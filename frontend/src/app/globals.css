@@ -1,0 +1,378 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =======================================================
+   FulfilmentKit UI System (V1.1 Locked)
+   - shadcn tokens are canonical (HSL vars)
+   - FulfilmentKit-specific tokens are namespaced as --fk-*
+   - Dark mode uses .dark class only (light-first)
+   - Glass strategy is CSS-first (no libraries)
+   ======================================================= */
+
+@layer base {
+  :root {
+    /* ---------------------------
+       shadcn design tokens
+       --------------------------- */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+
+    --radius: 0.5rem;
+
+    /* ---------------------------
+       FulfilmentKit tokens (namespaced)
+       --------------------------- */
+
+    /* Radius scale */
+    --fk-radius-sm: 0.5rem;
+    --fk-radius-md: 0.75rem;
+    --fk-radius-lg: 1rem;
+
+    /* Spacing scale */
+    --fk-space-1: 0.25rem;
+    --fk-space-2: 0.5rem;
+    --fk-space-3: 0.75rem;
+    --fk-space-4: 1rem;
+    --fk-space-6: 1.5rem;
+    --fk-space-8: 2rem;
+
+    /* Border + shadow rules */
+    --fk-border-alpha: 0.08;
+    --fk-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.04);
+
+    /* App background (calm, enterprise) */
+    --fk-app-bg: hsl(var(--background));
+    --fk-app-grad-1: rgba(0, 0, 0, 0.03);
+    --fk-app-grad-2: rgba(0, 0, 0, 0.015);
+
+    /* Background image layer (enabled) */
+    --fk-bg-image: url("/bg.png");
+    --fk-bg-image-opacity: 1;
+    --fk-bg-vignette: rgba(0, 0, 0, 0.44);
+
+    /* Glass system (liquid, not frost) */
+    /* UPDATED for dock-style look (stronger blur, more solid surface, reduced highlight) */
+    --fk-glass-blur: 22px;
+    --fk-glass-saturation: 1.9;
+
+    --fk-glass-card-bg: rgba(255, 255, 255, 0.16);
+    --fk-glass-card-border: rgba(255, 255, 255, 0.28);
+
+    --fk-glass-sidebar-bg: rgba(255, 255, 255, 0.24);
+    --fk-glass-sidebar-border: rgba(255, 255, 255, 0.36);
+
+    --fk-glass-topbar-bg: rgba(255, 255, 255, 0.26);
+    --fk-glass-topbar-border: rgba(255, 255, 255, 0.38);
+
+    /* Liquid highlight + depth */
+    --fk-glass-highlight: rgba(255, 255, 255, 0.28);
+    --fk-glass-shadow:
+      0 26px 70px rgba(0, 0, 0, 0.18),
+      0 8px 20px rgba(0, 0, 0, 0.14);
+
+    /* Hover surface */
+    --fk-surface-hover: rgba(255, 255, 255, 0.30);
+
+    /* Noise control */
+    --fk-noise-opacity: 0.05;
+  }
+
+  .dark {
+    /* ---------------------------
+       shadcn dark tokens
+       --------------------------- */
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+
+    /* ---------------------------
+       FulfilmentKit dark overrides
+       --------------------------- */
+    --fk-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4);
+
+    --fk-app-grad-1: rgba(255, 255, 255, 0.06);
+    --fk-app-grad-2: rgba(255, 255, 255, 0.03);
+
+    --fk-bg-image-opacity: 1;
+    --fk-bg-vignette: rgba(0, 0, 0, 0.68);
+
+    --fk-glass-card-bg: rgba(10, 10, 12, 0.28);
+    --fk-glass-card-border: rgba(255, 255, 255, 0.14);
+
+    /* UPDATED for dock-style look in dark too */
+    --fk-glass-sidebar-bg: rgba(10, 10, 12, 0.36);
+    --fk-glass-sidebar-border: rgba(255, 255, 255, 0.14);
+
+    --fk-glass-topbar-bg: rgba(10, 10, 12, 0.34);
+    --fk-glass-topbar-border: rgba(255, 255, 255, 0.16);
+
+    --fk-glass-highlight: rgba(255, 255, 255, 0.10);
+    --fk-glass-shadow:
+      0 30px 90px rgba(0, 0, 0, 0.45),
+      0 10px 26px rgba(0, 0, 0, 0.28);
+
+    --fk-surface-hover: rgba(255, 255, 255, 0.08);
+
+    --fk-noise-opacity: 0.04;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    background: hsl(var(--background));
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-geist-sans), sans-serif;
+
+    /* Base calm background (kept) */
+    background:
+      radial-gradient(1200px 600px at 15% 0%, var(--fk-app-grad-1), transparent 60%),
+      radial-gradient(900px 500px at 85% 10%, var(--fk-app-grad-2), transparent 55%),
+      var(--fk-app-bg);
+
+    position: relative;
+    min-height: 100vh;
+  }
+
+  /* Background image layer (enabled). Keep it behind everything. */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+
+    background-image:
+      radial-gradient(1200px 800px at 20% 10%, rgba(255, 80, 140, 0.28), transparent 60%),
+      radial-gradient(1200px 800px at 80% 5%, rgba(0, 190, 255, 0.18), transparent 60%),
+      radial-gradient(1400px 900px at 55% 110%, rgba(0, 0, 0, 0.38), transparent 60%),
+      linear-gradient(to bottom, rgba(0, 0, 0, 0.12) 0%, var(--fk-bg-vignette) 100%),
+      var(--fk-bg-image);
+
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+
+    opacity: var(--fk-bg-image-opacity);
+    filter: saturate(1.22) contrast(1.10) brightness(1.00);
+    transform: translateZ(0);
+  }
+
+  /* Optional subtle noise overlay for premium glass. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: var(--fk-noise-opacity);
+    mix-blend-mode: overlay;
+
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.25'/%3E%3C/svg%3E");
+    background-size: 140px 140px;
+  }
+
+  /* Keep main app content above background layers */
+  #__next,
+  body > div {
+    position: relative;
+    z-index: 2;
+  }
+}
+
+/* =======================================================
+   Typography Utilities
+   ======================================================= */
+
+.fk-h1 {
+  @apply text-2xl font-semibold tracking-tight;
+}
+
+.fk-h2 {
+  @apply text-xl font-semibold tracking-tight;
+}
+
+.fk-h3 {
+  @apply text-lg font-medium;
+}
+
+.fk-body {
+  @apply text-sm font-normal leading-6;
+}
+
+.fk-muted {
+  @apply text-muted-foreground;
+}
+
+.fk-mono {
+  @apply font-mono text-xs;
+}
+
+/* =======================================================
+   Layout Utilities
+   ======================================================= */
+
+.fk-page {
+  @apply p-6;
+}
+
+.fk-card {
+  @apply p-4 rounded-xl border;
+  box-shadow: var(--fk-shadow-soft);
+  background: hsl(var(--card));
+}
+
+.fk-card-lg {
+  @apply p-6 rounded-xl border;
+  box-shadow: var(--fk-shadow-soft);
+  background: hsl(var(--card));
+}
+
+/* =======================================================
+   Glass Surfaces (Locked)
+   ======================================================= */
+
+.fk-glass {
+  backdrop-filter: blur(var(--fk-glass-blur)) saturate(var(--fk-glass-saturation));
+  -webkit-backdrop-filter: blur(var(--fk-glass-blur)) saturate(var(--fk-glass-saturation));
+  border-radius: var(--fk-radius-lg);
+
+  box-shadow:
+    inset 0 1px 0 var(--fk-glass-highlight),
+    var(--fk-glass-shadow);
+
+  position: relative;
+  overflow: hidden;
+}
+
+/* Liquid sheen + subtle color bleed */
+/* UPDATED: reduced intensity for dock-style look */
+.fk-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(700px 300px at 20% 10%, rgba(255, 255, 255, 0.18), transparent 60%),
+    radial-gradient(700px 340px at 85% 18%, rgba(0, 200, 255, 0.08), transparent 62%),
+    radial-gradient(900px 520px at 45% 115%, rgba(255, 90, 140, 0.06), transparent 60%);
+}
+
+/* Keep content above liquid sheen */
+.fk-glass > * {
+  position: relative;
+  z-index: 1;
+}
+
+.fk-glass-card {
+  @apply fk-glass;
+  background: var(--fk-glass-card-bg);
+  border: 1px solid var(--fk-glass-card-border);
+}
+
+.fk-glass-sidebar {
+  @apply fk-glass;
+  background: var(--fk-glass-sidebar-bg);
+  border: 1px solid var(--fk-glass-sidebar-border);
+}
+
+.fk-glass-topbar {
+  @apply fk-glass;
+  background: var(--fk-glass-topbar-bg);
+  border: 1px solid var(--fk-glass-topbar-border);
+}
+
+/* =======================================================
+   Interaction
+   ======================================================= */
+
+.fk-hover {
+  transition: background 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.fk-hover:hover {
+  background: var(--fk-surface-hover);
+  transform: translateY(-1px);
+}
+
+.fk-active {
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+}
+
+/* =======================================================
+   Utility
+   ======================================================= */
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
