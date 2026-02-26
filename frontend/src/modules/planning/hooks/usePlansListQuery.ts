@@ -12,7 +12,7 @@ export function usePlansListQuery(params: ListPlansParams = {}) {
 
   return useQuery<PlansListResponse>({
     queryKey: workspaceId
-      ? queryKeys.planning.plansList(workspaceId, params as ListParams)
+      ? queryKeys.plans.list(workspaceId, params as ListParams)
       : (["planning", "no-workspace", "plans", "list", params] as const),
     queryFn: () => listPlans(params),
     enabled: Boolean(workspaceId),

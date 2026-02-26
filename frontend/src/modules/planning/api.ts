@@ -16,7 +16,7 @@ import type { PlanningOutput, Plan, PlansListResponse } from "@/modules/planning
  * Confirmed backend endpoints:
  * - GET /plans (pagination + optional createdAt from/to)
  * - GET /plans/:id
- * - POST /plans creates draft plan storing resultJson + assumptionsJson
+ * - POST /plans returns result + assumptions in payload
  */
 
 export type ListPlansParams = {
@@ -47,13 +47,14 @@ export async function getPlan(planId: string): Promise<Plan> {
 
 /**
  * Extract and strictly validate the AI planning output shape from a Plan record.
- * Backend stores structured blocks in resultJson (and assumptionsJson separately).
+ * Backend returns structured blocks in result (with assumptions separately).
  * This helper ensures critical planning screens never render unknown shapes.
  */
 export function parsePlanningOutputFromPlan(plan: Plan): PlanningOutput {
   return parseOrThrow(
     PlanningOutputSchema,
-    plan.resultJson,
+    plan.result,
     { module: "planning", operation: "parsePlanningOutputFromPlan" },
   );
 }
+

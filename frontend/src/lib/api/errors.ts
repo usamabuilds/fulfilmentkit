@@ -35,13 +35,30 @@ export function safeJsonParse(text: string): unknown {
 }
 
 export function extractMessage(data: unknown, fallback: string): string {
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "message" in data &&
-    typeof (data as { message?: unknown }).message === "string"
-  ) {
-    return (data as { message: string }).message;
+  try {
+    if (
+      typeof data === "object" &&
+      data !== null &&
+      "message" in data &&
+      typeof (data as { message?: unknown }).message === "string"
+    ) {
+      return (data as { message: string }).message;
+    }
+
+    // Backend error envelope support: { success: false, error: { message: string } }
+    if (typeof data === "object" && data !== null && "error" in data) {
+      const error = (data as { error?: unknown }).error;
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "message" in error &&
+        typeof (error as { message?: unknown }).message === "string"
+      ) {
+        return (error as { message: string }).message;
+      }
+    }
+  } catch {
+    // never throw from message extraction
   }
 
   return fallback;

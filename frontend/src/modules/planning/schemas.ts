@@ -22,7 +22,7 @@ export const PlanningOutputSchema = z.object({
  * Keep this tolerant to avoid breaking on new backend fields.
  * Only parse fields we actually rely on.
  *
- * Note: resultJson and assumptionsJson are stored on the Plan record.
+ * Note: backend returns planning payload fields as result + assumptions.
  */
 export const PlanSchema = z.object({
   id: z.string(),
@@ -30,8 +30,8 @@ export const PlanSchema = z.object({
   updatedAt: z.string(),
 
   // Backend may include status fields or metadata later, so allow passthrough.
-  resultJson: z.unknown().optional(),
-  assumptionsJson: z.unknown().optional(),
+  result: z.unknown().optional(),
+  assumptions: z.unknown().optional(),
 }).passthrough();
 
 /**
@@ -63,6 +63,7 @@ export const PlanDetailResponseSchema = ApiEnvelopeSchema(PlanSchema);
 
 /**
  * Some endpoints may return planning output directly as "data".
- * If backend wraps it inside resultJson later, we will validate at the api.ts level.
+ * If backend wraps it differently later, we will validate at the api.ts level.
  */
 export const PlanningOutputResponseSchema = ApiEnvelopeSchema(PlanningOutputSchema);
+
