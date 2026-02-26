@@ -12,7 +12,7 @@ export function usePlanDetailQuery(planId: string) {
 
   return useQuery<Plan>({
     queryKey: workspaceId
-      ? queryKeys.planning.planDetail(workspaceId, planId)
+      ? queryKeys.plans.detail(workspaceId, planId)
       : (["planning", "no-workspace", "plans", "detail", planId] as const),
     queryFn: () => getPlan(planId),
     enabled: Boolean(workspaceId) && Boolean(planId),
