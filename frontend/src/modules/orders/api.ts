@@ -1,4 +1,5 @@
 import { apiClient } from "@/lib/api/client";
+import { parseOrThrow } from "@/lib/validation/zod";
 import { OrdersListResponseSchema } from "./schemas";
 
 export type OrdersListQuery = {
@@ -27,5 +28,9 @@ function toQueryParams(q: OrdersListQuery): Record<string, string | number> {
 
 export async function fetchOrdersList(query: OrdersListQuery) {
   const res = await apiClient.get("/orders", toQueryParams(query));
-  return OrdersListResponseSchema.parse(res);
+  return parseOrThrow(
+    OrdersListResponseSchema,
+    res,
+    { module: "orders", operation: "fetchOrdersList" },
+  );
 }
