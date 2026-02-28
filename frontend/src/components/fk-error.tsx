@@ -17,10 +17,6 @@ function getString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-function getNumber(value: unknown): number | undefined {
-  return typeof value === "number" ? value : undefined;
-}
-
 function normalizeError(err: unknown): FriendlyError {
   // Prefer our ApiError shape when possible
   const maybeApi = err as Partial<ApiError> | null;
@@ -28,6 +24,8 @@ function normalizeError(err: unknown): FriendlyError {
   if (maybeApi && typeof maybeApi === "object") {
     const code = (maybeApi as { code?: unknown }).code;
     const codeStr = getString(code);
+    const msg =
+      getString((maybeApi as { message?: unknown }).message) ?? "Request failed.";
 
     // WORKSPACE_REQUIRED
     if (codeStr === "WORKSPACE_REQUIRED") {
@@ -49,17 +47,39 @@ function normalizeError(err: unknown): FriendlyError {
       };
     }
 
-    // HTTP_ERROR (we expect: { code: 'HTTP_ERROR', status?: number, message?: string })
-    if (codeStr === "HTTP_ERROR") {
-      const status = getNumber((maybeApi as { status?: unknown }).status);
-      const msg =
-        getString((maybeApi as { message?: unknown }).message) ?? "Request failed.";
-
+    if (codeStr === "BAD_REQUEST") {
       return {
-        title: status ? `Request failed (${status})` : "Request failed",
+        title: "Bad request",
         message: msg,
-        hint: "If this keeps happening, copy the details for debugging.",
-        code: "HTTP_ERROR",
+        hint: "Check your input and try again.",
+        code: "BAD_REQUEST",
+      };
+    }
+
+    if (codeStr === "UNAUTHORIZED") {
+      return {
+        title: "Unauthorized",
+        message: msg,
+        hint: "Please sign in again and retry.",
+        code: "UNAUTHORIZED",
+      };
+    }
+
+    if (codeStr === "FORBIDDEN") {
+      return {
+        title: "Forbidden",
+        message: msg,
+        hint: "You do not have access to this resource.",
+        code: "FORBIDDEN",
+      };
+    }
+
+    if (codeStr === "NOT_FOUND") {
+      return {
+        title: "Not found",
+        message: msg,
+        hint: "The requested resource could not be found.",
+        code: "NOT_FOUND",
       };
     }
 
@@ -75,6 +95,15 @@ function normalizeError(err: unknown): FriendlyError {
           code: "VALIDATION_ERROR",
         };
       }
+    }
+
+    if (codeStr === "BACKEND_ERROR") {
+      return {
+        title: "Something went wrong",
+        message: msg,
+        hint: "Please retry. If this keeps happening, contact support.",
+        code: "BACKEND_ERROR",
+      };
     }
   }
 
