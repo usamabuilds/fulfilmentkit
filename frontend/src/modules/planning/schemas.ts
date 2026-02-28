@@ -61,6 +61,8 @@ export const PlansListResponseSchema = ApiEnvelopeSchema(PlansListDataSchema);
 
 export const PlanDetailResponseSchema = ApiEnvelopeSchema(PlanSchema);
 
+export const CreatePlanResponseSchema = ApiEnvelopeSchema(PlanSchema);
+
 /**
  * Some endpoints may return planning output directly as "data".
  * If backend wraps it differently later, we will validate at the api.ts level.

@@ -1,21 +1,15 @@
+"use client";
+
 import { Card } from "@/components/patterns/Card";
 import { PageFrame } from "@/components/patterns/PageFrame";
+import { CreatePlanButton } from "@/modules/planning/components/CreatePlanButton";
 
 export default function PlansListPage() {
   return (
     <PageFrame
       title="Plans"
       subtitle="Plan generation, listing, and AI integration logic will live inside the planning module."
-      right={
-        <button
-          type="button"
-          className="px-3 py-2 rounded-md text-sm fk-hover border bg-black text-white"
-          aria-label="Create plan"
-          title="Create plan"
-        >
-          Create plan
-        </button>
-      }
+      right={<CreatePlanButton />}
     >
       <Card>
         <p className="fk-body">
