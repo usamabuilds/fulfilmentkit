@@ -1,19 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys, type ListParams } from "@/lib/api/queryKeys";
+import { useWorkspaceStore } from "@/store/workspace-store";
 import { listPlans, type ListPlansParams } from "@/modules/planning/api";
 import type { PlansListResponse } from "@/modules/planning/types";
 
-function getWorkspaceId(): string | null {
-  return localStorage.getItem("fk_workspace_id");
-}
-
 export function usePlansListQuery(params: ListPlansParams = {}) {
-  const workspaceId = getWorkspaceId();
+  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
 
   return useQuery<PlansListResponse>({
-    queryKey: workspaceId
-      ? queryKeys.plans.list(workspaceId, params as ListParams)
-      : (["planning", "no-workspace", "plans", "list", params] as const),
+    queryKey: queryKeys.plans.list((workspaceId ?? "no-workspace"), params as ListParams),
     queryFn: () => listPlans(params),
     enabled: Boolean(workspaceId),
   });
