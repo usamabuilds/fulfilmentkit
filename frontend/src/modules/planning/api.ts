@@ -5,8 +5,14 @@ import {
   PlansListResponseSchema,
   PlanDetailResponseSchema,
   PlanningOutputSchema,
+  CreatePlanResponseSchema,
 } from "@/modules/planning/schemas";
-import type { PlanningOutput, Plan, PlansListResponse } from "@/modules/planning/types";
+import type {
+  PlanningOutput,
+  Plan,
+  PlansListResponse,
+  CreatePlanResponse,
+} from "@/modules/planning/types";
 
 /**
  * Planning module API (LOCKED rules):
@@ -27,6 +33,12 @@ export type ListPlansParams = {
   to?: string;
 };
 
+export type CreatePlanBody = {
+  from: string;
+  to: string;
+  title?: string;
+};
+
 export async function listPlans(params: ListPlansParams = {}): Promise<PlansListResponse> {
   const data = await apiClient.get<unknown>(endpoints.plans.list, params);
   return parseOrThrow(
@@ -44,6 +56,15 @@ export async function getPlan(planId: string): Promise<Plan> {
     { module: "planning", operation: "getPlan" },
   );
   return parsed.data;
+}
+
+export async function createPlan(body: CreatePlanBody): Promise<CreatePlanResponse> {
+  const data = await apiClient.post<unknown>(endpoints.plans.list, body);
+  return parseOrThrow(
+    CreatePlanResponseSchema,
+    data,
+    { module: "planning", operation: "createPlan" },
+  );
 }
 
 /**
