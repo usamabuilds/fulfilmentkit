@@ -1,4 +1,6 @@
 import { apiClient } from "@/lib/api/client";
+import { endpoints } from "@/lib/api/endpoints";
+import { parseOrThrow } from "@/lib/validation/zod";
 import { OrdersListResponseSchema } from "./schemas";
 
 export type OrdersListQuery = {
@@ -26,6 +28,10 @@ function toQueryParams(q: OrdersListQuery): Record<string, string | number> {
 }
 
 export async function fetchOrdersList(query: OrdersListQuery) {
-  const res = await apiClient.get("/orders", toQueryParams(query));
-  return OrdersListResponseSchema.parse(res);
+  const res = await apiClient.get(endpoints.orders.list, toQueryParams(query));
+  return parseOrThrow(
+    OrdersListResponseSchema,
+    res,
+    { module: "orders", operation: "fetchOrdersList" },
+  );
 }

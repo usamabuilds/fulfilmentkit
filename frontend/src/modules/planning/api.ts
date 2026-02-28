@@ -1,4 +1,5 @@
 import { apiClient } from "@/lib/api/client";
+import { endpoints } from "@/lib/api/endpoints";
 import { parseOrThrow } from "@/lib/validation/zod";
 import {
   PlansListResponseSchema,
@@ -27,7 +28,7 @@ export type ListPlansParams = {
 };
 
 export async function listPlans(params: ListPlansParams = {}): Promise<PlansListResponse> {
-  const data = await apiClient.get<unknown>("/plans", params);
+  const data = await apiClient.get<unknown>(endpoints.plans.list, params);
   return parseOrThrow(
     PlansListResponseSchema,
     data,
@@ -36,7 +37,7 @@ export async function listPlans(params: ListPlansParams = {}): Promise<PlansList
 }
 
 export async function getPlan(planId: string): Promise<Plan> {
-  const data = await apiClient.get<unknown>(`/plans/${planId}`);
+  const data = await apiClient.get<unknown>(endpoints.plans.detail(planId));
   const parsed = parseOrThrow(
     PlanDetailResponseSchema,
     data,
@@ -57,4 +58,3 @@ export function parsePlanningOutputFromPlan(plan: Plan): PlanningOutput {
     { module: "planning", operation: "parsePlanningOutputFromPlan" },
   );
 }
-

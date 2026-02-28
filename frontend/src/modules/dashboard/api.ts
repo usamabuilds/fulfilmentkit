@@ -1,4 +1,5 @@
 import { apiClient } from "@/lib/api/client";
+import { endpoints } from "@/lib/api/endpoints";
 import { parseOrThrow } from "@/lib/validation/zod";
 import {
   DashboardSummarySchema,
@@ -8,7 +9,7 @@ import {
 } from "@/modules/dashboard/schemas";
 
 export async function fetchDashboardSummary() {
-  const data = await apiClient.get("/dashboard/summary");
+  const data = await apiClient.get(endpoints.dashboard.summary);
   return parseOrThrow(
     DashboardSummarySchema,
     data,

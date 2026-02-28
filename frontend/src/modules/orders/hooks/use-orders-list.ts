@@ -1,23 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/api/queryKeys";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import { fetchOrdersList, type OrdersListQuery } from "../api";
 
 export function useOrdersList(query: OrdersListQuery) {
   const workspaceId = useWorkspaceStore((s) => s.workspaceId);
 
+  const normalizedParamsObject = {
+    from: query.from ?? null,
+    to: query.to ?? null,
+    status: query.status ?? null,
+    channel: query.channel ?? null,
+    search: query.search ?? null,
+    page: query.page ?? 1,
+    pageSize: query.pageSize ?? 20,
+  };
+
   return useQuery({
-    queryKey: [
-      "orders",
-      "list",
-      workspaceId,
-      query.from ?? null,
-      query.to ?? null,
-      query.status ?? null,
-      query.channel ?? null,
-      query.search ?? null,
-      query.page ?? 1,
-      query.pageSize ?? 20,
-    ],
+    queryKey: queryKeys.orders.list(workspaceId ?? "no-workspace", normalizedParamsObject),
     queryFn: () => fetchOrdersList(query),
     enabled: !!workspaceId,
   });
