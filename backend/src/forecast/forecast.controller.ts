@@ -78,28 +78,11 @@ export class ForecastController {
     const workspaceId = req.workspaceId as string;
     const parsed = ListQuerySchema.parse(query);
 
-    const skip = (parsed.page - 1) * parsed.pageSize;
-
-    const [items, total] = await Promise.all([
-      this.prisma.forecast.findMany({
-        where: { workspaceId },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: parsed.pageSize,
-        select: {
-          id: true,
-          level: true,
-          method: true,
-          horizonDays: true,
-          createdAt: true,
-          updatedAt: true,
-          productId: true,
-        },
-      }),
-      this.prisma.forecast.count({
-        where: { workspaceId },
-      }),
-    ]);
+    const { items, total } = await this.forecastService.listForecasts({
+      workspaceId,
+      page: parsed.page,
+      pageSize: parsed.pageSize,
+    });
 
     return toListResponse({
       items: items.map((x) => ({

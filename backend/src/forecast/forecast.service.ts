@@ -16,6 +16,12 @@ type CreateForecastArgs = {
   method?: string;
 };
 
+type ListForecastsArgs = {
+  workspaceId: string;
+  page: number;
+  pageSize: number;
+};
+
 type ForecastPoint = {
   day: string; // YYYY-MM-DD
   revenue: number | null;
@@ -44,6 +50,34 @@ type ForecastResult = {
 @Injectable()
 export class ForecastService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async listForecasts(args: ListForecastsArgs) {
+    const { workspaceId, page, pageSize } = args;
+    const skip = (page - 1) * pageSize;
+
+    const [items, total] = await Promise.all([
+      this.prisma.forecast.findMany({
+        where: { workspaceId },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+        select: {
+          id: true,
+          level: true,
+          method: true,
+          horizonDays: true,
+          createdAt: true,
+          updatedAt: true,
+          productId: true,
+        },
+      }),
+      this.prisma.forecast.count({
+        where: { workspaceId },
+      }),
+    ]);
+
+    return { items, total };
+  }
 
   private parseRange(range: DateRange): { from: Date; toExclusive: Date } {
     const from = new Date(`${range.from}T00:00:00.000Z`);
