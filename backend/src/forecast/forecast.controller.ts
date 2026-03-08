@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
@@ -71,10 +70,6 @@ export class ForecastController {
       productId: parsed.productId,
       method: parsed.method,
     });
-
-    if (!result.success) {
-      throw new BadRequestException(result.error?.message ?? 'Request failed');
-    }
 
     return apiResponse(result.data);
   }

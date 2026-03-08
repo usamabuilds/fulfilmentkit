@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ConnectionPlatform } from '../../generated/prisma';
 
@@ -35,13 +35,7 @@ export class WebhookService {
       payload?.id;
 
     if (!externalEventId) {
-      return {
-        success: false,
-        error: {
-          code: 'MISSING_EVENT_ID',
-          message: 'Webhook missing external event id',
-        },
-      };
+      throw new BadRequestException('Webhook missing external event id');
     }
 
     try {

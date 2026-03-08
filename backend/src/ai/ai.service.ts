@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { toListResponse } from '../common/utils/list-response';
 
@@ -86,13 +86,7 @@ export class AiService {
     });
 
     if (!conversation) {
-      return {
-        success: false,
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Conversation not found',
-        },
-      };
+      throw new NotFoundException('Conversation not found');
     }
 
     return {
@@ -127,13 +121,7 @@ export class AiService {
     });
 
     if (!convo) {
-      return {
-        success: false,
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Conversation not found',
-        },
-      };
+      throw new NotFoundException('Conversation not found');
     }
 
     // create both messages in one transaction
@@ -183,13 +171,7 @@ export class AiService {
     });
 
     if (!msg) {
-      return {
-        success: false,
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Message not found for this workspace',
-        },
-      };
+      throw new NotFoundException('Message not found for this workspace');
     }
 
     const tc = await this.prisma.aiToolCall.create({

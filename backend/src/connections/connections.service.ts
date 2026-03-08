@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import * as crypto from 'crypto';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -216,14 +216,9 @@ export class ConnectionsService {
     });
 
     if (!connection) {
-      return {
-        success: false,
-        error: {
-          code: 'CONNECTION_NOT_FOUND',
-          message:
-            'No Connection record exists for this platform in this workspace.',
-        },
-      };
+      throw new NotFoundException(
+        'No Connection record exists for this platform in this workspace.',
+      );
     }
 
     // Encrypt payload (server-side only)
@@ -293,13 +288,7 @@ export class ConnectionsService {
     });
 
     if (!connection) {
-      return {
-        success: false,
-        error: {
-          code: 'CONNECTION_NOT_FOUND',
-          message: 'Connection not found for this workspace.',
-        },
-      };
+      throw new NotFoundException('Connection not found for this workspace.');
     }
 
     // Create SyncRun as QUEUED
@@ -360,13 +349,7 @@ export class ConnectionsService {
     });
 
     if (!connection) {
-      return {
-        success: false,
-        error: {
-          code: 'CONNECTION_NOT_FOUND',
-          message: 'Connection not found for this workspace.',
-        },
-      };
+      throw new NotFoundException('Connection not found for this workspace.');
     }
 
     const runs = await this.prisma.syncRun.findMany({

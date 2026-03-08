@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 
 type DateRange = { from: string; to: string };
@@ -311,10 +311,7 @@ export class ForecastService {
         : await this.computeSkuDailyAvgBySku(workspaceId, range, sku!.trim());
 
       if (!skuAvg.ok) {
-        return {
-          success: false,
-          error: skuAvg.error,
-        };
+        throw new NotFoundException(skuAvg.error.message);
       }
 
       const daily: ForecastPoint[] = futureDays.map((day) => ({
