@@ -12,6 +12,7 @@ import { LocationsModule } from './locations/locations.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { OrdersModule } from './orders/orders.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { MetricsModule } from './metrics/metrics.module';
 import { SyncModule } from './sync/sync.module';
 import { ConnectionsModule } from './connections/connections.module';
 import { AiModule } from './ai/ai.module';
@@ -28,6 +29,7 @@ import { JwtAuthMiddleware } from './common/auth/jwt-auth.middleware';
     InventoryModule,
     OrdersModule,
     DashboardModule,
+    MetricsModule,
     SyncModule,
     ConnectionsModule,
     AiModule,
