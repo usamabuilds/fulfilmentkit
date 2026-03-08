@@ -10,3 +10,12 @@ export function useOrders(params?: { page?: number; pageSize?: number }) {
     enabled: !!workspaceId,
   })
 }
+
+export function useOrder(orderId: string) {
+  const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
+  return useQuery({
+    queryKey: ['orders', workspaceId, orderId],
+    queryFn: () => ordersApi.getOne(workspaceId!, orderId),
+    enabled: !!workspaceId && !!orderId,
+  })
+}
