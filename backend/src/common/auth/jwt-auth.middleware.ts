@@ -1,4 +1,4 @@
-import { Injectable, NestMiddleware } from '@nestjs/common';
+import { Injectable, Logger, NestMiddleware } from '@nestjs/common';
 import jwt from 'jsonwebtoken';
 
 type JwtPayload = {
@@ -11,6 +11,7 @@ type JwtPayload = {
 
 @Injectable()
 export class JwtAuthMiddleware implements NestMiddleware {
+  private readonly logger = new Logger(JwtAuthMiddleware.name);
   private readonly jwtSecret: string;
 
   constructor() {
@@ -30,7 +31,7 @@ export class JwtAuthMiddleware implements NestMiddleware {
 
     const authHeader = req?.headers?.authorization;
 
-    console.log('[JwtAuthMiddleware] HIT', {
+    this.logger.log('[JwtAuthMiddleware] HIT', {
       path,
       hasAuthHeader: !!authHeader,
       authHeaderType: typeof authHeader,
@@ -45,7 +46,7 @@ export class JwtAuthMiddleware implements NestMiddleware {
 
       const [scheme, token] = authHeader.split(' ');
 
-      console.log('[JwtAuthMiddleware] PARSE', {
+      this.logger.log('[JwtAuthMiddleware] PARSE', {
         path,
         scheme,
         tokenLen: token ? token.length : 0,
@@ -63,13 +64,13 @@ export class JwtAuthMiddleware implements NestMiddleware {
 
       const secret = this.jwtSecret;
 
-      console.log('[JwtAuthMiddleware] SECRET', { path, secretFrom });
+      this.logger.log('[JwtAuthMiddleware] SECRET', { path, secretFrom });
 
       const decoded = jwt.verify(token, secret) as JwtPayload;
 
       const externalUserId = decoded?.sub || decoded?.user_id;
 
-      console.log('[JwtAuthMiddleware] VERIFIED', {
+      this.logger.log('[JwtAuthMiddleware] VERIFIED', {
         path,
         hasSub: !!decoded?.sub,
         hasUserId: !!decoded?.user_id,
@@ -99,7 +100,7 @@ export class JwtAuthMiddleware implements NestMiddleware {
       return next();
     } catch (err: any) {
       const msg = err?.message || String(err);
-      console.log('[JwtAuthMiddleware] VERIFY FAILED', {
+      this.logger.warn('[JwtAuthMiddleware] VERIFY FAILED', {
         path,
         name: err?.name,
         message: msg,

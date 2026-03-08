@@ -6,6 +6,7 @@ import {
   Injectable,
   NotFoundException,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -18,6 +19,8 @@ type AuthShape = {
 
 @Injectable()
 export class WorkspaceGuard implements CanActivate {
+  private readonly logger = new Logger(WorkspaceGuard.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -59,7 +62,7 @@ export class WorkspaceGuard implements CanActivate {
       auth?.externalUserId || request?.user?.id;
 
     if (!externalUserId) {
-      console.log('[WorkspaceGuard] no auth detected', {
+      this.logger.warn('[WorkspaceGuard] no auth detected', {
         path: request?.originalUrl || request?.url,
         method,
         hasAuth: !!auth,
@@ -107,7 +110,7 @@ export class WorkspaceGuard implements CanActivate {
       authProviderUserId: user.authProviderUserId,
     };
 
-    console.log('[WorkspaceGuard] enforcing membership', {
+    this.logger.log('[WorkspaceGuard] enforcing membership', {
       path: request?.originalUrl || request?.url,
       workspaceId,
       userId: user.id,
@@ -130,7 +133,7 @@ export class WorkspaceGuard implements CanActivate {
     request.workspaceMember = membership;
     request.workspaceRole = membership.role;
 
-    console.log('[WorkspaceGuard] role attached', {
+    this.logger.log('[WorkspaceGuard] role attached', {
       path: request?.originalUrl || request?.url,
       workspaceId,
       role: membership.role,
