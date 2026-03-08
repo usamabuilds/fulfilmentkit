@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -13,6 +14,7 @@ import { ForecastService } from './forecast.service';
 import { Roles } from '../common/auth/roles.decorator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { toListResponse } from '../common/utils/list-response';
+import { apiResponse } from '../common/utils/api-response';
 
 const ForecastBodySchema = z
   .object({
@@ -60,7 +62,7 @@ export class ForecastController {
     const workspaceId = req.workspaceId as string;
     const parsed = ForecastBodySchema.parse(body);
 
-    return this.forecastService.createForecast({
+    const result = await this.forecastService.createForecast({
       workspaceId,
       from: parsed.from,
       to: parsed.to,
@@ -69,6 +71,12 @@ export class ForecastController {
       productId: parsed.productId,
       method: parsed.method,
     });
+
+    if (!result.success) {
+      throw new BadRequestException(result.error?.message ?? 'Request failed');
+    }
+
+    return apiResponse(result.data);
   }
 
   // GET /forecast (VIEWER allowed)
@@ -84,7 +92,8 @@ export class ForecastController {
       pageSize: parsed.pageSize,
     });
 
-    return toListResponse({
+    return apiResponse(
+      toListResponse({
       items: items.map((x) => ({
         ...x,
         createdAt: x.createdAt.toISOString(),
@@ -93,7 +102,8 @@ export class ForecastController {
       total,
       page: parsed.page,
       pageSize: parsed.pageSize,
-    });
+      }),
+    );
   }
 
   // GET /forecast/:id (VIEWER allowed)
@@ -116,14 +126,11 @@ export class ForecastController {
       throw new NotFoundException('Forecast not found');
     }
 
-    return {
-      success: true,
-      data: {
+    return apiResponse({
         id: forecast.id,
         createdAt: forecast.createdAt.toISOString(),
         updatedAt: forecast.updatedAt.toISOString(),
         ...(forecast.result as any),
-      },
-    };
+      });
   }
 }

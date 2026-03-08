@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { PlanningService } from './planning.service';
 import { Roles } from '../common/auth/roles.decorator';
+import { apiResponse } from '../common/utils/api-response';
 
 const CreatePlanBodySchema = z.object({
   from: z.string().min(10),
@@ -22,11 +23,13 @@ export class PlanningController {
     const workspaceId = req.workspaceId as string;
     const parsed = CreatePlanBodySchema.parse(body);
 
-    return this.planningService.createPlan({
+    const result = await this.planningService.createPlan({
       workspaceId,
       title: parsed.title,
       range: { from: parsed.from, to: parsed.to },
     });
+
+    return apiResponse(result.data);
   }
 
   // GET /plans?from=&to=&page=&pageSize=
@@ -39,7 +42,7 @@ export class PlanningController {
     const pagination = parsePagination(query, { page: 1, pageSize: 25 });
     const range = parseDateRange(query);
 
-    return this.planningService.listPlans({
+    const result = await this.planningService.listPlans({
       workspaceId,
       createdAtRange: {
         from: range.from,
@@ -48,6 +51,8 @@ export class PlanningController {
       },
       pagination,
     });
+
+    return apiResponse(result);
   }
 
   // GET /plans/:id
@@ -57,10 +62,12 @@ export class PlanningController {
   async getPlanDetail(@Req() req: any, @Param('id') id: string) {
     const workspaceId = req.workspaceId as string;
 
-    return this.planningService.getPlanDetail({
+    const result = await this.planningService.getPlanDetail({
       workspaceId,
       planId: id,
     });
+
+    return apiResponse(result.data);
   }
 }
 

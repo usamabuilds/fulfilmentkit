@@ -5,6 +5,7 @@ import { parsePagination } from '../common/utils/pagination';
 import { toListResponse } from '../common/utils/list-response';
 import { validateQuery } from '../common/utils/query-validate';
 import { parseDateRange } from '../common/utils/date-range';
+import { apiResponse } from '../common/utils/api-response';
 
 const ordersListQuerySchema = z.object({
   from: z.string().optional(),
@@ -47,12 +48,14 @@ export class OrdersController {
       take,
     });
 
-    return toListResponse({
+    return apiResponse(
+      toListResponse({
       items: result.items,
       total: result.total,
       page,
       pageSize,
-    });
+      }),
+    );
   }
 
   @Get(':id')
@@ -60,9 +63,11 @@ export class OrdersController {
     const workspaceId = req.workspaceId;
     const { id } = validateQuery(orderIdParamSchema, params);
 
-    return this.ordersService.getById({
+    const result = await this.ordersService.getById({
       workspaceId,
       id,
     });
+
+    return apiResponse(result);
   }
 }

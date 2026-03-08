@@ -1,7 +1,17 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Post,
+  Req,
+} from '@nestjs/common';
 import { z } from 'zod';
 import { ConnectionsService } from './connections.service';
 import { Roles } from '../common/auth/roles.decorator';
+import { apiResponse } from '../common/utils/api-response';
 
 const platformSchema = z.enum(['shopify', 'woocommerce', 'amazon']);
 
@@ -12,7 +22,9 @@ export class ConnectionsController {
   @Get()
   async list(@Req() req: any) {
     const workspaceId = req.workspaceId as string;
-    return this.connectionsService.list(workspaceId);
+
+    const result = await this.connectionsService.list(workspaceId);
+    return apiResponse(result);
   }
 
   @Post(':platform/start')
@@ -22,10 +34,12 @@ export class ConnectionsController {
 
     const platform = platformSchema.parse(platformRaw.toLowerCase());
 
-    return this.connectionsService.startConnectionFlow({
+    const result = await this.connectionsService.startConnectionFlow({
       workspaceId,
       platform,
     });
+
+    return apiResponse(result.data);
   }
 
   @Post(':platform/callback')
@@ -39,11 +53,20 @@ export class ConnectionsController {
 
     const platform = platformSchema.parse(platformRaw.toLowerCase());
 
-    return this.connectionsService.handleCallback({
+    const result = await this.connectionsService.handleCallback({
       workspaceId,
       platform,
       payload: body,
     });
+
+    if (!result.success) {
+      if (result.error?.code === 'CONNECTION_NOT_FOUND') {
+        throw new NotFoundException(result.error.message);
+      }
+      throw new BadRequestException(result.error?.message ?? 'Request failed');
+    }
+
+    return apiResponse(result.data);
   }
 
   @Post(':id/sync')
@@ -51,19 +74,37 @@ export class ConnectionsController {
   async sync(@Req() req: any, @Param('id') connectionId: string) {
     const workspaceId = req.workspaceId as string;
 
-    return this.connectionsService.triggerManualSync({
+    const result = await this.connectionsService.triggerManualSync({
       workspaceId,
       connectionId,
     });
+
+    if (!result.success) {
+      if (result.error?.code === 'CONNECTION_NOT_FOUND') {
+        throw new NotFoundException(result.error.message);
+      }
+      throw new BadRequestException(result.error?.message ?? 'Request failed');
+    }
+
+    return apiResponse(result.data);
   }
 
   @Get(':id/sync-runs')
   async listSyncRuns(@Req() req: any, @Param('id') connectionId: string) {
     const workspaceId = req.workspaceId as string;
 
-    return this.connectionsService.listSyncRuns({
+    const result = await this.connectionsService.listSyncRuns({
       workspaceId,
       connectionId,
     });
+
+    if ('success' in result && !result.success) {
+      if (result.error?.code === 'CONNECTION_NOT_FOUND') {
+        throw new NotFoundException(result.error.message);
+      }
+      throw new BadRequestException(result.error?.message ?? 'Request failed');
+    }
+
+    return apiResponse(result);
   }
 }

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { validateQuery } from '../common/utils/query-validate';
 import { toListResponse } from '../common/utils/list-response';
+import { apiResponse } from '../common/utils/api-response';
 
 const computeDailyQuerySchema = z.object({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // YYYY-MM-DD
@@ -65,14 +66,11 @@ export class MetricsController {
       },
     );
 
-    return {
-      success: true,
-      data: {
+    return apiResponse({
         jobId: job.id,
         workspaceId,
         dayUtc: dayUtc.toISOString(),
-      },
-    };
+      });
   }
 
   // POST /metrics/compute-sku-daily?day=YYYY-MM-DD
@@ -97,14 +95,11 @@ export class MetricsController {
       },
     );
 
-    return {
-      success: true,
-      data: {
+    return apiResponse({
         jobId: job.id,
         workspaceId,
         dayUtc: dayUtc.toISOString(),
-      },
-    };
+      });
   }
 
   // GET /metrics/daily?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -142,7 +137,8 @@ export class MetricsController {
       },
     });
 
-    return toListResponse({
+    return apiResponse(
+      toListResponse({
       items: rows.map((r) => ({
         day: ymdFromUtcDate(r.day),
         revenue: String(r.revenue),
@@ -159,6 +155,7 @@ export class MetricsController {
       total: rows.length,
       page: 1,
       pageSize: rows.length,
-    });
+      }),
+    );
   }
 }

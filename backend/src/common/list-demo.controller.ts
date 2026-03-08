@@ -9,6 +9,7 @@ import { Roles } from './auth/roles.decorator';
 import { RolesGuard } from './auth/roles.guard';
 import { PrismaService } from './prisma/prisma.service';
 import { requireWorkspaceId } from './workspace/workspace.utils';
+import { apiResponse } from './utils/api-response';
 
 const ListDemoQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional(),
@@ -45,12 +46,14 @@ export class ListDemoController {
       },
     ];
 
-    return toListResponse({
+    return apiResponse(
+      toListResponse({
       items,
       total: 1,
       page,
       pageSize,
-    });
+      }),
+    );
   }
 
   // DB-backed proof endpoint: always scoped by workspaceId
@@ -69,20 +72,22 @@ export class ListDemoController {
       },
     });
 
-    return toListResponse({
+    return apiResponse(
+      toListResponse({
       items: locations,
       total: locations.length,
       page: 1,
       pageSize: locations.length,
-    });
+      }),
+    );
   }
 
   @Roles('ADMIN')
   @Get('admin-only')
   adminOnly() {
-    return {
+    return apiResponse({
       ok: true,
       message: 'ADMIN access granted',
-    };
+    });
   }
 }
