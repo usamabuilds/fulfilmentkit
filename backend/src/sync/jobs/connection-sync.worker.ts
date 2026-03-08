@@ -45,7 +45,7 @@ export class ConnectionSyncWorker extends WorkerHost {
       );
 
       await this.prisma.syncRun.update({
-        where: { id: syncRunId },
+        where: { id: syncRunId, workspaceId },
         data: {
           status: 'RUNNING',
           startedAt,
@@ -58,7 +58,7 @@ export class ConnectionSyncWorker extends WorkerHost {
       const finishedAt = new Date();
 
       await this.prisma.syncRun.update({
-        where: { id: syncRunId },
+        where: { id: syncRunId, workspaceId },
         data: {
           status: 'SUCCESS',
           finishedAt,
@@ -66,7 +66,7 @@ export class ConnectionSyncWorker extends WorkerHost {
       });
 
       await this.prisma.connection.update({
-        where: { id: connectionId },
+        where: { id: connectionId, workspaceId },
         data: {
           lastSyncAt: finishedAt,
           lastError: null,
@@ -84,7 +84,7 @@ export class ConnectionSyncWorker extends WorkerHost {
           : 'Sync failed';
 
       await this.prisma.syncRun.update({
-        where: { id: syncRunId },
+        where: { id: syncRunId, workspaceId },
         data: {
           status: 'FAILED',
           finishedAt,
@@ -93,7 +93,7 @@ export class ConnectionSyncWorker extends WorkerHost {
       });
 
       await this.prisma.connection.update({
-        where: { id: connectionId },
+        where: { id: connectionId, workspaceId },
         data: {
           lastError: message,
         },
