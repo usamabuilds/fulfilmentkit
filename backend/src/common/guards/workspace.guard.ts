@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -49,12 +50,24 @@ export class WorkspaceGuard implements CanActivate {
       auth?.externalUserId || request?.user?.id;
 
     if (!externalUserId) {
+      const method = request?.method;
+      const path = (request?.originalUrl || request?.url || '').split('?')[0];
+      const isWorkspaceBootstrapRoute =
+        path === '/workspaces' && (method === 'GET' || method === 'POST');
+
       console.log('[WorkspaceGuard] no auth detected', {
         path: request?.originalUrl || request?.url,
+        method,
         hasAuth: !!auth,
         hasUser: !!request?.user,
+        isWorkspaceBootstrapRoute,
       });
-      return true;
+
+      if (isWorkspaceBootstrapRoute) {
+        return true;
+      }
+
+      throw new UnauthorizedException('Authentication required');
     }
 
     // provider MUST be a string for Prisma
