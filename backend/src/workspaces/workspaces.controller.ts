@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { WorkspacesService } from './workspaces.service';
 import { validateQuery } from '../common/utils/query-validate';
@@ -8,16 +8,14 @@ const CreateWorkspaceSchema = z.object({
   name: z.string().min(1).max(120),
 });
 
-// Dummy user until auth is plugged in
-const DUMMY_USER_ID = 'demo-user-1';
-
 @Controller('workspaces')
 export class WorkspacesController {
   constructor(private readonly workspaces: WorkspacesService) {}
 
   @Get()
-  async list() {
-    const items = await this.workspaces.listWorkspacesForUser(DUMMY_USER_ID);
+  async list(@Req() req: any) {
+    const authUser = req.user as { id?: string } | undefined;
+    const items = await this.workspaces.listWorkspacesForUser(authUser?.id as string);
 
     return toListResponse({
       items,
@@ -28,18 +26,20 @@ export class WorkspacesController {
   }
 
   @Get(':id')
-  async detail(@Param('id') id: string) {
-    const workspace = await this.workspaces.getWorkspaceForUser(id, DUMMY_USER_ID);
+  async detail(@Param('id') id: string, @Req() req: any) {
+    const authUser = req.user as { id?: string } | undefined;
+    const workspace = await this.workspaces.getWorkspaceForUser(id, authUser?.id as string);
     return workspace;
   }
 
   @Post()
-  async create(@Body() body: any) {
+  async create(@Body() body: any, @Req() req: any) {
+    const authUser = req.user as { id?: string } | undefined;
     const validated = validateQuery(CreateWorkspaceSchema, body);
 
     const workspace = await this.workspaces.createWorkspace({
       name: validated.name,
-      creatorUserId: DUMMY_USER_ID,
+      creatorUserId: authUser?.id as string,
     });
 
     return workspace;
