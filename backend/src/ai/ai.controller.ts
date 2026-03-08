@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { AiService } from './ai.service';
 import { AiToolsetService } from './ai-toolset.service';
+import { Roles } from '../common/auth/roles.decorator';
 import { apiResponse } from '../common/utils/api-response';
 
 const AddMessagesSchema = z.object({
@@ -167,6 +168,7 @@ export class AiController {
   ) {}
 
   // ✅ Create conversation
+  @Roles('VIEWER', 'ADMIN', 'OWNER')
   @Post('conversations')
   async createConversation(@Req() req: any) {
     const workspaceId = req.workspaceId as string;
@@ -193,6 +195,7 @@ export class AiController {
   }
 
   // ✅ Store user message + assistant message
+  @Roles('VIEWER', 'ADMIN', 'OWNER')
   @Post('conversations/:id/messages')
   async addMessages(
     @Req() req: any,
@@ -206,6 +209,7 @@ export class AiController {
   }
 
   // ✅ Log tool call
+  @Roles('VIEWER', 'ADMIN', 'OWNER')
   @Post('messages/:messageId/tool-calls')
   async logToolCall(
     @Req() req: any,

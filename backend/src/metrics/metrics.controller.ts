@@ -6,6 +6,7 @@ import { validateQuery } from '../common/utils/query-validate';
 import { toListResponse } from '../common/utils/list-response';
 import { apiResponse } from '../common/utils/api-response';
 import { MetricsService } from './metrics.service';
+import { Roles } from '../common/auth/roles.decorator';
 
 const computeDailyQuerySchema = z.object({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // YYYY-MM-DD
@@ -45,6 +46,7 @@ export class MetricsController {
   ) {}
 
   // POST /metrics/compute-daily?day=YYYY-MM-DD
+  @Roles('ADMIN', 'OWNER')
   @Post('compute-daily')
   async computeDaily(@Req() req: any, @Query() query: any) {
     const q = validateQuery(computeDailyQuerySchema, query);
@@ -74,6 +76,7 @@ export class MetricsController {
   }
 
   // POST /metrics/compute-sku-daily?day=YYYY-MM-DD
+  @Roles('ADMIN', 'OWNER')
   @Post('compute-sku-daily')
   async computeSkuDaily(@Req() req: any, @Query() query: any) {
     const q = validateQuery(computeDailyQuerySchema, query);
