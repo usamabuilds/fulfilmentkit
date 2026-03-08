@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { z } from 'zod';
 import { WorkspacesService } from './workspaces.service';
 import { validateQuery } from '../common/utils/query-validate';
+import { toListResponse } from '../common/utils/list-response';
 
 const CreateWorkspaceSchema = z.object({
   name: z.string().min(1).max(120),
@@ -18,10 +19,12 @@ export class WorkspacesController {
   async list() {
     const items = await this.workspaces.listWorkspacesForUser(DUMMY_USER_ID);
 
-    return {
+    return toListResponse({
       items,
       total: items.length,
-    };
+      page: 1,
+      pageSize: items.length,
+    });
   }
 
   @Get(':id')

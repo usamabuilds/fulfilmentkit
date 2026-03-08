@@ -3,6 +3,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import * as crypto from 'crypto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { toListResponse } from '../common/utils/list-response';
 
 type StartPlatform = 'shopify' | 'woocommerce' | 'amazon';
 
@@ -48,7 +49,7 @@ export class ConnectionsService {
       },
     });
 
-    return {
+    return toListResponse({
       items: rows.map((r) => ({
         id: r.id,
         platform: r.platform,
@@ -62,7 +63,10 @@ export class ConnectionsService {
         lastSyncAt: r.lastSyncAt ? r.lastSyncAt.toISOString() : null,
         lastError: r.lastError ?? null,
       })),
-    };
+      total: rows.length,
+      page: 1,
+      pageSize: rows.length,
+    });
   }
 
   async startConnectionFlow(args: StartConnectionFlowArgs) {
@@ -383,20 +387,20 @@ export class ConnectionsService {
       },
     });
 
-    return {
-      success: true,
-      data: {
-        items: runs.map((r) => ({
-          id: r.id,
-          status: r.status,
-          jobId: r.jobId ?? null,
-          createdAt: r.createdAt.toISOString(),
-          startedAt: r.startedAt ? r.startedAt.toISOString() : null,
-          finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,
-          error: r.error ?? null,
-          counts: null, // v1: counts not tracked yet (added when sync worker exists)
-        })),
-      },
-    };
+    return toListResponse({
+      items: runs.map((r) => ({
+        id: r.id,
+        status: r.status,
+        jobId: r.jobId ?? null,
+        createdAt: r.createdAt.toISOString(),
+        startedAt: r.startedAt ? r.startedAt.toISOString() : null,
+        finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,
+        error: r.error ?? null,
+        counts: null, // v1: counts not tracked yet (added when sync worker exists)
+      })),
+      total: runs.length,
+      page: 1,
+      pageSize: runs.length,
+    });
   }
 }

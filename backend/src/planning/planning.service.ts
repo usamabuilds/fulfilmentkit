@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AiToolsetService } from '../ai/ai-toolset.service';
+import { toListResponse } from '../common/utils/list-response';
 
 type DateRange = { from: string; to: string };
 
@@ -117,24 +118,21 @@ export class PlanningService {
       }),
     ]);
 
-    return {
-      success: true,
-      data: {
-        items: rows.map((p) => ({
-          id: p.id,
-          workspaceId: p.workspaceId,
-          status: p.status,
-          title: p.title,
-          createdAt: p.createdAt,
-          updatedAt: p.updatedAt,
-          result: p.resultJson,
-          assumptions: p.assumptionsJson,
-        })),
-        total,
-        page: args.pagination.page,
-        pageSize: args.pagination.pageSize,
-      },
-    };
+    return toListResponse({
+      items: rows.map((p) => ({
+        id: p.id,
+        workspaceId: p.workspaceId,
+        status: p.status,
+        title: p.title,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+        result: p.resultJson,
+        assumptions: p.assumptionsJson,
+      })),
+      total,
+      page: args.pagination.page,
+      pageSize: args.pagination.pageSize,
+    });
   }
 
   // GET /plans/:id

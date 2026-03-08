@@ -4,6 +4,7 @@ import { Queue } from 'bullmq';
 import { z } from 'zod';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { validateQuery } from '../common/utils/query-validate';
+import { toListResponse } from '../common/utils/list-response';
 
 const computeDailyQuerySchema = z.object({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // YYYY-MM-DD
@@ -141,25 +142,23 @@ export class MetricsController {
       },
     });
 
-    return {
-      success: true,
-      data: {
-        items: rows.map((r) => ({
-          day: ymdFromUtcDate(r.day),
-          revenue: String(r.revenue),
-          orders: r.orders,
-          units: r.units,
-          refundsAmount: String(r.refundsAmount),
-          feesAmount: String(r.feesAmount),
-          cogsAmount: String(r.cogsAmount),
-          grossMarginAmount: String(r.grossMarginAmount),
-          grossMarginPercent: String(r.grossMarginPercent),
-          stockoutsCount: r.stockoutsCount,
-          lowStockCount: r.lowStockCount,
-        })),
-        total: rows.length,
-        range: { from: q.from, to: q.to },
-      },
-    };
+    return toListResponse({
+      items: rows.map((r) => ({
+        day: ymdFromUtcDate(r.day),
+        revenue: String(r.revenue),
+        orders: r.orders,
+        units: r.units,
+        refundsAmount: String(r.refundsAmount),
+        feesAmount: String(r.feesAmount),
+        cogsAmount: String(r.cogsAmount),
+        grossMarginAmount: String(r.grossMarginAmount),
+        grossMarginPercent: String(r.grossMarginPercent),
+        stockoutsCount: r.stockoutsCount,
+        lowStockCount: r.lowStockCount,
+      })),
+      total: rows.length,
+      page: 1,
+      pageSize: rows.length,
+    });
   }
 }
