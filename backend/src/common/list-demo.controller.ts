@@ -7,7 +7,7 @@ import { toListResponse } from './utils/list-response';
 import { WorkspaceGuard } from './guards/workspace.guard';
 import { Roles } from './auth/roles.decorator';
 import { RolesGuard } from './auth/roles.guard';
-import { PrismaService } from './prisma/prisma.service';
+import { LocationsService } from '../locations/locations.service';
 import { requireWorkspaceId } from './workspace/workspace.utils';
 import { apiResponse } from './utils/api-response';
 
@@ -21,7 +21,7 @@ const ListDemoQuerySchema = z.object({
 @UseGuards(WorkspaceGuard, RolesGuard)
 @Controller('health')
 export class ListDemoController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly locationsService: LocationsService) {}
 
   @Get('list-demo')
   listDemo(@Query() query: any) {
@@ -61,16 +61,7 @@ export class ListDemoController {
   async listLocations(@Req() req: any) {
     const workspaceId = requireWorkspaceId(req);
 
-    const locations = await this.prisma.location.findMany({
-      where: { workspaceId },
-      orderBy: { code: 'asc' },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        createdAt: true,
-      },
-    });
+    const locations = await this.locationsService.listByCode(workspaceId);
 
     return apiResponse(
       toListResponse({

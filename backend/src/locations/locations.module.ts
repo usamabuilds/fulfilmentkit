@@ -6,5 +6,6 @@ import { LocationsService } from './locations.service';
 @Module({
   controllers: [LocationsController],
   providers: [PrismaService, LocationsService],
+  exports: [LocationsService],
 })
 export class LocationsModule {}

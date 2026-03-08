@@ -2,10 +2,10 @@ import { Controller, Get, Post, Query, Req } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { z } from 'zod';
-import { PrismaService } from '../common/prisma/prisma.service';
 import { validateQuery } from '../common/utils/query-validate';
 import { toListResponse } from '../common/utils/list-response';
 import { apiResponse } from '../common/utils/api-response';
+import { MetricsService } from './metrics.service';
 
 const computeDailyQuerySchema = z.object({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // YYYY-MM-DD
@@ -41,7 +41,7 @@ function ymdFromUtcDate(date: Date): string {
 export class MetricsController {
   constructor(
     @InjectQueue('metrics') private readonly metricsQueue: Queue,
-    private readonly prisma: PrismaService,
+    private readonly metricsService: MetricsService,
   ) {}
 
   // POST /metrics/compute-daily?day=YYYY-MM-DD
@@ -113,28 +113,10 @@ export class MetricsController {
     const toDayInclusive = toUtcMidnightFromYmd(q.to);
     const toExclusive = addDaysUtc(toDayInclusive, 1);
 
-    const rows = await this.prisma.dailyMetric.findMany({
-      where: {
-        workspaceId,
-        day: {
-          gte: fromDay,
-          lt: toExclusive,
-        },
-      },
-      orderBy: { day: 'asc' },
-      select: {
-        day: true,
-        revenue: true,
-        orders: true,
-        units: true,
-        refundsAmount: true,
-        feesAmount: true,
-        cogsAmount: true,
-        grossMarginAmount: true,
-        grossMarginPercent: true,
-        stockoutsCount: true,
-        lowStockCount: true,
-      },
+    const rows = await this.metricsService.listDailyMetrics({
+      workspaceId,
+      fromDay,
+      toExclusive,
     });
 
     return apiResponse(

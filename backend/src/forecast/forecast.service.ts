@@ -22,6 +22,11 @@ type ListForecastsArgs = {
   pageSize: number;
 };
 
+type GetForecastArgs = {
+  workspaceId: string;
+  id: string;
+};
+
 type ForecastPoint = {
   day: string; // YYYY-MM-DD
   revenue: number | null;
@@ -77,6 +82,20 @@ export class ForecastService {
     ]);
 
     return { items, total };
+  }
+
+  async getForecast(args: GetForecastArgs) {
+    const { workspaceId, id } = args;
+
+    return this.prisma.forecast.findFirst({
+      where: { id, workspaceId },
+      select: {
+        id: true,
+        createdAt: true,
+        updatedAt: true,
+        result: true,
+      },
+    });
   }
 
   private parseRange(range: DateRange): { from: Date; toExclusive: Date } {

@@ -47,6 +47,21 @@ export class WorkspacesService {
     return memberships.map((m) => m.workspace);
   }
 
+
+  async getWorkspaceRoleForUser(workspaceId: string, userId: string) {
+    const membership = await this.prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId,
+          userId,
+        },
+      },
+      select: { role: true },
+    });
+
+    return membership?.role ?? null;
+  }
+
   // Workspace detail with access control
   async getWorkspaceForUser(workspaceId: string, userId: string) {
     const workspace = await this.prisma.workspace.findUnique({

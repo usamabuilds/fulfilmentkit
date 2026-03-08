@@ -1,5 +1,5 @@
 import { Controller, Get, Req } from '@nestjs/common';
-import { PrismaService } from './prisma/prisma.service';
+import { WorkspacesService } from '../workspaces/workspaces.service';
 import { apiResponse } from './utils/api-response';
 
 type MeUserDto = {
@@ -9,7 +9,7 @@ type MeUserDto = {
 
 @Controller()
 export class MeController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly workspacesService: WorkspacesService) {}
 
   // GET /me
   // Workspace scoped (WorkspaceGuard requires X-Workspace-Id and sets req.workspaceId)
@@ -29,17 +29,10 @@ export class MeController {
         email: authUser.email ?? null,
       };
 
-      const membership = await this.prisma.workspaceMember.findUnique({
-        where: {
-          workspaceId_userId: {
-            workspaceId,
-            userId: authUser.id,
-          },
-        },
-        select: { role: true },
-      });
-
-      workspaceRole = membership?.role ?? null;
+      workspaceRole = await this.workspacesService.getWorkspaceRoleForUser(
+        workspaceId,
+        authUser.id,
+      );
     }
 
     return apiResponse({
