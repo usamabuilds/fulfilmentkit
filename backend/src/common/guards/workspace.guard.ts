@@ -23,6 +23,15 @@ export class WorkspaceGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
 
+    const method = request?.method;
+    const path = (request?.originalUrl || request?.url || '').split('?')[0];
+    const isWorkspaceBootstrapRoute =
+      path === '/workspaces' && (method === 'GET' || method === 'POST');
+
+    if (isWorkspaceBootstrapRoute) {
+      return true;
+    }
+
     const workspaceId = request.headers['x-workspace-id'];
 
     if (!workspaceId || typeof workspaceId !== 'string') {
@@ -50,11 +59,6 @@ export class WorkspaceGuard implements CanActivate {
       auth?.externalUserId || request?.user?.id;
 
     if (!externalUserId) {
-      const method = request?.method;
-      const path = (request?.originalUrl || request?.url || '').split('?')[0];
-      const isWorkspaceBootstrapRoute =
-        path === '/workspaces' && (method === 'GET' || method === 'POST');
-
       console.log('[WorkspaceGuard] no auth detected', {
         path: request?.originalUrl || request?.url,
         method,
@@ -62,10 +66,6 @@ export class WorkspaceGuard implements CanActivate {
         hasUser: !!request?.user,
         isWorkspaceBootstrapRoute,
       });
-
-      if (isWorkspaceBootstrapRoute) {
-        return true;
-      }
 
       throw new UnauthorizedException('Authentication required');
     }
