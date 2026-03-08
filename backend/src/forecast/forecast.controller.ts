@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { ForecastService } from './forecast.service';
 import { Roles } from '../common/auth/roles.decorator';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { toListResponse } from '../common/utils/list-response';
 
 const ForecastBodySchema = z
   .object({
@@ -100,19 +101,16 @@ export class ForecastController {
       }),
     ]);
 
-    return {
-      success: true,
-      data: {
-        items: items.map((x) => ({
-          ...x,
-          createdAt: x.createdAt.toISOString(),
-          updatedAt: x.updatedAt.toISOString(),
-        })),
-        total,
-        page: parsed.page,
-        pageSize: parsed.pageSize,
-      },
-    };
+    return toListResponse({
+      items: items.map((x) => ({
+        ...x,
+        createdAt: x.createdAt.toISOString(),
+        updatedAt: x.updatedAt.toISOString(),
+      })),
+      total,
+      page: parsed.page,
+      pageSize: parsed.pageSize,
+    });
   }
 
   // GET /forecast/:id (VIEWER allowed)

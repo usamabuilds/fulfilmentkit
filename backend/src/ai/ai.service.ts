@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { toListResponse } from '../common/utils/list-response';
 
 type AddMessagesArgs = {
   userMessage: string;
@@ -55,16 +56,16 @@ export class AiService {
       },
     });
 
-    return {
-      success: true,
-      data: {
-        items: conversations.map((c) => ({
-          id: c.id,
-          title: c.title,
-          createdAt: c.createdAt.toISOString(),
-        })),
-      },
-    };
+    return toListResponse({
+      items: conversations.map((c) => ({
+        id: c.id,
+        title: c.title,
+        createdAt: c.createdAt.toISOString(),
+      })),
+      total: conversations.length,
+      page: 1,
+      pageSize: conversations.length,
+    });
   }
 
   // ✅ Get messages of a conversation

@@ -69,10 +69,12 @@ export class ListDemoController {
       },
     });
 
-    return {
+    return toListResponse({
       items: locations,
       total: locations.length,
-    };
+      page: 1,
+      pageSize: locations.length,
+    });
   }
 
   @Roles('ADMIN')

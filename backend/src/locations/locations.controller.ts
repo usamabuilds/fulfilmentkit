@@ -1,5 +1,6 @@
 import { Controller, Get, Req } from '@nestjs/common';
 import { LocationsService } from './locations.service';
+import { toListResponse } from '../common/utils/list-response';
 
 @Controller('locations')
 export class LocationsController {
@@ -11,8 +12,11 @@ export class LocationsController {
 
     const items = await this.locationsService.list(workspaceId);
 
-    return {
+    return toListResponse({
       items,
-    };
+      total: items.length,
+      page: 1,
+      pageSize: items.length,
+    });
   }
 }
