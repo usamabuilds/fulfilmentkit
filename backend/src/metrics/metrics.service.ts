@@ -163,6 +163,39 @@ export class MetricsService {
     return record;
   }
 
+
+  async listDailyMetrics(params: {
+    workspaceId: string;
+    fromDay: Date;
+    toExclusive: Date;
+  }) {
+    const { workspaceId, fromDay, toExclusive } = params;
+
+    return this.prisma.dailyMetric.findMany({
+      where: {
+        workspaceId,
+        day: {
+          gte: fromDay,
+          lt: toExclusive,
+        },
+      },
+      orderBy: { day: 'asc' },
+      select: {
+        day: true,
+        revenue: true,
+        orders: true,
+        units: true,
+        refundsAmount: true,
+        feesAmount: true,
+        cogsAmount: true,
+        grossMarginAmount: true,
+        grossMarginPercent: true,
+        stockoutsCount: true,
+        lowStockCount: true,
+      },
+    });
+  }
+
   async computeSkuDailyMetric(params: ComputeSkuDailyMetricParams) {
     const { workspaceId } = params;
 

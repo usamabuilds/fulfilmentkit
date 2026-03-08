@@ -21,4 +21,18 @@ export class LocationsService {
       },
     });
   }
+
+  async listByCode(workspaceId: string) {
+    return this.prisma.location.findMany({
+      where: { workspaceId },
+      orderBy: { code: 'asc' },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        createdAt: true,
+      },
+    });
+  }
+
 }

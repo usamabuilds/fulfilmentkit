@@ -11,7 +11,6 @@ import {
 import { z } from 'zod';
 import { ForecastService } from './forecast.service';
 import { Roles } from '../common/auth/roles.decorator';
-import { PrismaService } from '../common/prisma/prisma.service';
 import { toListResponse } from '../common/utils/list-response';
 import { apiResponse } from '../common/utils/api-response';
 
@@ -49,10 +48,7 @@ const ListQuerySchema = z.object({
 
 @Controller('forecast')
 export class ForecastController {
-  constructor(
-    private readonly forecastService: ForecastService,
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly forecastService: ForecastService) {}
 
   // POST /forecast (ADMIN + OWNER only)
   @Roles('ADMIN', 'OWNER')
@@ -107,14 +103,9 @@ export class ForecastController {
   async getForecast(@Req() req: any, @Param('id') id: string) {
     const workspaceId = req.workspaceId as string;
 
-    const forecast = await this.prisma.forecast.findFirst({
-      where: { id, workspaceId },
-      select: {
-        id: true,
-        createdAt: true,
-        updatedAt: true,
-        result: true,
-      },
+    const forecast = await this.forecastService.getForecast({
+      workspaceId,
+      id,
     });
 
     if (!forecast) {
