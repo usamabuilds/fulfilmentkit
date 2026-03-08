@@ -11,6 +11,20 @@ type JwtPayload = {
 
 @Injectable()
 export class JwtAuthMiddleware implements NestMiddleware {
+  private readonly jwtSecret: string;
+
+  constructor() {
+    const secret = process.env.SUPABASE_JWT_SECRET || process.env.JWT_SECRET;
+
+    if (!secret) {
+      throw new Error(
+        'Missing JWT secret: set SUPABASE_JWT_SECRET or JWT_SECRET before starting the application.',
+      );
+    }
+
+    this.jwtSecret = secret;
+  }
+
   use(req: any, _res: any, next: (err?: any) => void) {
     const path = req?.originalUrl || req?.url;
 
@@ -43,27 +57,13 @@ export class JwtAuthMiddleware implements NestMiddleware {
         return next();
       }
 
-      const secretFrom =
-        process.env.SUPABASE_JWT_SECRET
-          ? 'SUPABASE_JWT_SECRET'
-          : process.env.JWT_SECRET
-            ? 'JWT_SECRET'
-            : process.env.NODE_ENV !== 'production'
-              ? 'dev-secret'
-              : 'none';
+      const secretFrom = process.env.SUPABASE_JWT_SECRET
+        ? 'SUPABASE_JWT_SECRET'
+        : 'JWT_SECRET';
 
-      const secret =
-        process.env.SUPABASE_JWT_SECRET ||
-        process.env.JWT_SECRET ||
-        (process.env.NODE_ENV !== 'production' ? 'dev-secret' : undefined);
+      const secret = this.jwtSecret;
 
       console.log('[JwtAuthMiddleware] SECRET', { path, secretFrom });
-
-      if (!secret) {
-        req.user = undefined;
-        req.auth = undefined;
-        return next();
-      }
 
       const decoded = jwt.verify(token, secret) as JwtPayload;
 
