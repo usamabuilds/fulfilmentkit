@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { ConnectionsService } from './connections.service';
+import { Roles } from '../common/auth/roles.decorator';
 
 const platformSchema = z.enum(['shopify', 'woocommerce', 'amazon']);
 
@@ -15,6 +16,7 @@ export class ConnectionsController {
   }
 
   @Post(':platform/start')
+  @Roles('ADMIN', 'OWNER')
   async start(@Req() req: any, @Param('platform') platformRaw: string) {
     const workspaceId = req.workspaceId as string;
 
@@ -27,6 +29,7 @@ export class ConnectionsController {
   }
 
   @Post(':platform/callback')
+  @Roles('ADMIN', 'OWNER')
   async callback(
     @Req() req: any,
     @Param('platform') platformRaw: string,
@@ -44,6 +47,7 @@ export class ConnectionsController {
   }
 
   @Post(':id/sync')
+  @Roles('ADMIN', 'OWNER')
   async sync(@Req() req: any, @Param('id') connectionId: string) {
     const workspaceId = req.workspaceId as string;
 
