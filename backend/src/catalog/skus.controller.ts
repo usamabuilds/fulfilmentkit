@@ -5,6 +5,7 @@ import { parsePagination } from '../common/utils/pagination';
 import { toListResponse } from '../common/utils/list-response';
 import { requireWorkspaceId } from '../common/workspace/workspace.utils';
 import { SkusService } from './skus.service';
+import { apiResponse } from '../common/utils/api-response';
 
 const SkusListQuerySchema = z.object({
   search: z.string().optional(),
@@ -30,6 +31,6 @@ export class SkusController {
       pageSize,
     });
 
-    return toListResponse(result);
+    return apiResponse(toListResponse(result));
   }
 }

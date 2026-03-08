@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { DashboardService } from './dashboard.service';
 import { validateQuery } from '../common/utils/query-validate';
 import { parseDateRange } from '../common/utils/date-range';
+import { apiResponse } from '../common/utils/api-response';
 
 const dashboardSummaryQuerySchema = z.object({
   from: z.string().optional(),
@@ -37,11 +38,13 @@ export class DashboardController {
     const q = validateQuery(dashboardSummaryQuerySchema, query);
     const { from, to } = parseDateRange(q);
 
-    return this.dashboardService.summary({
+    const result = await this.dashboardService.summary({
       workspaceId,
       from,
       to,
     });
+
+    return apiResponse(result);
   }
 
   @Get('trends')
@@ -50,13 +53,15 @@ export class DashboardController {
     const q = validateQuery(dashboardTrendsQuerySchema, query);
     const { from, to } = parseDateRange(q);
 
-    return this.dashboardService.trends({
+    const result = await this.dashboardService.trends({
       workspaceId,
       metric: q.metric,
       groupBy: q.groupBy,
       from,
       to,
     });
+
+    return apiResponse(result);
   }
 
   @Get('breakdown')
@@ -65,12 +70,14 @@ export class DashboardController {
     const q = validateQuery(dashboardBreakdownQuerySchema, query);
     const { from, to } = parseDateRange(q);
 
-    return this.dashboardService.breakdown({
+    const result = await this.dashboardService.breakdown({
       workspaceId,
       by: q.by,
       from,
       to,
     });
+
+    return apiResponse(result);
   }
 
   @Get('alerts')
@@ -79,10 +86,12 @@ export class DashboardController {
     const q = validateQuery(dashboardAlertsQuerySchema, query);
     const { from, to } = parseDateRange(q);
 
-    return this.dashboardService.alerts({
+    const result = await this.dashboardService.alerts({
       workspaceId,
       from,
       to,
     });
+
+    return apiResponse(result);
   }
 }

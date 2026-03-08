@@ -5,6 +5,7 @@ import { validateQuery } from '../common/utils/query-validate';
 import { parsePagination } from '../common/utils/pagination';
 import { toListResponse } from '../common/utils/list-response';
 import { requireWorkspaceId } from '../common/workspace/workspace.utils';
+import { apiResponse } from '../common/utils/api-response';
 
 const ProductsListQuerySchema = z.object({
   search: z.string().optional(),
@@ -30,6 +31,6 @@ export class ProductsController {
       pageSize,
     });
 
-    return toListResponse(result);
+    return apiResponse(toListResponse(result));
   }
 }

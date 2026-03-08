@@ -1,5 +1,6 @@
 import { Controller, Get, Req } from '@nestjs/common';
 import { PrismaService } from './prisma/prisma.service';
+import { apiResponse } from './utils/api-response';
 
 type MeUserDto = {
   id: string;
@@ -41,13 +42,10 @@ export class MeController {
       workspaceRole = membership?.role ?? null;
     }
 
-    return {
-      success: true,
-      data: {
+    return apiResponse({
         user,
         workspaceId,
         workspaceRole,
-      },
-    };
+      });
   }
 }

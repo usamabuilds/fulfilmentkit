@@ -1,7 +1,18 @@
-import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import { z } from 'zod';
 import { AiService } from './ai.service';
 import { AiToolsetService } from './ai-toolset.service';
+import { apiResponse } from '../common/utils/api-response';
 
 const AddMessagesSchema = z.object({
   userMessage: z.string().min(1),
@@ -176,7 +187,8 @@ export class AiController {
   @Get('conversations')
   async listConversations(@Req() req: any) {
     const workspaceId = req.workspaceId as string;
-    return this.aiService.listConversations(workspaceId);
+    const result = await this.aiService.listConversations(workspaceId);
+    return apiResponse(result);
   }
 
   // ✅ Get messages of a conversation
@@ -186,7 +198,13 @@ export class AiController {
     @Param('id') conversationId: string,
   ) {
     const workspaceId = req.workspaceId as string;
-    return this.aiService.getConversationMessages(workspaceId, conversationId);
+    const result = await this.aiService.getConversationMessages(workspaceId, conversationId);
+
+    if (!result.success) {
+      throw new NotFoundException(result.error?.message ?? 'Conversation not found');
+    }
+
+    return apiResponse(result.data);
   }
 
   // ✅ Store user message + assistant message
@@ -198,7 +216,13 @@ export class AiController {
   ) {
     const workspaceId = req.workspaceId as string;
     const parsed = AddMessagesSchema.parse(body);
-    return this.aiService.addMessages(workspaceId, conversationId, parsed);
+    const result = await this.aiService.addMessages(workspaceId, conversationId, parsed);
+
+    if (!result.success) {
+      throw new NotFoundException(result.error?.message ?? 'Conversation not found');
+    }
+
+    return apiResponse(result.data);
   }
 
   // ✅ Log tool call
@@ -211,10 +235,16 @@ export class AiController {
     const workspaceId = req.workspaceId as string;
     const parsed = LogToolCallSchema.parse(body);
 
-    return this.aiService.logToolCall(workspaceId, {
+    const result = await this.aiService.logToolCall(workspaceId, {
       messageId,
       ...parsed,
     });
+
+    if (!result.success) {
+      throw new NotFoundException(result.error?.message ?? 'Message not found');
+    }
+
+    return apiResponse(result.data);
   }
 
   // -------------------------
@@ -226,10 +256,12 @@ export class AiController {
     const workspaceId = req.workspaceId as string;
     const parsed = KpiSummaryQuerySchema.parse(query);
 
-    return this.toolset.getKpiSummary({
+    const result = await this.toolset.getKpiSummary({
       workspaceId,
       range: { from: parsed.from, to: parsed.to },
     });
+
+    return apiResponse(result);
   }
 
   @Get('tools/kpi-deltas')
@@ -237,11 +269,13 @@ export class AiController {
     const workspaceId = req.workspaceId as string;
     const parsed = KpiDeltasQuerySchema.parse(query);
 
-    return this.toolset.getKpiDeltas({
+    const result = await this.toolset.getKpiDeltas({
       workspaceId,
       range: { from: parsed.from, to: parsed.to },
       compareTo: { from: parsed.compareFrom, to: parsed.compareTo },
     });
+
+    return apiResponse(result);
   }
 
   @Get('tools/trends')
@@ -257,11 +291,13 @@ export class AiController {
             .filter((s) => s.length > 0)
         : undefined;
 
-    return this.toolset.getTrends({
+    const result = await this.toolset.getTrends({
       workspaceId,
       range: { from: parsed.from, to: parsed.to },
       metricKeys: keys,
     });
+
+    return apiResponse(result);
   }
 
   @Get('tools/breakdown')
@@ -269,12 +305,14 @@ export class AiController {
     const workspaceId = req.workspaceId as string;
     const parsed = BreakdownQuerySchema.parse(query);
 
-    return this.toolset.getBreakdown({
+    const result = await this.toolset.getBreakdown({
       workspaceId,
       range: { from: parsed.from, to: parsed.to },
       by: parsed.by,
       limit: parsed.limit,
     });
+
+    return apiResponse(result);
   }
 
   // ✅ UPDATED: pass optional compare range through (so service can compute delta/deltaPct)
@@ -294,7 +332,7 @@ export class AiController {
       margin: 'margin',
     };
 
-    return this.toolset.getTopMovers({
+    const result = await this.toolset.getTopMovers({
       workspaceId,
       range: { from: parsed.from, to: parsed.to },
       compareTo:
@@ -305,6 +343,8 @@ export class AiController {
       direction: parsed.direction,
       limit: parsed.limit,
     });
+
+    return apiResponse(result);
   }
 
   @Get('tools/order-issues')
@@ -312,11 +352,13 @@ export class AiController {
     const workspaceId = req.workspaceId as string;
     const parsed = OrderIssuesQuerySchema.parse(query);
 
-    return this.toolset.getOrderIssues({
+    const result = await this.toolset.getOrderIssues({
       workspaceId,
       range: { from: parsed.from, to: parsed.to },
       limit: parsed.limit,
     });
+
+    return apiResponse(result);
   }
 
   // -------------------------
@@ -329,12 +371,14 @@ export class AiController {
     const workspaceId = req.workspaceId as string;
     const parsed = StockoutRiskQuerySchema.parse(query);
 
-    return this.toolset.getStockoutRisk({
+    const result = await this.toolset.getStockoutRisk({
       workspaceId,
       range: { from: parsed.from, to: parsed.to },
       horizonDays: parsed.horizonDays,
       limit: parsed.limit,
     });
+
+    return apiResponse(result);
   }
 
   // GET /ai/tools/low-stock-risk?threshold=10&limit=50
@@ -343,11 +387,13 @@ export class AiController {
     const workspaceId = req.workspaceId as string;
     const parsed = LowStockRiskQuerySchema.parse(query);
 
-    return this.toolset.getLowStockRisk({
+    const result = await this.toolset.getLowStockRisk({
       workspaceId,
       threshold: parsed.threshold,
       limit: parsed.limit,
     });
+
+    return apiResponse(result);
   }
 
   // GET /ai/tools/refund-spike-risk?from=YYYY-MM-DD&to=YYYY-MM-DD&compareFrom=YYYY-MM-DD&compareTo=YYYY-MM-DD
@@ -356,11 +402,13 @@ export class AiController {
     const workspaceId = req.workspaceId as string;
     const parsed = SpikeRiskQuerySchema.parse(query);
 
-    return this.toolset.getRefundSpikeRisk({
+    const result = await this.toolset.getRefundSpikeRisk({
       workspaceId,
       range: { from: parsed.from, to: parsed.to },
       compareTo: { from: parsed.compareFrom, to: parsed.compareTo },
     });
+
+    return apiResponse(result);
   }
 
   // GET /ai/tools/fee-spike-risk?from=YYYY-MM-DD&to=YYYY-MM-DD&compareFrom=YYYY-MM-DD&compareTo=YYYY-MM-DD
@@ -369,11 +417,13 @@ export class AiController {
     const workspaceId = req.workspaceId as string;
     const parsed = SpikeRiskQuerySchema.parse(query);
 
-    return this.toolset.getFeeSpikeRisk({
+    const result = await this.toolset.getFeeSpikeRisk({
       workspaceId,
       range: { from: parsed.from, to: parsed.to },
       compareTo: { from: parsed.compareFrom, to: parsed.compareTo },
     });
+
+    return apiResponse(result);
   }
 
   // GET /ai/tools/margin-leakage?from=YYYY-MM-DD&to=YYYY-MM-DD&compareFrom=...&compareTo=...
@@ -382,7 +432,7 @@ export class AiController {
     const workspaceId = req.workspaceId as string;
     const parsed = MarginLeakageQuerySchema.parse(query);
 
-    return this.toolset.getMarginLeakageRisk({
+    const result = await this.toolset.getMarginLeakageRisk({
       workspaceId,
       range: { from: parsed.from, to: parsed.to },
       compareTo:
@@ -390,6 +440,8 @@ export class AiController {
           ? { from: parsed.compareFrom, to: parsed.compareTo }
           : undefined,
     });
+
+    return apiResponse(result);
   }
 
   // GET /ai/tools/ops-risk?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -398,10 +450,12 @@ export class AiController {
     const workspaceId = req.workspaceId as string;
     const parsed = OpsRiskQuerySchema.parse(query);
 
-    return this.toolset.getOpsRisk({
+    const result = await this.toolset.getOpsRisk({
       workspaceId,
       range: { from: parsed.from, to: parsed.to },
     });
+
+    return apiResponse(result);
   }
 
   // -------------------------
@@ -416,9 +470,11 @@ export class AiController {
     const workspaceId = req.workspaceId as string;
     const parsed = KpiSummaryQuerySchema.parse(query);
 
-    return this.toolset.getPlanningOutput({
+    const result = await this.toolset.getPlanningOutput({
       workspaceId,
       range: { from: parsed.from, to: parsed.to },
     });
+
+    return apiResponse(result);
   }
 }

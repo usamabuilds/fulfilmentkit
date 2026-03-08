@@ -1,6 +1,15 @@
-import { Body, Controller, Headers, Param, Post, Req } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Headers,
+  Param,
+  Post,
+  Req,
+} from '@nestjs/common';
 import { z } from 'zod';
 import { WebhookService } from './webhook.service';
+import { apiResponse } from '../../common/utils/api-response';
 
 const platformSchema = z.enum(['shopify', 'woocommerce', 'amazon']);
 
@@ -18,11 +27,17 @@ export class WebhookController {
     const workspaceId = req.workspaceId as string;
     const platform = platformSchema.parse(platformRaw.toLowerCase());
 
-    return this.webhookService.ingestWebhook({
+    const result = await this.webhookService.ingestWebhook({
       workspaceId,
       platform,
       headers,
       payload: body,
     });
+
+    if (!result.success) {
+      throw new BadRequestException(result.error?.message ?? 'Request failed');
+    }
+
+    return apiResponse(result.data);
   }
 }

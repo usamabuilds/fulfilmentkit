@@ -4,6 +4,7 @@ import { InventoryService } from './inventory.service';
 import { parsePagination } from '../common/utils/pagination';
 import { toListResponse } from '../common/utils/list-response';
 import { validateQuery } from '../common/utils/query-validate';
+import { apiResponse } from '../common/utils/api-response';
 
 const inventoryListQuerySchema = z.object({
   locationId: z.string().uuid().optional(),
@@ -34,11 +35,13 @@ export class InventoryController {
       take,
     });
 
-    return toListResponse({
+    return apiResponse(
+      toListResponse({
       items: result.items,
       total: result.total,
       page,
       pageSize,
-    });
+      }),
+    );
   }
 }

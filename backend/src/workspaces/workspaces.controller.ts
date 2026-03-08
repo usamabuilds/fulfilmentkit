@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { WorkspacesService } from './workspaces.service';
 import { validateQuery } from '../common/utils/query-validate';
 import { toListResponse } from '../common/utils/list-response';
+import { apiResponse } from '../common/utils/api-response';
 
 const CreateWorkspaceSchema = z.object({
   name: z.string().min(1).max(120),
@@ -17,19 +18,21 @@ export class WorkspacesController {
     const authUser = req.user as { id?: string } | undefined;
     const items = await this.workspaces.listWorkspacesForUser(authUser?.id as string);
 
-    return toListResponse({
+    return apiResponse(
+      toListResponse({
       items,
       total: items.length,
       page: 1,
       pageSize: items.length,
-    });
+      }),
+    );
   }
 
   @Get(':id')
   async detail(@Param('id') id: string, @Req() req: any) {
     const authUser = req.user as { id?: string } | undefined;
     const workspace = await this.workspaces.getWorkspaceForUser(id, authUser?.id as string);
-    return workspace;
+    return apiResponse(workspace);
   }
 
   @Post()
@@ -42,6 +45,6 @@ export class WorkspacesController {
       creatorUserId: authUser?.id as string,
     });
 
-    return workspace;
+    return apiResponse(workspace);
   }
 }
