@@ -1,14 +1,4 @@
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  Get,
-  NotFoundException,
-  Param,
-  Post,
-  Query,
-  Req,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { AiService } from './ai.service';
 import { AiToolsetService } from './ai-toolset.service';
@@ -199,11 +189,6 @@ export class AiController {
   ) {
     const workspaceId = req.workspaceId as string;
     const result = await this.aiService.getConversationMessages(workspaceId, conversationId);
-
-    if (!result.success) {
-      throw new NotFoundException(result.error?.message ?? 'Conversation not found');
-    }
-
     return apiResponse(result.data);
   }
 
@@ -217,11 +202,6 @@ export class AiController {
     const workspaceId = req.workspaceId as string;
     const parsed = AddMessagesSchema.parse(body);
     const result = await this.aiService.addMessages(workspaceId, conversationId, parsed);
-
-    if (!result.success) {
-      throw new NotFoundException(result.error?.message ?? 'Conversation not found');
-    }
-
     return apiResponse(result.data);
   }
 
@@ -239,11 +219,6 @@ export class AiController {
       messageId,
       ...parsed,
     });
-
-    if (!result.success) {
-      throw new NotFoundException(result.error?.message ?? 'Message not found');
-    }
-
     return apiResponse(result.data);
   }
 

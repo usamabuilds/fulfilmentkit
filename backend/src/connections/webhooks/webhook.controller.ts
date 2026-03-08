@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Headers,
@@ -33,10 +32,6 @@ export class WebhookController {
       headers,
       payload: body,
     });
-
-    if (!result.success) {
-      throw new BadRequestException(result.error?.message ?? 'Request failed');
-    }
 
     return apiResponse(result.data);
   }

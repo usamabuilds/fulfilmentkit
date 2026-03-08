@@ -1,13 +1,4 @@
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  Get,
-  NotFoundException,
-  Param,
-  Post,
-  Req,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { ConnectionsService } from './connections.service';
 import { Roles } from '../common/auth/roles.decorator';
@@ -59,13 +50,6 @@ export class ConnectionsController {
       payload: body,
     });
 
-    if (!result.success) {
-      if (result.error?.code === 'CONNECTION_NOT_FOUND') {
-        throw new NotFoundException(result.error.message);
-      }
-      throw new BadRequestException(result.error?.message ?? 'Request failed');
-    }
-
     return apiResponse(result.data);
   }
 
@@ -79,13 +63,6 @@ export class ConnectionsController {
       connectionId,
     });
 
-    if (!result.success) {
-      if (result.error?.code === 'CONNECTION_NOT_FOUND') {
-        throw new NotFoundException(result.error.message);
-      }
-      throw new BadRequestException(result.error?.message ?? 'Request failed');
-    }
-
     return apiResponse(result.data);
   }
 
@@ -97,13 +74,6 @@ export class ConnectionsController {
       workspaceId,
       connectionId,
     });
-
-    if ('success' in result && !result.success) {
-      if (result.error?.code === 'CONNECTION_NOT_FOUND') {
-        throw new NotFoundException(result.error.message);
-      }
-      throw new BadRequestException(result.error?.message ?? 'Request failed');
-    }
 
     return apiResponse(result);
   }
