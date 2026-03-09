@@ -37,7 +37,7 @@ const config: Config = {
         '22': '5.5rem',
       },
       fontFamily: {
-        sans: ['SohneBreit', '-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'Helvetica Neue', 'sans-serif'],
+        sans: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'Helvetica Neue', 'sans-serif'],
         mono: ['SF Mono', 'ui-monospace', 'Menlo', 'monospace'],
       },
       boxShadow: {
