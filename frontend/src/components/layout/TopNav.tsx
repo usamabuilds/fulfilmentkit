@@ -1,5 +1,6 @@
 'use client'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { modules } from '@/lib/nav/modules'
@@ -12,9 +13,13 @@ export function TopNav() {
   return (
     <header className="glass-nav fixed top-0 left-0 right-0 z-50 h-12 flex items-center px-4">
       <Link href="/dashboard" className="flex items-center gap-2 mr-8 shrink-0">
-        <div className="w-6 h-6 rounded-[6px] bg-accent flex items-center justify-center">
-          <span className="text-white text-caption-2 font-bold">FK</span>
-        </div>
+        <Image
+          src="/ffkt_logo_purple_transparent_bg.png"
+          alt="FulfilmentKit"
+          width={28}
+          height={28}
+          className="object-contain"
+        />
         <span className="text-headline text-text-primary hidden sm:block">FulfilmentKit</span>
       </Link>
 
