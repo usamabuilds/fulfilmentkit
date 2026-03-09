@@ -1,11 +1,3 @@
-@font-face {
-  font-family: 'SohneBreit';
-  src: url('/fonts/TestSohneBreit-ExtrafettKursiv-BF663d89caab90d.otf') format('opentype');
-  font-weight: 800;
-  font-style: italic;
-  font-display: swap;
-}
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -70,7 +62,7 @@
   body {
     background-color: var(--bg-base);
     color: var(--text-primary);
-    font-family: 'SohneBreit', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
     font-size: 15px;
     line-height: 1.5;
   }
