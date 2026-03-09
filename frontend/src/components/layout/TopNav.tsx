@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { motion } from 'framer-motion'
 import { modules } from '@/lib/nav/modules'
 import { cn } from '@/lib/utils/cn'
 
@@ -16,6 +17,7 @@ export function TopNav() {
         </div>
         <span className="text-headline text-text-primary hidden sm:block">FulfilmentKit</span>
       </Link>
+
       <nav className="flex items-center gap-1 flex-1 overflow-x-auto">
         {modules.map((module) => {
           const isActive = activeModule?.id === module.id
@@ -24,13 +26,18 @@ export function TopNav() {
               key={module.id}
               href={module.pages[0].href}
               className={cn(
-                'px-3 py-1.5 rounded-[8px] text-subhead whitespace-nowrap transition-all duration-200',
-                isActive
-                  ? 'nav-pill-active text-text-primary'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-black/5'
+                'relative px-3 py-1.5 rounded-[8px] text-subhead whitespace-nowrap transition-colors duration-200',
+                isActive ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'
               )}
             >
-              {module.label}
+              {isActive && (
+                <motion.span
+                  layoutId="nav-pill"
+                  className="absolute inset-0 nav-pill-active rounded-[8px]"
+                  transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }}
+                />
+              )}
+              <span className="relative z-10">{module.label}</span>
             </Link>
           )
         })}
