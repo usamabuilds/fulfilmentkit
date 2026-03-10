@@ -11,7 +11,7 @@ export function TopNav() {
   const activeModule = modules.find((m) => pathname.startsWith(m.basePath))
 
   return (
-    <header className="glass-nav fixed top-0 left-0 right-0 z-50 h-12 flex items-center px-4">
+    <header className="glass-nav fixed top-0 left-0 right-0 z-50 h-12 flex items-center px-4 mx-4 mt-3 rounded-2xl">
       <Link href="/dashboard" className="flex items-center gap-2 mr-8 shrink-0">
         <Image
           src="/ffkt_logo_purple_transparent_bg.png"

@@ -19,7 +19,9 @@ export function Shell({ children }: ShellProps) {
 
   return (
     <div className="min-h-screen bg-bg-base">
-      <TopNav />
+      <div className="px-4 pt-3">
+        <TopNav />
+      </div>
       <RightSidebar />
 
       {/* Mobile page nav — shown below 1024px when module has multiple pages */}
@@ -64,7 +66,7 @@ export function Shell({ children }: ShellProps) {
         </div>
       )}
 
-      <main className="pt-12 lg:pr-[220px]">
+      <main className="pt-16 lg:pr-[220px]">
         <motion.div
           key={pathname}
           initial={{ opacity: 0, y: 6 }}

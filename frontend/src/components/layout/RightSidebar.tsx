@@ -12,7 +12,7 @@ export function RightSidebar() {
   if (!activeModule || activeModule.pages.length <= 1) return null
 
   return (
-    <aside className="glass-sidebar fixed top-12 right-0 bottom-0 w-[220px] z-40 p-3 hidden lg:block">
+    <aside className="glass-sidebar fixed top-12 right-0 bottom-0 w-[220px] z-40 p-3 hidden lg:block mr-3 mt-16 mb-3 rounded-2xl">
       <p className="text-caption-2 text-text-tertiary px-2 mb-2">
         {activeModule.label.toUpperCase()}
       </p>
