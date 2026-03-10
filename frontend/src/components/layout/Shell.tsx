@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { TopNav } from './TopNav'
-import { RightSidebar } from './RightSidebar'
+import { LeftSidebar } from './RightSidebar'
 import { modules } from '@/lib/nav/modules'
 import Link from 'next/link'
 import { cn } from '@/lib/utils/cn'
@@ -22,7 +22,7 @@ export function Shell({ children }: ShellProps) {
       <div className="px-4 pt-3">
         <TopNav />
       </div>
-      <RightSidebar />
+      <LeftSidebar />
 
       {/* Mobile page nav — shown below 1024px when module has multiple pages */}
       {activeModule && activeModule.pages.length > 1 && (
@@ -66,7 +66,7 @@ export function Shell({ children }: ShellProps) {
         </div>
       )}
 
-      <main className="pt-16 lg:pr-[220px]">
+      <main className="pt-16 lg:pl-[216px]">
         <motion.div
           key={pathname}
           initial={{ opacity: 0, y: 6 }}
