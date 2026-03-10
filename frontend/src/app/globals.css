@@ -20,7 +20,7 @@
     --border-default: rgba(255, 255, 255, 0.12);
     --border-strong: rgba(255, 255, 255, 0.22);
 
-    --bg-base: #1a0533;
+    --bg-base: transparent;
     --bg-elevated: rgba(255, 255, 255, 0.08);
     --surface-1: rgba(255, 255, 255, 0.08);
     --surface-2: rgba(255, 255, 255, 0.05);
@@ -59,8 +59,11 @@
   }
 
   body {
-    background: linear-gradient(135deg, #1a0533 0%, #2d1057 30%, #4a1a8a 60%, #2d1057 80%, #1a0533 100%);
+    background-image: url('/bg.png');
+    background-size: cover;
+    background-position: center;
     background-attachment: fixed;
+    background-repeat: no-repeat;
     min-height: 100vh;
     color: var(--text-primary);
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
