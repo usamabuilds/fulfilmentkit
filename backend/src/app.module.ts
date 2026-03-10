@@ -19,6 +19,7 @@ import { AiModule } from './ai/ai.module';
 import { ForecastModule } from './forecast/forecast.module';
 import { PlanningModule } from './planning/planning.module';
 import { SettingsModule } from './settings/settings.module';
+import { AuthModule } from './auth/auth.module';
 
 import { JwtAuthMiddleware } from './common/auth/jwt-auth.middleware';
 
@@ -37,6 +38,7 @@ import { JwtAuthMiddleware } from './common/auth/jwt-auth.middleware';
     ForecastModule,
     PlanningModule,
     SettingsModule,
+    AuthModule,
   ],
   controllers: [ListDemoController, MeController],
   providers: [
