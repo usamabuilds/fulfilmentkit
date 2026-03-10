@@ -18,6 +18,7 @@ import { ConnectionsModule } from './connections/connections.module';
 import { AiModule } from './ai/ai.module';
 import { ForecastModule } from './forecast/forecast.module';
 import { PlanningModule } from './planning/planning.module';
+import { SettingsModule } from './settings/settings.module';
 
 import { JwtAuthMiddleware } from './common/auth/jwt-auth.middleware';
 
@@ -35,6 +36,7 @@ import { JwtAuthMiddleware } from './common/auth/jwt-auth.middleware';
     AiModule,
     ForecastModule,
     PlanningModule,
+    SettingsModule,
   ],
   controllers: [ListDemoController, MeController],
   providers: [
