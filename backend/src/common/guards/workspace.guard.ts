@@ -30,8 +30,10 @@ export class WorkspaceGuard implements CanActivate {
     const path = (request?.originalUrl || request?.url || '').split('?')[0];
     const isWorkspaceBootstrapRoute =
       path === '/workspaces' && (method === 'GET' || method === 'POST');
+    const isAuthPublicRoute =
+      (path === '/auth/register' || path === '/auth/login') && method === 'POST';
 
-    if (isWorkspaceBootstrapRoute) {
+    if (isWorkspaceBootstrapRoute || isAuthPublicRoute) {
       return true;
     }
 
