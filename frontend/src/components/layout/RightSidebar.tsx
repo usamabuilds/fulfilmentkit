@@ -5,14 +5,14 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { modules } from '@/lib/nav/modules'
 import { cn } from '@/lib/utils/cn'
 
-export function RightSidebar() {
+export function LeftSidebar() {
   const pathname = usePathname()
   const activeModule = modules.find((m) => pathname.startsWith(m.basePath))
 
   if (!activeModule || activeModule.pages.length <= 1) return null
 
   return (
-    <aside className="glass-sidebar fixed top-12 right-0 bottom-0 w-[220px] z-40 p-3 hidden lg:block mr-3 mt-16 mb-3 rounded-2xl">
+    <aside className="glass-nav fixed top-16 left-3 bottom-3 w-[200px] hidden lg:flex flex-col pt-3 pb-3 px-2 rounded-2xl z-40">
       <p className="text-caption-2 text-text-tertiary px-2 mb-2">
         {activeModule.label.toUpperCase()}
       </p>
