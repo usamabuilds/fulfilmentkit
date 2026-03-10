@@ -7,10 +7,10 @@
    ============================================ */
 @layer base {
   :root {
-    --text-primary: #ffffff;
-    --text-secondary: rgba(255, 255, 255, 0.65);
-    --text-tertiary: rgba(255, 255, 255, 0.35);
-    --text-inverse: #1a0533;
+    --text-primary: #0a0a0a;
+    --text-secondary: #3d3d3d;
+    --text-tertiary: #7a7a7a;
+    --text-inverse: #ffffff;
 
     --accent: #a78bfa;
     --accent-hover: #c4b5fd;
