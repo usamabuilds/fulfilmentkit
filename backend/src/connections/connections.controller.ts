@@ -4,7 +4,7 @@ import { ConnectionsService } from './connections.service';
 import { Roles } from '../common/auth/roles.decorator';
 import { apiResponse } from '../common/utils/api-response';
 
-const platformSchema = z.enum(['shopify', 'woocommerce', 'amazon']);
+const platformSchema = z.enum(['shopify', 'woocommerce', 'amazon', 'zoho', 'xero', 'sage', 'odoo', 'quickbooks']);
 
 @Controller('connections')
 export class ConnectionsController {

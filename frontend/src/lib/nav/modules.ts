@@ -54,6 +54,11 @@ export const modules: NavModule[] = [
       { label: 'Shopify', href: '/connections/shopify' },
       { label: 'WooCommerce', href: '/connections/woocommerce' },
       { label: 'Amazon', href: '/connections/amazon' },
+      { label: 'Zoho', href: '/connections/zoho' },
+      { label: 'Xero', href: '/connections/xero' },
+      { label: 'Sage', href: '/connections/sage' },
+      { label: 'Odoo', href: '/connections/odoo' },
+      { label: 'QuickBooks', href: '/connections/quickbooks' },
     ],
   },
   {
