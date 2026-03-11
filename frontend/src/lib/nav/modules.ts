@@ -30,6 +30,9 @@ export const modules: NavModule[] = [
     basePath: '/orders',
     pages: [
       { label: 'All Orders', href: '/orders' },
+      { label: 'Pending', href: '/orders/pending' },
+      { label: 'Fulfilled', href: '/orders/fulfilled' },
+      { label: 'Cancelled', href: '/orders/cancelled' },
     ],
   },
   {
