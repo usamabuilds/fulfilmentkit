@@ -1,12 +1,16 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { createHash, randomBytes } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { Prisma } from '../generated/prisma';
 import { PrismaService } from '../common/prisma/prisma.service';
 
-const bcrypt = require('bcryptjs') as {
-  hash: (value: string, saltRounds: number) => Promise<string>;
-  compare: (value: string, encrypted: string) => Promise<boolean>;
-};
+function hashPassword(password: string, salt: string): string {
+  return createHash('sha256').update(salt + password).digest('hex');
+}
+
+function generateSalt(): string {
+  return randomBytes(16).toString('hex');
+}
 
 @Injectable()
 export class AuthService {
@@ -27,7 +31,9 @@ export class AuthService {
       throw new BadRequestException('User already exists');
     }
 
-    const passwordHash = await bcrypt.hash(params.password, 10);
+    const salt = generateSalt();
+    const hash = hashPassword(params.password, salt);
+    const passwordHash = `${salt}:${hash}`;
 
     const user = await this.prisma.user.create({
       data: {
@@ -76,7 +82,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const passwordMatches = await bcrypt.compare(params.password, passwordHash);
+    const [salt, hash] = passwordHash.split(':');
+    const passwordMatches = salt ? hashPassword(params.password, salt) === hash : false;
 
     if (!passwordMatches) {
       throw new UnauthorizedException('Invalid credentials');
