@@ -5,7 +5,43 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { toListResponse } from '../common/utils/list-response';
 
-type StartPlatform = 'shopify' | 'woocommerce' | 'amazon';
+type StartPlatform = 'shopify' | 'woocommerce' | 'amazon' | 'zoho' | 'xero' | 'sage' | 'odoo' | 'quickbooks';
+type ConnectionPlatform =
+  | 'SHOPIFY'
+  | 'WOOCOMMERCE'
+  | 'AMAZON'
+  | 'ZOHO'
+  | 'XERO'
+  | 'SAGE'
+  | 'ODOO'
+  | 'QUICKBOOKS';
+type ConnectionAuthType =
+  | 'oauth_callback'
+  | 'api_keys_callback'
+  | 'sp_api_callback'
+  | 'oauth2';
+
+const PLATFORM_MAP: Record<StartPlatform, ConnectionPlatform> = {
+  shopify: 'SHOPIFY',
+  woocommerce: 'WOOCOMMERCE',
+  amazon: 'AMAZON',
+  zoho: 'ZOHO',
+  xero: 'XERO',
+  sage: 'SAGE',
+  odoo: 'ODOO',
+  quickbooks: 'QUICKBOOKS',
+} as const;
+
+const AUTH_TYPE_MAP: Record<StartPlatform, ConnectionAuthType> = {
+  shopify: 'oauth_callback',
+  woocommerce: 'api_keys_callback',
+  amazon: 'sp_api_callback',
+  zoho: 'oauth2',
+  xero: 'oauth2',
+  sage: 'oauth2',
+  odoo: 'oauth2',
+  quickbooks: 'oauth2',
+} as const;
 
 type StartConnectionFlowArgs = {
   workspaceId: string;
@@ -155,18 +191,11 @@ export class ConnectionsService {
   }
 
   private getPlatformEnum(platform: StartPlatform) {
-    return platform === 'shopify'
-      ? 'SHOPIFY'
-      : platform === 'woocommerce'
-        ? 'WOOCOMMERCE'
-        : 'AMAZON';
+    return PLATFORM_MAP[platform];
   }
 
   private getAuthType(platform: StartPlatform) {
-    // v1: generic callback storage
-    if (platform === 'shopify') return 'oauth_callback';
-    if (platform === 'woocommerce') return 'api_keys_callback';
-    return 'sp_api_callback';
+    return AUTH_TYPE_MAP[platform];
   }
 
   private encryptJson(payload: any) {
@@ -210,7 +239,7 @@ export class ConnectionsService {
     const connection = await this.prisma.connection.findFirst({
       where: {
         workspaceId,
-        platform: platformEnum,
+        platform: platformEnum as never,
       },
       select: { id: true },
     });
@@ -230,7 +259,7 @@ export class ConnectionsService {
       create: {
         connectionId: connection.id,
         workspaceId,
-        platform: platformEnum,
+        platform: platformEnum as never,
         authType: this.getAuthType(platform),
         secretCiphertext: ciphertext,
         secretMetadata: {
@@ -243,7 +272,7 @@ export class ConnectionsService {
       },
       update: {
         workspaceId,
-        platform: platformEnum,
+        platform: platformEnum as never,
         authType: this.getAuthType(platform),
         secretCiphertext: ciphertext,
         secretMetadata: {
