@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { z } from 'zod';
 import { WorkspacesService } from './workspaces.service';
 import { validateQuery } from '../common/utils/query-validate';
@@ -36,13 +36,18 @@ export class WorkspacesController {
   }
 
   @Post()
-  async create(@Body() body: any, @Req() req: any) {
-    const authUser = req.user as { id?: string } | undefined;
-    const validated = validateQuery(CreateWorkspaceSchema, body);
+  async create(@Req() req: any, @Body() body: any) {
+    const schema = z.object({ name: z.string().min(1) });
+    const { name } = schema.parse(body);
+    const userId = req.user?.sub;
+
+    if (!userId) {
+      throw new UnauthorizedException('Not authenticated');
+    }
 
     const workspace = await this.workspaces.createWorkspace({
-      name: validated.name,
-      creatorUserId: authUser?.id as string,
+      name,
+      creatorUserId: userId,
     });
 
     return apiResponse(workspace);
