@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { Prisma } from '../generated/prisma';
 import { PrismaService } from '../common/prisma/prisma.service';
 
-const bcrypt = require('bcrypt') as {
+const bcrypt = require('bcryptjs') as {
   hash: (value: string, saltRounds: number) => Promise<string>;
   compare: (value: string, encrypted: string) => Promise<boolean>;
 };
