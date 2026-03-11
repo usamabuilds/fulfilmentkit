@@ -50,7 +50,10 @@ export const modules: NavModule[] = [
     label: 'Connections',
     basePath: '/connections',
     pages: [
-      { label: 'Platforms', href: '/connections' },
+      { label: 'All Connections', href: '/connections' },
+      { label: 'Shopify', href: '/connections/shopify' },
+      { label: 'WooCommerce', href: '/connections/woocommerce' },
+      { label: 'Amazon', href: '/connections/amazon' },
     ],
   },
   {
