@@ -9,31 +9,112 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils/cn'
 import { useAuthStore } from '@/lib/store/authStore'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
+import { apiGet } from '@/lib/api/client'
 
 interface ShellProps {
   children: React.ReactNode
+}
+
+type AuthValidationState = 'loading' | 'valid' | 'invalid'
+
+interface MeResponse {
+  user: {
+    id: string
+    email: string | null
+  } | null
+  workspaceId: string | null
+  workspaceRole: string | null
 }
 
 export function Shell({ children }: ShellProps) {
   const router = useRouter()
   const pathname = usePathname()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [authValidationState, setAuthValidationState] = useState<AuthValidationState>('loading')
+  const [validationKey, setValidationKey] = useState(0)
   const jwt = useAuthStore((s) => s.jwt)
+  const user = useAuthStore((s) => s.user)
   const workspace = useWorkspaceStore((s) => s.workspace)
+  const setAuth = useAuthStore((s) => s.setAuth)
   const activeModule = modules.find((m) => pathname.startsWith(m.basePath))
 
   useEffect(() => {
     if (!jwt) {
+      setAuthValidationState('invalid')
       router.replace('/login')
       return
     }
 
     if (!workspace) {
+      setAuthValidationState('invalid')
       router.replace('/workspaces')
+      return
     }
-  }, [jwt, workspace, router])
 
-  if (!jwt || !workspace) return null
+    let cancelled = false
+
+    const validateSession = async () => {
+      setAuthValidationState('loading')
+
+      try {
+        const res = await apiGet<MeResponse>('/me')
+        const validatedUser = res.data.user
+        const validatedWorkspaceId = res.data.workspaceId
+        const validatedWorkspaceRole = res.data.workspaceRole
+
+        if (!validatedUser || !validatedWorkspaceId || !validatedWorkspaceRole) {
+          if (!cancelled) {
+            setAuthValidationState('invalid')
+            router.replace('/login')
+          }
+          return
+        }
+
+        setAuth(
+          {
+            id: validatedUser.id,
+            email: validatedUser.email ?? user?.email ?? '',
+          },
+          jwt
+        )
+
+        if (!cancelled) {
+          setAuthValidationState('valid')
+        }
+      } catch {
+        if (!cancelled) {
+          setAuthValidationState('invalid')
+        }
+      }
+    }
+
+    void validateSession()
+
+    return () => {
+      cancelled = true
+    }
+  }, [jwt, router, setAuth, user?.email, validationKey, workspace])
+
+  useEffect(() => {
+    const unsubscribeAuth = useAuthStore.subscribe((state) => {
+      if (!state.jwt) {
+        setValidationKey((prev) => prev + 1)
+      }
+    })
+
+    const unsubscribeWorkspace = useWorkspaceStore.subscribe((state) => {
+      if (!state.workspace) {
+        setValidationKey((prev) => prev + 1)
+      }
+    })
+
+    return () => {
+      unsubscribeAuth()
+      unsubscribeWorkspace()
+    }
+  }, [])
+
+  if (authValidationState !== 'valid') return null
 
   return (
     <div className="min-h-screen bg-bg-base">

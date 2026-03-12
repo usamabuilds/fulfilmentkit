@@ -1,11 +1,68 @@
-import { useAuthStore } from '@/lib/store/authStore'
-import { useWorkspaceStore } from '@/lib/store/workspaceStore'
+import { useAuthStore } from '../store/authStore'
+import { useWorkspaceStore } from '../store/workspaceStore'
 import type { ApiListResponse, ApiResponse } from './types'
 
 const getBaseUrl = () => {
   const url = process.env.NEXT_PUBLIC_API_URL
   if (!url) throw new Error('NEXT_PUBLIC_API_URL is not set')
   return url
+}
+
+export type UnauthorizedRedirectReason = 'expired_token' | 'revoked_membership' | 'missing_workspace_header'
+
+interface UnauthorizedResolution {
+  shouldHandle: boolean
+  redirectPath: '/login' | '/workspaces'
+  reason: UnauthorizedRedirectReason
+}
+
+export function resolveUnauthorizedResolution(statusCode: number): UnauthorizedResolution {
+  const workspaceId = useWorkspaceStore.getState().workspace?.id
+
+  if (statusCode === 401) {
+    return {
+      shouldHandle: true,
+      redirectPath: '/login',
+      reason: 'expired_token',
+    }
+  }
+
+  if (statusCode === 403 && workspaceId) {
+    return {
+      shouldHandle: true,
+      redirectPath: '/workspaces',
+      reason: 'revoked_membership',
+    }
+  }
+
+  if (statusCode === 403) {
+    return {
+      shouldHandle: true,
+      redirectPath: '/workspaces',
+      reason: 'missing_workspace_header',
+    }
+  }
+
+  return {
+    shouldHandle: false,
+    redirectPath: '/login',
+    reason: 'expired_token',
+  }
+}
+
+function redirectTo(path: '/login' | '/workspaces') {
+  if (typeof window === 'undefined') return
+  if (window.location.pathname === path) return
+  window.location.assign(path)
+}
+
+function handleUnauthorized(statusCode: number) {
+  const resolution = resolveUnauthorizedResolution(statusCode)
+  if (!resolution.shouldHandle) return
+
+  useAuthStore.getState().clearAuth()
+  useWorkspaceStore.getState().clearWorkspace()
+  redirectTo(resolution.redirectPath)
 }
 
 function getHeaders(): HeadersInit {
@@ -26,6 +83,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
   const json = await res.json()
 
   if (!res.ok) {
+    handleUnauthorized(res.status)
     const message = json?.message ?? `HTTP ${res.status}`
     const error = new Error(message) as Error & { statusCode: number }
     error.statusCode = res.status
