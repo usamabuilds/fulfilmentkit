@@ -19,5 +19,5 @@ export interface CreateForecastDto {
 export const forecastApi = {
   list: () => apiGetList<Forecast>('/forecast'),
   getOne: (forecastId: string) => apiGet<Forecast>(`/forecast/${forecastId}`),
-  create: (dto: CreateForecastDto | { name: string }) => apiPost<Forecast>('/forecast', dto),
+  create: (dto: CreateForecastDto) => apiPost<Forecast>('/forecast', dto),
 }

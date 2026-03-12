@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { forecastApi } from '@/lib/api/endpoints/forecast'
+import type { CreateForecastDto } from '@/lib/api/endpoints/forecast'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 
 export function useForecasts() {
@@ -24,8 +25,7 @@ export function useCreateForecast() {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (dto: { name: string }) =>
-      forecastApi.create(dto),
+    mutationFn: (dto: CreateForecastDto) => forecastApi.create(dto),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['forecasts', workspaceId] })
     },

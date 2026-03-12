@@ -7,14 +7,15 @@ import { cn } from '@/lib/utils/cn'
 export default function CreateForecastPage() {
   const router = useRouter()
   const { mutate, isPending } = useCreateForecast()
-  const [name, setName] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   function handleSubmit() {
-    if (!name.trim()) return
+    if (!from || !to) return
     setError(null)
     mutate(
-      { name: name.trim() },
+      { from, to },
       {
         onSuccess: () => router.push('/forecast'),
         onError: (err) => setError(err instanceof Error ? err.message : 'Failed to create forecast'),
@@ -28,38 +29,28 @@ export default function CreateForecastPage() {
         <h1 className="text-title-1 text-text-primary">New Forecast</h1>
         <p className="text-body text-text-secondary mt-1">Create a new demand forecast.</p>
       </div>
-
       <div className="glass-panel p-6 flex flex-col gap-4">
         <div>
-          <label className="text-subhead text-text-secondary block mb-1.5">Forecast name</label>
-          <input
-            className="glass-input"
-            type="text"
-            placeholder="e.g. Q3 2025 Demand Forecast"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
+          <label className="text-subhead text-text-secondary block mb-1.5">From date</label>
+          <input className="glass-input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
         </div>
-
+        <div>
+          <label className="text-subhead text-text-secondary block mb-1.5">To date</label>
+          <input className="glass-input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        </div>
         {error && <p className="text-footnote text-destructive">{error}</p>}
-
         <div className="flex gap-3">
           <button
             onClick={handleSubmit}
-            disabled={isPending || !name.trim()}
+            disabled={isPending || !from || !to}
             className={cn(
               'px-4 py-2 rounded-[8px] text-callout text-white transition-all duration-200',
-              isPending || !name.trim()
-                ? 'bg-accent/50 cursor-not-allowed'
-                : 'bg-accent hover:bg-accent-hover active:scale-[0.98]'
+              isPending || !from || !to ? 'bg-accent/50 cursor-not-allowed' : 'bg-accent hover:bg-accent-hover active:scale-[0.98]'
             )}
           >
             {isPending ? 'Creating…' : 'Create Forecast'}
           </button>
-          <button
-            onClick={() => router.push('/forecast')}
-            className="px-4 py-2 rounded-[8px] text-callout text-text-secondary hover:bg-black/5 transition-all duration-200"
-          >
+          <button onClick={() => router.push('/forecast')} className="px-4 py-2 rounded-[8px] text-callout text-text-secondary hover:bg-black/5 transition-all duration-200">
             Cancel
           </button>
         </div>

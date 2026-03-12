@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { planningApi } from '@/lib/api/endpoints/planning'
+import type { CreatePlanDto } from '@/lib/api/endpoints/planning'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 
 export function usePlans() {
@@ -27,7 +28,7 @@ export function useCreatePlan() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (dto: { name: string }) => planningApi.create(dto),
+    mutationFn: (dto: CreatePlanDto) => planningApi.create(dto),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plans', workspaceId] })
     },
