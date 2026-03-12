@@ -8,13 +8,13 @@ export interface Plan {
 }
 
 export interface CreatePlanDto {
-  name: string
+  from: string
+  to: string
+  title?: string
 }
 
 export const planningApi = {
   list: () => apiGetList<Plan>('/plans'),
-
   getOne: (planId: string) => apiGet<Plan>(`/plans/${planId}`),
-
-  create: (dto: CreatePlanDto) => apiPost<Plan>('/plans', dto),
+  create: (dto: CreatePlanDto | { name: string }) => apiPost<Plan>('/plans', dto),
 }

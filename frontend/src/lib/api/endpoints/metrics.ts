@@ -9,13 +9,17 @@ export interface DailyMetric {
   currency: string
 }
 
+export interface MetricsListParams {
+  from: string
+  to: string
+}
+
 export const metricsApi = {
-  list: (params?: { page?: number; pageSize?: number }) => {
+  list: (params: MetricsListParams) => {
     const query = new URLSearchParams()
-    if (params?.page) query.set('page', String(params.page))
-    if (params?.pageSize) query.set('pageSize', String(params.pageSize))
+    query.set('from', params.from)
+    query.set('to', params.to)
     return apiGetList<DailyMetric>(`/metrics/daily?${query}`)
   },
-
   compute: () => apiPost<void>('/metrics/compute-daily', {}),
 }
