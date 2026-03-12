@@ -42,7 +42,7 @@ export default function MembersPage() {
             </thead>
             <tbody>
               {members.map((member) => (
-                <tr key={member.id} className="border-b border-border-subtle last:border-0 hover:bg-black/[0.02] transition-colors">
+                <tr key={member.userId} className="border-b border-border-subtle last:border-0 hover:bg-black/[0.02] transition-colors">
                   <td className="px-5 py-3 text-body text-text-primary">{member.email}</td>
                   <td className="px-5 py-3">
                     <span className={cn('text-caption-2 px-2.5 py-1 rounded-full', roleStyles[member.role] ?? 'bg-black/5 text-text-secondary')}>
