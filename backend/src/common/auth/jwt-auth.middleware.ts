@@ -3,12 +3,15 @@ import jwt from 'jsonwebtoken';
 import { getAuthRuntimeConfig } from '../../config/env.validation';
 
 type JwtPayload = {
+  // Canonical identity claim for all providers.
   sub?: string;
+  // Legacy Supabase claim used only as an explicit fallback.
   user_id?: string;
+  provider?: string;
   email?: string;
   role?: string;
   iss?: string;
-  provider?: string;
+  aud?: string;
   [key: string]: unknown;
 };
 
@@ -22,10 +25,50 @@ type MiddlewareRequest = {
   auth?: unknown;
 };
 
+type SupportedAuthProvider = 'local' | 'supabase';
+
 @Injectable()
 export class JwtAuthMiddleware implements NestMiddleware {
   private readonly logger = new Logger(JwtAuthMiddleware.name);
   private readonly authConfig = getAuthRuntimeConfig(process.env);
+
+  private deriveProviderFromClaims(claims: JwtPayload): SupportedAuthProvider | undefined {
+    if (typeof claims.provider === 'string') {
+      if (claims.provider === 'local' || claims.provider === 'supabase') {
+        return claims.provider;
+      }
+
+      return undefined;
+    }
+
+    // Supabase access tokens commonly omit `provider`; infer explicitly.
+    if (
+      (typeof claims.iss === 'string' && claims.iss.includes('supabase')) ||
+      claims.role === 'authenticated' ||
+      claims.aud === 'authenticated'
+    ) {
+      return 'supabase';
+    }
+
+    // Local tokens should include an explicit provider claim.
+    return undefined;
+  }
+
+  private extractExternalUserId(
+    claims: JwtPayload,
+    provider: SupportedAuthProvider,
+  ): string | undefined {
+    if (typeof claims.sub === 'string' && claims.sub.length > 0) {
+      return claims.sub;
+    }
+
+    // Explicitly-supported legacy fallback for Supabase JWTs.
+    if (provider === 'supabase' && typeof claims.user_id === 'string' && claims.user_id.length > 0) {
+      return claims.user_id;
+    }
+
+    return undefined;
+  }
 
   use(req: MiddlewareRequest, _res: unknown, next: (err?: unknown) => void) {
     const path = req?.originalUrl || req?.url;
@@ -54,7 +97,18 @@ export class JwtAuthMiddleware implements NestMiddleware {
 
       const verificationTarget = this.resolveVerificationTarget(tokenIssuer);
       const decoded = jwt.verify(token, verificationTarget.secret) as JwtPayload;
-      const externalUserId = decoded?.sub || decoded?.user_id;
+
+      const providerFromClaims = this.deriveProviderFromClaims(decoded);
+      const provider = providerFromClaims ?? verificationTarget.provider;
+
+      // Never accept a token that declares a conflicting provider.
+      if (providerFromClaims && providerFromClaims !== verificationTarget.provider) {
+        req.user = undefined;
+        req.auth = undefined;
+        return next();
+      }
+
+      const externalUserId = this.extractExternalUserId(decoded, provider);
 
       if (!externalUserId) {
         req.user = undefined;
@@ -63,15 +117,15 @@ export class JwtAuthMiddleware implements NestMiddleware {
       }
 
       req.auth = {
-        provider: verificationTarget.provider,
+        provider,
         externalUserId,
-        email: decoded?.email,
+        email: decoded.email,
         tokenClaims: decoded,
       };
 
       req.user = {
         id: externalUserId,
-        email: decoded?.email,
+        email: decoded.email,
         tokenClaims: decoded,
       };
 
@@ -91,7 +145,7 @@ export class JwtAuthMiddleware implements NestMiddleware {
   }
 
   private resolveVerificationTarget(tokenIssuer: unknown): {
-    provider: 'local' | 'supabase';
+    provider: SupportedAuthProvider;
     secret: string;
   } {
     if (this.authConfig.mode === 'local') {
