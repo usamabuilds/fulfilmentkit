@@ -16,14 +16,19 @@ export class WorkspacesController {
   @Get()
   async list(@Req() req: any) {
     const authUser = req.user as { id?: string } | undefined;
-    const items = await this.workspaces.listWorkspacesForUser(authUser?.id as string);
+
+    if (!authUser?.id) {
+      throw new UnauthorizedException('Not authenticated');
+    }
+
+    const items = await this.workspaces.listWorkspacesForUser(authUser.id);
 
     return apiResponse(
       toListResponse({
-      items,
-      total: items.length,
-      page: 1,
-      pageSize: items.length,
+        items,
+        total: items.length,
+        page: 1,
+        pageSize: items.length,
       }),
     );
   }

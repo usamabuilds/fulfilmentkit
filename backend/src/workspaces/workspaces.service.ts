@@ -1,4 +1,9 @@
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { WorkspaceRole } from '../generated/prisma';
 
@@ -27,6 +32,10 @@ export class WorkspacesService {
   }
 
   async listWorkspacesForUser(userId: string) {
+    if (!userId || userId.trim().length === 0) {
+      throw new BadRequestException('Invalid userId');
+    }
+
     const memberships = await this.prisma.workspaceMember.findMany({
       where: {
         userId,
@@ -46,7 +55,6 @@ export class WorkspacesService {
 
     return memberships.map((m) => m.workspace);
   }
-
 
   async getWorkspaceRoleForUser(workspaceId: string, userId: string) {
     const membership = await this.prisma.workspaceMember.findUnique({
