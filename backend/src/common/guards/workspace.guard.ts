@@ -28,8 +28,7 @@ export class WorkspaceGuard implements CanActivate {
 
     const method = request?.method;
     const path = (request?.originalUrl || request?.url || '').split('?')[0];
-    const isWorkspaceBootstrapRoute =
-      path === '/workspaces' && (method === 'GET' || method === 'POST');
+    const isWorkspaceBootstrapRoute = path === '/workspaces' && method === 'POST';
     const isAuthPublicRoute =
       (path === '/auth/register' || path === '/auth/login') && method === 'POST';
 
@@ -60,8 +59,7 @@ export class WorkspaceGuard implements CanActivate {
 
     const auth: AuthShape | undefined = request.auth;
 
-    const externalUserId: string | undefined =
-      auth?.externalUserId || request?.user?.id;
+    const externalUserId: string | undefined = auth?.externalUserId || request?.user?.id;
 
     if (!externalUserId) {
       this.logger.warn('[WorkspaceGuard] no auth detected', {
