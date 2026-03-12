@@ -110,6 +110,14 @@ export class JwtAuthMiddleware implements NestMiddleware {
 
       const externalUserId = this.extractExternalUserId(decoded, provider);
 
+      this.logger.log('[JwtAuthMiddleware] VERIFIED', {
+        path,
+        provider,
+        hasSub: !!decoded.sub,
+        hasUserId: !!decoded.user_id,
+        hasEmail: !!decoded.email,
+      });
+
       if (!externalUserId) {
         req.user = undefined;
         req.auth = undefined;
