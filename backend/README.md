@@ -61,11 +61,11 @@ Before deploying:
 
 - `local`
   - Requires `JWT_SECRET`
-  - Verifies local FulfilmentKit tokens only
+  - Verifies local FulfilmentKit tokens only (issuer must be `fulfilmentkit-local` when `iss` is present)
   - Local login/register JWTs are signed with issuer `fulfilmentkit-local`
 - `supabase`
   - Requires `SUPABASE_JWT_SECRET` and `SUPABASE_JWT_ISSUER`
-  - Verifies Supabase-issued tokens only
+  - Verifies Supabase-issued tokens only (issuer must match `SUPABASE_JWT_ISSUER`)
   - Local JWT signing is disabled in this mode
 - `hybrid`
   - Requires `JWT_SECRET`, `SUPABASE_JWT_SECRET`, and `SUPABASE_JWT_ISSUER`

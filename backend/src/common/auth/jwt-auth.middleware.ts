@@ -155,6 +155,12 @@ export class JwtAuthMiddleware implements NestMiddleware {
         throw new Error('Local auth config is missing while AUTH_MODE=local.');
       }
 
+      if (typeof tokenIssuer === 'string' && tokenIssuer !== localConfig.issuer) {
+        throw new Error(
+          `Unexpected JWT issuer for AUTH_MODE=local. Expected issuer ${localConfig.issuer}.`,
+        );
+      }
+
       return { provider: 'local', secret: localConfig.secret };
     }
 
@@ -163,6 +169,12 @@ export class JwtAuthMiddleware implements NestMiddleware {
 
       if (!supabaseConfig) {
         throw new Error('Supabase auth config is missing while AUTH_MODE=supabase.');
+      }
+
+      if (tokenIssuer !== supabaseConfig.issuer) {
+        throw new Error(
+          `Unexpected JWT issuer for AUTH_MODE=supabase. Expected issuer ${supabaseConfig.issuer}.`,
+        );
       }
 
       return { provider: 'supabase', secret: supabaseConfig.secret };
