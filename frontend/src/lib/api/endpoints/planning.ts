@@ -16,5 +16,5 @@ export interface CreatePlanDto {
 export const planningApi = {
   list: () => apiGetList<Plan>('/plans'),
   getOne: (planId: string) => apiGet<Plan>(`/plans/${planId}`),
-  create: (dto: CreatePlanDto | { name: string }) => apiPost<Plan>('/plans', dto),
+  create: (dto: CreatePlanDto) => apiPost<Plan>('/plans', dto),
 }
