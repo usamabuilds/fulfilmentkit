@@ -1,21 +1,39 @@
 'use client'
-import { useState } from 'react'
-import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { TopNav } from './TopNav'
 import { LeftSidebar } from './RightSidebar'
 import { modules } from '@/lib/nav/modules'
 import Link from 'next/link'
 import { cn } from '@/lib/utils/cn'
+import { useAuthStore } from '@/lib/store/authStore'
+import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 
 interface ShellProps {
   children: React.ReactNode
 }
 
 export function Shell({ children }: ShellProps) {
+  const router = useRouter()
   const pathname = usePathname()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const jwt = useAuthStore((s) => s.jwt)
+  const workspace = useWorkspaceStore((s) => s.workspace)
   const activeModule = modules.find((m) => pathname.startsWith(m.basePath))
+
+  useEffect(() => {
+    if (!jwt) {
+      router.replace('/login')
+      return
+    }
+
+    if (!workspace) {
+      router.replace('/workspaces')
+    }
+  }, [jwt, workspace, router])
+
+  if (!jwt || !workspace) return null
 
   return (
     <div className="min-h-screen bg-bg-base">
