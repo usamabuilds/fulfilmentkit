@@ -75,35 +75,71 @@ export class WorkspaceGuard implements CanActivate {
       throw new UnauthorizedException('Authentication required');
     }
 
-    // provider MUST be a string for Prisma
-    const provider: string = auth?.provider || 'supabase';
+    const provider: string | undefined = auth?.provider;
+
+    if (!provider) {
+      throw new UnauthorizedException('Authentication provider missing');
+    }
 
     const email: string | undefined = auth?.email || request?.user?.email;
 
-    // --------------------------------------------------
-    // UPSERT USER (LOCKED RULE: User.id = external auth id)
-    // --------------------------------------------------
-
-    const user = await this.prisma.user.upsert({
+    const existingUser = await this.prisma.user.findUnique({
       where: { id: externalUserId },
-      update: {
-        email: email ?? undefined,
-        authProvider: provider,
-        authProviderUserId: externalUserId,
-      },
-      create: {
-        id: externalUserId,
-        authProvider: provider,
-        authProviderUserId: externalUserId,
-        email: email ?? null,
-      },
       select: {
         id: true,
         authProvider: true,
         authProviderUserId: true,
-        email: true,
       },
     });
+
+    if (existingUser) {
+      if (
+        existingUser.authProvider !== provider ||
+        existingUser.authProviderUserId !== externalUserId
+      ) {
+        this.logger.warn(
+          '[WorkspaceGuard] provider mismatch for existing user',
+          {
+            path: request?.originalUrl || request?.url,
+            userId: existingUser.id,
+            expectedProvider: existingUser.authProvider,
+            tokenProvider: provider,
+            expectedProviderUserId: existingUser.authProviderUserId,
+            tokenExternalUserId: externalUserId,
+          },
+        );
+
+        throw new UnauthorizedException('Token provider mismatch for user');
+      }
+    }
+
+    const user = existingUser
+      ? await this.prisma.user.update({
+          where: { id: externalUserId },
+          data: {
+            email: email ?? undefined,
+          },
+          select: {
+            id: true,
+            authProvider: true,
+            authProviderUserId: true,
+            email: true,
+          },
+        })
+      : await this.prisma.user.create({
+          data: {
+            id: externalUserId,
+            authProvider: provider,
+            authProviderUserId: externalUserId,
+            email: email ?? null,
+          },
+          select: {
+            id: true,
+            authProvider: true,
+            authProviderUserId: true,
+            email: true,
+          },
+        });
 
     request.user = {
       id: user.id,
