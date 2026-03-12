@@ -39,7 +39,7 @@ export class WorkspacesController {
   async create(@Req() req: any, @Body() body: any) {
     const schema = z.object({ name: z.string().min(1) });
     const { name } = schema.parse(body);
-    const userId = req.user?.sub;
+    const userId = req.user?.id;
 
     if (!userId) {
       throw new UnauthorizedException('Not authenticated');
