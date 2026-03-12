@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from '@/lib/api/client'
+import { apiGet, apiGetList, apiPost } from '@/lib/api/client'
 
 export interface Workspace {
   id: string
@@ -11,6 +11,8 @@ export interface CreateWorkspaceDto {
 }
 
 export const workspacesApi = {
+  list: () => apiGetList<Workspace>('/workspaces'),
+
   create: (dto: CreateWorkspaceDto) => apiPost<Workspace>('/workspaces', dto),
 
   getOne: (id: string) => apiGet<Workspace>(`/workspaces/${id}`),
