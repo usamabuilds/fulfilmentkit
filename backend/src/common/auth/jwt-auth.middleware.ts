@@ -2,12 +2,19 @@ import { Injectable, Logger, NestMiddleware } from '@nestjs/common';
 import jwt from 'jsonwebtoken';
 
 type JwtPayload = {
+  // Canonical identity claim for all providers.
   sub?: string;
+  // Legacy Supabase claim used only as an explicit fallback.
   user_id?: string;
+  provider?: string;
   email?: string;
   role?: string;
+  iss?: string;
+  aud?: string;
   [key: string]: any;
 };
+
+type SupportedAuthProvider = 'local' | 'supabase';
 
 @Injectable()
 export class JwtAuthMiddleware implements NestMiddleware {
@@ -24,6 +31,50 @@ export class JwtAuthMiddleware implements NestMiddleware {
     }
 
     this.jwtSecret = secret;
+  }
+
+  private deriveProviderFromClaims(
+    claims: JwtPayload,
+  ): SupportedAuthProvider | undefined {
+    if (typeof claims?.provider === 'string') {
+      if (claims.provider === 'local' || claims.provider === 'supabase') {
+        return claims.provider;
+      }
+
+      return undefined;
+    }
+
+    // Supabase access tokens commonly omit `provider`; infer explicitly.
+    if (
+      (typeof claims?.iss === 'string' && claims.iss.includes('supabase')) ||
+      claims?.role === 'authenticated' ||
+      claims?.aud === 'authenticated'
+    ) {
+      return 'supabase';
+    }
+
+    // Local tokens must include an explicit provider claim.
+    return undefined;
+  }
+
+  private extractExternalUserId(
+    claims: JwtPayload,
+    provider: SupportedAuthProvider,
+  ): string | undefined {
+    if (typeof claims?.sub === 'string' && claims.sub.length > 0) {
+      return claims.sub;
+    }
+
+    // Explicitly-supported legacy fallback for Supabase JWTs.
+    if (
+      provider === 'supabase' &&
+      typeof claims?.user_id === 'string' &&
+      claims.user_id.length > 0
+    ) {
+      return claims.user_id;
+    }
+
+    return undefined;
   }
 
   use(req: any, _res: any, next: (err?: any) => void) {
@@ -68,7 +119,15 @@ export class JwtAuthMiddleware implements NestMiddleware {
 
       const decoded = jwt.verify(token, secret) as JwtPayload;
 
-      const externalUserId = decoded?.sub || decoded?.user_id;
+      const provider = this.deriveProviderFromClaims(decoded);
+
+      if (!provider) {
+        req.user = undefined;
+        req.auth = undefined;
+        return next();
+      }
+
+      const externalUserId = this.extractExternalUserId(decoded, provider);
 
       this.logger.log('[JwtAuthMiddleware] VERIFIED', {
         path,
@@ -85,7 +144,7 @@ export class JwtAuthMiddleware implements NestMiddleware {
       }
 
       req.auth = {
-        provider: 'supabase',
+        provider,
         externalUserId,
         email: decoded?.email,
         tokenClaims: decoded,
