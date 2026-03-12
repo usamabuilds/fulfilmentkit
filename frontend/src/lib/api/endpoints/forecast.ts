@@ -8,13 +8,16 @@ export interface Forecast {
 }
 
 export interface CreateForecastDto {
-  name: string
+  from: string
+  to: string
+  horizonDays?: number
+  sku?: string
+  productId?: string
+  method?: string
 }
 
 export const forecastApi = {
   list: () => apiGetList<Forecast>('/forecast'),
-
   getOne: (forecastId: string) => apiGet<Forecast>(`/forecast/${forecastId}`),
-
-  create: (dto: CreateForecastDto) => apiPost<Forecast>('/forecast', dto),
+  create: (dto: CreateForecastDto | { name: string }) => apiPost<Forecast>('/forecast', dto),
 }
