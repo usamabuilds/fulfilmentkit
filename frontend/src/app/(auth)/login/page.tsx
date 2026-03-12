@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils/cn'
 
 interface LoginResponse {
   user: { id: string; email: string }
-  jwt: string
+  token: string
 }
 
 export default function LoginPage() {
@@ -24,7 +24,7 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const res = await apiPost<LoginResponse>('/auth/login', { email, password })
-      setAuth(res.data.user, res.data.jwt)
+      setAuth(res.data.user, res.data.token)
       router.push('/workspaces')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
