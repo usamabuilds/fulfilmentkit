@@ -54,3 +54,36 @@ Before deploying:
 - npm run build
 - set NODE_ENV=production and boot locally
 - ensure DATABASE_URL and REDIS_URL point to reachable services
+
+## Auth mode configuration
+
+`AUTH_MODE` controls which JWT issuers and secrets are accepted:
+
+- `local`
+  - Requires `JWT_SECRET`
+  - Verifies local FulfilmentKit tokens only
+  - Local login/register JWTs are signed with issuer `fulfilmentkit-local`
+- `supabase`
+  - Requires `SUPABASE_JWT_SECRET` and `SUPABASE_JWT_ISSUER`
+  - Verifies Supabase-issued tokens only
+  - Local JWT signing is disabled in this mode
+- `hybrid`
+  - Requires `JWT_SECRET`, `SUPABASE_JWT_SECRET`, and `SUPABASE_JWT_ISSUER`
+  - Verifies both local and Supabase tokens
+  - Verification chooses the secret from the token `iss` claim:
+    - `iss=fulfilmentkit-local` -> `JWT_SECRET`
+    - `iss=<SUPABASE_JWT_ISSUER>` -> `SUPABASE_JWT_SECRET`
+
+### Required auth environment variables by mode
+
+- `AUTH_MODE=local`
+  - `JWT_SECRET`
+- `AUTH_MODE=supabase`
+  - `SUPABASE_JWT_SECRET`
+  - `SUPABASE_JWT_ISSUER`
+- `AUTH_MODE=hybrid`
+  - `JWT_SECRET`
+  - `SUPABASE_JWT_SECRET`
+  - `SUPABASE_JWT_ISSUER`
+
+Startup fails fast with actionable validation errors when these combinations are invalid.

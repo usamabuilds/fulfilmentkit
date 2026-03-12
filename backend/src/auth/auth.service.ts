@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { Prisma } from '../generated/prisma';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { getAuthRuntimeConfig } from '../config/env.validation';
 
 function hashPassword(password: string, salt: string): string {
   return createHash('sha256').update(salt + password).digest('hex');
@@ -14,6 +15,8 @@ function generateSalt(): string {
 
 @Injectable()
 export class AuthService {
+  private readonly authConfig = getAuthRuntimeConfig(process.env);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async register(params: { email: string; password: string }) {
@@ -93,10 +96,12 @@ export class AuthService {
   }
 
   private toAuthResponse(user: { id: string; email: string | null }) {
-    const jwtSecret = process.env.JWT_SECRET;
+    const localConfig = this.authConfig.local;
 
-    if (!jwtSecret) {
-      throw new Error('JWT_SECRET is required');
+    if (!localConfig) {
+      throw new Error(
+        `Local token signing is disabled for AUTH_MODE=${this.authConfig.mode}. Enable local signing with AUTH_MODE=local or AUTH_MODE=hybrid.`,
+      );
     }
 
     const token = jwt.sign(
@@ -104,8 +109,9 @@ export class AuthService {
         sub: user.id,
         email: user.email ?? undefined,
         provider: 'local',
+        iss: localConfig.issuer,
       },
-      jwtSecret,
+      localConfig.secret,
       { expiresIn: '7d' },
     );
 

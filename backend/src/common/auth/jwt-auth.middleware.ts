@@ -1,41 +1,35 @@
 import { Injectable, Logger, NestMiddleware } from '@nestjs/common';
 import jwt from 'jsonwebtoken';
+import { getAuthRuntimeConfig } from '../../config/env.validation';
 
 type JwtPayload = {
   sub?: string;
   user_id?: string;
   email?: string;
   role?: string;
-  [key: string]: any;
+  iss?: string;
+  provider?: string;
+  [key: string]: unknown;
+};
+
+type MiddlewareRequest = {
+  originalUrl?: string;
+  url?: string;
+  headers?: {
+    authorization?: unknown;
+  };
+  user?: unknown;
+  auth?: unknown;
 };
 
 @Injectable()
 export class JwtAuthMiddleware implements NestMiddleware {
   private readonly logger = new Logger(JwtAuthMiddleware.name);
-  private readonly jwtSecret: string;
+  private readonly authConfig = getAuthRuntimeConfig(process.env);
 
-  constructor() {
-    const secret = process.env.SUPABASE_JWT_SECRET || process.env.JWT_SECRET;
-
-    if (!secret) {
-      throw new Error(
-        'Missing JWT secret: set SUPABASE_JWT_SECRET or JWT_SECRET before starting the application.',
-      );
-    }
-
-    this.jwtSecret = secret;
-  }
-
-  use(req: any, _res: any, next: (err?: any) => void) {
+  use(req: MiddlewareRequest, _res: unknown, next: (err?: unknown) => void) {
     const path = req?.originalUrl || req?.url;
-
     const authHeader = req?.headers?.authorization;
-
-    this.logger.log('[JwtAuthMiddleware] HIT', {
-      path,
-      hasAuthHeader: !!authHeader,
-      authHeaderType: typeof authHeader,
-    });
 
     try {
       if (!authHeader || typeof authHeader !== 'string') {
@@ -46,37 +40,21 @@ export class JwtAuthMiddleware implements NestMiddleware {
 
       const [scheme, token] = authHeader.split(' ');
 
-      this.logger.log('[JwtAuthMiddleware] PARSE', {
-        path,
-        scheme,
-        tokenLen: token ? token.length : 0,
-      });
-
       if (scheme !== 'Bearer' || !token) {
         req.user = undefined;
         req.auth = undefined;
         return next();
       }
 
-      const secretFrom = process.env.SUPABASE_JWT_SECRET
-        ? 'SUPABASE_JWT_SECRET'
-        : 'JWT_SECRET';
+      const decodedWithoutVerify = jwt.decode(token);
+      const tokenIssuer =
+        decodedWithoutVerify && typeof decodedWithoutVerify === 'object'
+          ? decodedWithoutVerify.iss
+          : undefined;
 
-      const secret = this.jwtSecret;
-
-      this.logger.log('[JwtAuthMiddleware] SECRET', { path, secretFrom });
-
-      const decoded = jwt.verify(token, secret) as JwtPayload;
-
+      const verificationTarget = this.resolveVerificationTarget(tokenIssuer);
+      const decoded = jwt.verify(token, verificationTarget.secret) as JwtPayload;
       const externalUserId = decoded?.sub || decoded?.user_id;
-
-      this.logger.log('[JwtAuthMiddleware] VERIFIED', {
-        path,
-        hasSub: !!decoded?.sub,
-        hasUserId: !!decoded?.user_id,
-        externalUserId,
-        hasEmail: !!decoded?.email,
-      });
 
       if (!externalUserId) {
         req.user = undefined;
@@ -85,7 +63,7 @@ export class JwtAuthMiddleware implements NestMiddleware {
       }
 
       req.auth = {
-        provider: 'supabase',
+        provider: verificationTarget.provider,
         externalUserId,
         email: decoded?.email,
         tokenClaims: decoded,
@@ -98,17 +76,44 @@ export class JwtAuthMiddleware implements NestMiddleware {
       };
 
       return next();
-    } catch (err: any) {
-      const msg = err?.message || String(err);
+    } catch (err: unknown) {
+      const error = err as { message?: string; name?: string };
       this.logger.warn('[JwtAuthMiddleware] VERIFY FAILED', {
         path,
-        name: err?.name,
-        message: msg,
+        name: error?.name,
+        message: error?.message || String(err),
       });
 
       req.user = undefined;
       req.auth = undefined;
       return next();
     }
+  }
+
+  private resolveVerificationTarget(tokenIssuer: unknown): {
+    provider: 'local' | 'supabase';
+    secret: string;
+  } {
+    if (this.authConfig.mode === 'local') {
+      return { provider: 'local', secret: this.authConfig.local!.secret };
+    }
+
+    if (this.authConfig.mode === 'supabase') {
+      return { provider: 'supabase', secret: this.authConfig.supabase!.secret };
+    }
+
+    const localConfig = this.authConfig.local;
+    if (tokenIssuer === localConfig?.issuer && localConfig) {
+      return { provider: 'local', secret: localConfig.secret };
+    }
+
+    const supabaseConfig = this.authConfig.supabase;
+    if (tokenIssuer === supabaseConfig?.issuer && supabaseConfig) {
+      return { provider: 'supabase', secret: supabaseConfig.secret };
+    }
+
+    throw new Error(
+      `Unsupported JWT issuer for AUTH_MODE=hybrid. Expected one of: ${this.authConfig.local?.issuer}, ${this.authConfig.supabase?.issuer}.`,
+    );
   }
 }
