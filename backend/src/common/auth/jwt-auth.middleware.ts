@@ -95,11 +95,23 @@ export class JwtAuthMiddleware implements NestMiddleware {
     secret: string;
   } {
     if (this.authConfig.mode === 'local') {
-      return { provider: 'local', secret: this.authConfig.local!.secret };
+      const localConfig = this.authConfig.local;
+
+      if (!localConfig) {
+        throw new Error('Local auth config is missing while AUTH_MODE=local.');
+      }
+
+      return { provider: 'local', secret: localConfig.secret };
     }
 
     if (this.authConfig.mode === 'supabase') {
-      return { provider: 'supabase', secret: this.authConfig.supabase!.secret };
+      const supabaseConfig = this.authConfig.supabase;
+
+      if (!supabaseConfig) {
+        throw new Error('Supabase auth config is missing while AUTH_MODE=supabase.');
+      }
+
+      return { provider: 'supabase', secret: supabaseConfig.secret };
     }
 
     const localConfig = this.authConfig.local;

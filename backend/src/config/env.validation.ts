@@ -78,21 +78,53 @@ export type AuthRuntimeConfig = {
 export function getAuthRuntimeConfig(env: NodeJS.ProcessEnv): AuthRuntimeConfig {
   const parsed = envSchema.parse(env);
 
+  if (parsed.AUTH_MODE === 'local') {
+    if (!parsed.JWT_SECRET) {
+      throw new Error('JWT_SECRET is required when AUTH_MODE=local');
+    }
+
+    return {
+      mode: parsed.AUTH_MODE,
+      local: {
+        issuer: 'fulfilmentkit-local',
+        secret: parsed.JWT_SECRET,
+      },
+      supabase: null,
+    };
+  }
+
+  if (parsed.AUTH_MODE === 'supabase') {
+    if (!parsed.SUPABASE_JWT_SECRET || !parsed.SUPABASE_JWT_ISSUER) {
+      throw new Error(
+        'SUPABASE_JWT_SECRET and SUPABASE_JWT_ISSUER are required when AUTH_MODE=supabase',
+      );
+    }
+
+    return {
+      mode: parsed.AUTH_MODE,
+      local: null,
+      supabase: {
+        issuer: parsed.SUPABASE_JWT_ISSUER,
+        secret: parsed.SUPABASE_JWT_SECRET,
+      },
+    };
+  }
+
+  if (!parsed.JWT_SECRET || !parsed.SUPABASE_JWT_SECRET || !parsed.SUPABASE_JWT_ISSUER) {
+    throw new Error(
+      'JWT_SECRET, SUPABASE_JWT_SECRET, and SUPABASE_JWT_ISSUER are required when AUTH_MODE=hybrid',
+    );
+  }
+
   return {
     mode: parsed.AUTH_MODE,
-    local:
-      parsed.AUTH_MODE === 'local' || parsed.AUTH_MODE === 'hybrid'
-        ? {
-            issuer: 'fulfilmentkit-local',
-            secret: parsed.JWT_SECRET as string,
-          }
-        : null,
-    supabase:
-      parsed.AUTH_MODE === 'supabase' || parsed.AUTH_MODE === 'hybrid'
-        ? {
-            issuer: parsed.SUPABASE_JWT_ISSUER as string,
-            secret: parsed.SUPABASE_JWT_SECRET as string,
-          }
-        : null,
+    local: {
+      issuer: 'fulfilmentkit-local',
+      secret: parsed.JWT_SECRET,
+    },
+    supabase: {
+      issuer: parsed.SUPABASE_JWT_ISSUER,
+      secret: parsed.SUPABASE_JWT_SECRET,
+    },
   };
 }
