@@ -9,11 +9,9 @@ export interface Connection {
 }
 
 export const connectionsApi = {
-  list: (workspaceId: string) => apiGetList<Connection>(`/workspaces/${workspaceId}/connections`),
+  list: () => apiGetList<Connection>('/connections'),
 
-  getOne: (workspaceId: string, connectionId: string) =>
-    apiGet<Connection>(`/workspaces/${workspaceId}/connections/${connectionId}`),
+  getOne: (connectionId: string) => apiGet<Connection>(`/connections/${connectionId}`),
 
-  startSync: (workspaceId: string, connectionId: string) =>
-    apiPost<void>(`/workspaces/${workspaceId}/connections/${connectionId}/sync`, {}),
+  startSync: (connectionId: string) => apiPost<void>(`/connections/${connectionId}/sync`, {}),
 }

@@ -7,7 +7,7 @@ export function useInventory(params?: { page?: number; pageSize?: number }) {
 
   return useQuery({
     queryKey: ['inventory', workspaceId, params],
-    queryFn: () => inventoryApi.list(workspaceId!, params),
+    queryFn: () => inventoryApi.list(params),
     enabled: !!workspaceId,
   })
 }

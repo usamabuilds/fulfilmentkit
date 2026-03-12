@@ -10,10 +10,10 @@ export interface InventoryItem {
 }
 
 export const inventoryApi = {
-  list: (workspaceId: string, params?: { page?: number; pageSize?: number }) => {
+  list: (params?: { page?: number; pageSize?: number }) => {
     const query = new URLSearchParams()
     if (params?.page) query.set('page', String(params.page))
     if (params?.pageSize) query.set('pageSize', String(params.pageSize))
-    return apiGetList<InventoryItem>(`/workspaces/${workspaceId}/inventory?${query}`)
+    return apiGetList<InventoryItem>(`/inventory?${query}`)
   },
 }

@@ -12,11 +12,9 @@ export interface CreateForecastDto {
 }
 
 export const forecastApi = {
-  list: (workspaceId: string) => apiGetList<Forecast>(`/workspaces/${workspaceId}/forecasts`),
+  list: () => apiGetList<Forecast>('/forecast'),
 
-  getOne: (workspaceId: string, forecastId: string) =>
-    apiGet<Forecast>(`/workspaces/${workspaceId}/forecasts/${forecastId}`),
+  getOne: (forecastId: string) => apiGet<Forecast>(`/forecast/${forecastId}`),
 
-  create: (workspaceId: string, dto: CreateForecastDto) =>
-    apiPost<Forecast>(`/workspaces/${workspaceId}/forecasts`, dto),
+  create: (dto: CreateForecastDto) => apiPost<Forecast>('/forecast', dto),
 }

@@ -10,13 +10,12 @@ export interface DailyMetric {
 }
 
 export const metricsApi = {
-  list: (workspaceId: string, params?: { page?: number; pageSize?: number }) => {
+  list: (params?: { page?: number; pageSize?: number }) => {
     const query = new URLSearchParams()
     if (params?.page) query.set('page', String(params.page))
     if (params?.pageSize) query.set('pageSize', String(params.pageSize))
-    return apiGetList<DailyMetric>(`/workspaces/${workspaceId}/metrics/daily?${query}`)
+    return apiGetList<DailyMetric>(`/metrics/daily?${query}`)
   },
 
-  compute: (workspaceId: string) =>
-    apiPost<void>(`/workspaces/${workspaceId}/metrics/compute`, {}),
+  compute: () => apiPost<void>('/metrics/compute-daily', {}),
 }

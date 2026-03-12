@@ -22,18 +22,14 @@ export interface AiToolResult {
 }
 
 export const aiApi = {
-  listConversations: (workspaceId: string) =>
-    apiGetList<AiConversation>(`/workspaces/${workspaceId}/ai/conversations`),
+  listConversations: () => apiGetList<AiConversation>('/ai/conversations'),
 
-  getMessages: (workspaceId: string, conversationId: string) =>
-    apiGetList<AiMessage>(`/workspaces/${workspaceId}/ai/conversations/${conversationId}/messages`),
+  getMessages: (conversationId: string) => apiGetList<AiMessage>(`/ai/conversations/${conversationId}/messages`),
 
-  sendMessage: (workspaceId: string, conversationId: string, content: string) =>
-    apiPost<AiMessage>(`/workspaces/${workspaceId}/ai/conversations/${conversationId}/messages`, { content }),
+  sendMessage: (conversationId: string, content: string) =>
+    apiPost<AiMessage>(`/ai/conversations/${conversationId}/messages`, { content }),
 
-  createConversation: (workspaceId: string) =>
-    apiPost<AiConversation>(`/workspaces/${workspaceId}/ai/conversations`, {}),
+  createConversation: () => apiPost<AiConversation>('/ai/conversations', {}),
 
-  listToolResults: (workspaceId: string) =>
-    apiGetList<AiToolResult>(`/workspaces/${workspaceId}/ai/tool-results`),
+  listToolResults: () => apiGetList<AiToolResult>('/ai/tools/kpi-summary'),
 }

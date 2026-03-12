@@ -79,7 +79,7 @@ function toOrder(raw: RawOrder): Order {
 }
 
 export const ordersApi = {
-  list: async (workspaceId: string, params?: OrdersListParams): Promise<ApiListResponse<Order>> => {
+  list: async (params?: OrdersListParams): Promise<ApiListResponse<Order>> => {
     const query = new URLSearchParams()
     if (params?.page) query.set('page', String(params.page))
     if (params?.pageSize) query.set('pageSize', String(params.pageSize))
@@ -89,7 +89,7 @@ export const ordersApi = {
     if (params?.channel) query.set('channel', params.channel)
     if (params?.search) query.set('search', params.search)
 
-    const response = await apiGetList<RawOrder>(`/workspaces/${workspaceId}/orders?${query.toString()}`)
+    const response = await apiGetList<RawOrder>(`/orders?${query.toString()}`)
     return {
       ...response,
       data: {
@@ -99,8 +99,8 @@ export const ordersApi = {
     }
   },
 
-  getOne: async (workspaceId: string, orderId: string): Promise<ApiResponse<OrderDetail>> => {
-    const response = await apiGet<RawOrderDetail>(`/workspaces/${workspaceId}/orders/${orderId}`)
+  getOne: async (orderId: string): Promise<ApiResponse<OrderDetail>> => {
+    const response = await apiGet<RawOrderDetail>(`/orders/${orderId}`)
     return {
       ...response,
       data: {

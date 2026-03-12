@@ -8,5 +8,5 @@ export interface DashboardStats {
 }
 
 export const dashboardApi = {
-  getStats: (workspaceId: string) => apiGet<DashboardStats>(`/workspaces/${workspaceId}/dashboard`),
+  getStats: () => apiGet<DashboardStats>('/dashboard/summary'),
 }

@@ -12,9 +12,9 @@ export interface CreatePlanDto {
 }
 
 export const planningApi = {
-  list: (workspaceId: string) => apiGetList<Plan>(`/workspaces/${workspaceId}/plans`),
+  list: () => apiGetList<Plan>('/plans'),
 
-  getOne: (workspaceId: string, planId: string) => apiGet<Plan>(`/workspaces/${workspaceId}/plans/${planId}`),
+  getOne: (planId: string) => apiGet<Plan>(`/plans/${planId}`),
 
-  create: (workspaceId: string, dto: CreatePlanDto) => apiPost<Plan>(`/workspaces/${workspaceId}/plans`, dto),
+  create: (dto: CreatePlanDto) => apiPost<Plan>('/plans', dto),
 }

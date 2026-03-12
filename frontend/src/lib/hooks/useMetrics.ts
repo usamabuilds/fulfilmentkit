@@ -7,7 +7,7 @@ export function useMetrics(params?: { page?: number; pageSize?: number }) {
 
   return useQuery({
     queryKey: ['metrics', workspaceId, params],
-    queryFn: () => metricsApi.list(workspaceId!, params),
+    queryFn: () => metricsApi.list(params),
     enabled: !!workspaceId,
   })
 }
@@ -17,7 +17,7 @@ export function useComputeMetrics() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: () => metricsApi.compute(workspaceId!),
+    mutationFn: () => metricsApi.compute(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['metrics', workspaceId] })
     },
