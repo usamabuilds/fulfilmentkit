@@ -14,12 +14,9 @@ export interface WorkspaceMember {
 }
 
 export const settingsApi = {
-  getWorkspace: (workspaceId: string) =>
-    apiGet<WorkspaceSettings>(`/workspaces/${workspaceId}`),
+  getWorkspace: () => apiGet<WorkspaceSettings>('/settings'),
 
-  updateWorkspace: (workspaceId: string, dto: { name: string }) =>
-    apiPatch<WorkspaceSettings>(`/workspaces/${workspaceId}`, dto),
+  updateWorkspace: (dto: { name: string }) => apiPatch<WorkspaceSettings>('/settings', dto),
 
-  listMembers: (workspaceId: string) =>
-    apiGetList<WorkspaceMember>(`/workspaces/${workspaceId}/members`),
+  listMembers: () => apiGetList<WorkspaceMember>('/settings/members'),
 }

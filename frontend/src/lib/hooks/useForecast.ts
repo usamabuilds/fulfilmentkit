@@ -6,7 +6,7 @@ export function useForecasts() {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
   return useQuery({
     queryKey: ['forecasts', workspaceId],
-    queryFn: () => forecastApi.list(workspaceId!),
+    queryFn: () => forecastApi.list(),
     enabled: !!workspaceId,
   })
 }
@@ -15,7 +15,7 @@ export function useForecast(forecastId: string) {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
   return useQuery({
     queryKey: ['forecasts', workspaceId, forecastId],
-    queryFn: () => forecastApi.getOne(workspaceId!, forecastId),
+    queryFn: () => forecastApi.getOne(forecastId),
     enabled: !!workspaceId && !!forecastId,
   })
 }
@@ -25,7 +25,7 @@ export function useCreateForecast() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (dto: { name: string }) =>
-      forecastApi.create(workspaceId!, dto),
+      forecastApi.create(dto),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['forecasts', workspaceId] })
     },

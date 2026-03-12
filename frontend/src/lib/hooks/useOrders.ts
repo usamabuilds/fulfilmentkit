@@ -6,7 +6,7 @@ export function useOrders(params?: OrdersListParams) {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
   return useQuery({
     queryKey: ['orders', workspaceId, params],
-    queryFn: () => ordersApi.list(workspaceId!, params),
+    queryFn: () => ordersApi.list(params),
     enabled: !!workspaceId,
   })
 }
@@ -15,7 +15,7 @@ export function useOrder(orderId: string) {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
   return useQuery({
     queryKey: ['orders', workspaceId, orderId],
-    queryFn: () => ordersApi.getOne(workspaceId!, orderId),
+    queryFn: () => ordersApi.getOne(orderId),
     enabled: !!workspaceId && !!orderId,
   })
 }

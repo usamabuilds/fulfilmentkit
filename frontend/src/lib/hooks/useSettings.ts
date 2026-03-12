@@ -6,7 +6,7 @@ export function useWorkspaceSettings() {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
   return useQuery({
     queryKey: ['settings', 'workspace', workspaceId],
-    queryFn: () => settingsApi.getWorkspace(workspaceId!),
+    queryFn: () => settingsApi.getWorkspace(),
     enabled: !!workspaceId,
   })
 }
@@ -17,7 +17,7 @@ export function useUpdateWorkspace() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (dto: { name: string }) =>
-      settingsApi.updateWorkspace(workspaceId!, dto),
+      settingsApi.updateWorkspace(dto),
     onSuccess: (res) => {
       setWorkspace({ id: res.data.id, name: res.data.name })
       queryClient.invalidateQueries({ queryKey: ['settings', 'workspace', workspaceId] })
@@ -29,7 +29,7 @@ export function useWorkspaceMembers() {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
   return useQuery({
     queryKey: ['settings', 'members', workspaceId],
-    queryFn: () => settingsApi.listMembers(workspaceId!),
+    queryFn: () => settingsApi.listMembers(),
     enabled: !!workspaceId,
   })
 }

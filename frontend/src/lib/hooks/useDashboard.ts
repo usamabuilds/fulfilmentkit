@@ -6,7 +6,7 @@ export function useDashboardStats() {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
   return useQuery({
     queryKey: ['dashboard', 'stats', workspaceId],
-    queryFn: () => dashboardApi.getStats(workspaceId!),
+    queryFn: () => dashboardApi.getStats(),
     enabled: !!workspaceId,
   })
 }

@@ -7,7 +7,7 @@ export function useConnections() {
 
   return useQuery({
     queryKey: ['connections', workspaceId],
-    queryFn: () => connectionsApi.list(workspaceId!),
+    queryFn: () => connectionsApi.list(),
     enabled: !!workspaceId,
   })
 }
@@ -17,7 +17,7 @@ export function useStartSync(connectionId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: () => connectionsApi.startSync(workspaceId!, connectionId),
+    mutationFn: () => connectionsApi.startSync(connectionId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['connections', workspaceId] })
     },
