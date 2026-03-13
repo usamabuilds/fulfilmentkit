@@ -53,10 +53,6 @@ export class WorkspaceGuard implements CanActivate {
 
     request.workspaceId = workspaceId;
 
-    // --------------------------------------------------
-    // RESOLVE AUTH IDENTITY (robust)
-    // --------------------------------------------------
-
     const auth: AuthShape | undefined = request.auth;
 
     const externalUserId: string | undefined = auth?.externalUserId || request?.user?.id;
@@ -82,7 +78,12 @@ export class WorkspaceGuard implements CanActivate {
     const email: string | undefined = auth?.email || request?.user?.email;
 
     const existingUser = await this.prisma.user.findUnique({
-      where: { id: externalUserId },
+      where: {
+        authProvider_authProviderUserId: {
+          authProvider: provider,
+          authProviderUserId: externalUserId,
+        },
+      },
       select: {
         id: true,
         authProvider: true,
@@ -90,30 +91,9 @@ export class WorkspaceGuard implements CanActivate {
       },
     });
 
-    if (existingUser) {
-      if (
-        existingUser.authProvider !== provider ||
-        existingUser.authProviderUserId !== externalUserId
-      ) {
-        this.logger.warn(
-          '[WorkspaceGuard] provider mismatch for existing user',
-          {
-            path: request?.originalUrl || request?.url,
-            userId: existingUser.id,
-            expectedProvider: existingUser.authProvider,
-            tokenProvider: provider,
-            expectedProviderUserId: existingUser.authProviderUserId,
-            tokenExternalUserId: externalUserId,
-          },
-        );
-
-        throw new UnauthorizedException('Token provider mismatch for user');
-      }
-    }
-
     const user = existingUser
       ? await this.prisma.user.update({
-          where: { id: externalUserId },
+          where: { id: existingUser.id },
           data: {
             email: email ?? undefined,
           },
@@ -126,7 +106,6 @@ export class WorkspaceGuard implements CanActivate {
         })
       : await this.prisma.user.create({
           data: {
-            id: externalUserId,
             authProvider: provider,
             authProviderUserId: externalUserId,
             email: email ?? null,
