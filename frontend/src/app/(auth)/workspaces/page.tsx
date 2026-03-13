@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/authStore'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
+import { useOnboardingStore } from '@/lib/store/onboardingStore'
 import { workspacesApi, type Workspace } from '@/lib/api/endpoints/workspaces'
 import { cn } from '@/lib/utils/cn'
 
@@ -30,6 +31,7 @@ export default function WorkspacesPage() {
   const router = useRouter()
   const user = useAuthStore((s) => s.user)
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace)
+  const isInviteStepCompleted = useOnboardingStore((s) => s.isInviteStepCompleted)
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('')
@@ -60,7 +62,7 @@ export default function WorkspacesPage() {
 
         if (items.length === 1) {
           setWorkspace({ id: items[0].id, name: items[0].name })
-          router.replace('/dashboard')
+          router.replace(isInviteStepCompleted(items[0].id) ? '/dashboard' : '/onboarding/invite')
           return
         }
 
@@ -97,7 +99,7 @@ export default function WorkspacesPage() {
     return () => {
       active = false
     }
-  }, [router, setWorkspace, user])
+  }, [isInviteStepCompleted, router, setWorkspace, user])
 
   async function handleContinue() {
     if (!selectedWorkspace) return
@@ -106,7 +108,7 @@ export default function WorkspacesPage() {
 
     try {
       setWorkspace({ id: selectedWorkspace.id, name: selectedWorkspace.name })
-      router.push('/dashboard')
+      router.push(isInviteStepCompleted(selectedWorkspace.id) ? '/dashboard' : '/onboarding/invite')
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to select workspace'))
     } finally {
@@ -122,7 +124,7 @@ export default function WorkspacesPage() {
     try {
       const res = await workspacesApi.create({ name: name.trim() })
       setWorkspace({ id: res.data.id, name: res.data.name })
-      router.push('/dashboard')
+      router.push(isInviteStepCompleted(res.data.id) ? '/dashboard' : '/onboarding/invite')
     } catch (err) {
       const typedError = err as HttpError
       if (typedError.statusCode === 401) {

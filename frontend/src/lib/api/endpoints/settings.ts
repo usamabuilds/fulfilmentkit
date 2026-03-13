@@ -1,5 +1,5 @@
-import { apiGet, apiGetList, apiPatch } from '@/lib/api/client'
-import type { ApiListResponse } from '@/lib/api/types'
+import { apiGet, apiGetList, apiPatch, apiPost } from '@/lib/api/client'
+import type { ApiListResponse, ApiResponse } from '@/lib/api/types'
 
 export interface WorkspaceSettings {
   id: string
@@ -12,6 +12,11 @@ export interface WorkspaceMember {
   email: string
   role: 'OWNER' | 'ADMIN' | 'VIEWER'
   joinedAt: string
+}
+
+export interface InviteWorkspaceMemberDto {
+  email: string
+  role?: WorkspaceMember['role']
 }
 
 const workspaceMemberRoles = ['OWNER', 'ADMIN', 'VIEWER'] as const
@@ -53,5 +58,11 @@ export const settingsApi = {
     const response = await apiGetList<unknown>('/settings/members')
     response.data.items.forEach(assertWorkspaceMemberContract)
     return response as ApiListResponse<WorkspaceMember>
+  },
+
+  inviteMember: async (dto: InviteWorkspaceMemberDto): Promise<ApiResponse<WorkspaceMember>> => {
+    const response = await apiPost<unknown>('/settings/members/invite', dto)
+    assertWorkspaceMemberContract(response.data)
+    return response as ApiResponse<WorkspaceMember>
   },
 }
