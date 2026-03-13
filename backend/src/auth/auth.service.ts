@@ -1,8 +1,13 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { Prisma } from '../generated/prisma';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { getAuthRuntimeConfig } from '../config/env.validation';
 
 function hashPassword(password: string, salt: string): string {
   return createHash('sha256').update(salt + password).digest('hex');
@@ -93,10 +98,12 @@ export class AuthService {
   }
 
   private toAuthResponse(user: { id: string; email: string | null }) {
-    const jwtSecret = process.env.JWT_SECRET;
+    const authConfig = getAuthRuntimeConfig(process.env);
 
-    if (!jwtSecret) {
-      throw new Error('JWT_SECRET is required');
+    if (!authConfig.local) {
+      throw new Error(
+        `Local token signing is disabled for AUTH_MODE=${authConfig.mode}. Enable AUTH_MODE=local or AUTH_MODE=hybrid to sign local tokens.`,
+      );
     }
 
     const token = jwt.sign(
@@ -104,8 +111,9 @@ export class AuthService {
         sub: user.id,
         email: user.email ?? undefined,
         provider: 'local',
+        iss: authConfig.local.issuer,
       },
-      jwtSecret,
+      authConfig.local.secret,
       { expiresIn: '7d' },
     );
 

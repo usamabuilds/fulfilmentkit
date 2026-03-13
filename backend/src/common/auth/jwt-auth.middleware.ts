@@ -1,59 +1,62 @@
 import { Injectable, Logger, NestMiddleware } from '@nestjs/common';
 import jwt from 'jsonwebtoken';
+import { AuthRuntimeConfig, getAuthRuntimeConfig } from '../../config/env.validation';
 
 type JwtPayload = {
-  // Canonical identity claim for all providers.
   sub?: string;
-  // Legacy Supabase claim used only as an explicit fallback.
   user_id?: string;
   provider?: string;
   email?: string;
   role?: string;
   iss?: string;
   aud?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 type SupportedAuthProvider = 'local' | 'supabase';
 
+type MiddlewareRequest = {
+  headers: {
+    authorization?: string;
+  };
+  auth?: {
+    provider: SupportedAuthProvider;
+    externalUserId: string;
+    email?: string;
+    tokenClaims: JwtPayload;
+  };
+  user?: {
+    id: string;
+    email?: string;
+    tokenClaims: JwtPayload;
+  };
+};
+
+type MiddlewareResponse = Record<string, never>;
+type MiddlewareNext = () => void;
+
 @Injectable()
 export class JwtAuthMiddleware implements NestMiddleware {
   private readonly logger = new Logger(JwtAuthMiddleware.name);
-  private readonly jwtSecret: string;
+  private readonly authConfig: AuthRuntimeConfig;
 
   constructor() {
-    const secret = process.env.SUPABASE_JWT_SECRET || process.env.JWT_SECRET;
-
-    if (!secret) {
-      throw new Error(
-        'Missing JWT secret: set SUPABASE_JWT_SECRET or JWT_SECRET before starting the application.',
-      );
-    }
-
-    this.jwtSecret = secret;
+    this.authConfig = getAuthRuntimeConfig(process.env);
   }
 
-  private deriveProviderFromClaims(
-    claims: JwtPayload,
-  ): SupportedAuthProvider | undefined {
-    if (typeof claims?.provider === 'string') {
-      if (claims.provider === 'local' || claims.provider === 'supabase') {
-        return claims.provider;
-      }
-
-      return undefined;
+  private deriveProviderFromClaims(claims: JwtPayload): SupportedAuthProvider | undefined {
+    if (claims.provider === 'local' || claims.provider === 'supabase') {
+      return claims.provider;
     }
 
-    // Supabase access tokens commonly omit `provider`; infer explicitly.
     if (
-      (typeof claims?.iss === 'string' && claims.iss.includes('supabase')) ||
-      claims?.role === 'authenticated' ||
-      claims?.aud === 'authenticated'
+      (typeof claims.iss === 'string' && claims.iss.includes('supabase')) ||
+      claims.role === 'authenticated' ||
+      claims.aud === 'authenticated'
     ) {
       return 'supabase';
     }
 
-    // Local tokens must include an explicit provider claim.
     return undefined;
   }
 
@@ -61,113 +64,143 @@ export class JwtAuthMiddleware implements NestMiddleware {
     claims: JwtPayload,
     provider: SupportedAuthProvider,
   ): string | undefined {
-    if (typeof claims?.sub === 'string' && claims.sub.length > 0) {
+    if (typeof claims.sub === 'string' && claims.sub.length > 0) {
       return claims.sub;
     }
 
-    // Explicitly-supported legacy fallback for Supabase JWTs.
-    if (
-      provider === 'supabase' &&
-      typeof claims?.user_id === 'string' &&
-      claims.user_id.length > 0
-    ) {
+    if (provider === 'supabase' && typeof claims.user_id === 'string' && claims.user_id.length > 0) {
       return claims.user_id;
     }
 
     return undefined;
   }
 
-  use(req: any, _res: any, next: (err?: any) => void) {
-    const path = req?.originalUrl || req?.url;
+  private clearAuth(req: MiddlewareRequest, next: MiddlewareNext): void {
+    req.user = undefined;
+    req.auth = undefined;
+    next();
+  }
 
-    const authHeader = req?.headers?.authorization;
+  use(req: MiddlewareRequest, _res: MiddlewareResponse, next: MiddlewareNext): void {
+    const authHeader = req.headers.authorization;
 
-    this.logger.log('[JwtAuthMiddleware] HIT', {
-      path,
-      hasAuthHeader: !!authHeader,
-      authHeaderType: typeof authHeader,
-    });
+    if (!authHeader || typeof authHeader !== 'string') {
+      this.clearAuth(req, next);
+      return;
+    }
+
+    const [scheme, token] = authHeader.split(' ');
+    if (scheme !== 'Bearer' || !token) {
+      this.clearAuth(req, next);
+      return;
+    }
+
+    const decodedToken = jwt.decode(token);
+    const unverifiedClaims: JwtPayload | undefined =
+      decodedToken && typeof decodedToken === 'object' ? (decodedToken as JwtPayload) : undefined;
+    const tokenIssuer = typeof unverifiedClaims?.iss === 'string' ? unverifiedClaims.iss : undefined;
+
+    let verificationTarget:
+      | { provider: SupportedAuthProvider; secret: string; issuer: string }
+      | undefined;
+
+    if (this.authConfig.mode === 'local') {
+      if (tokenIssuer && tokenIssuer !== this.authConfig.local?.issuer) {
+        this.clearAuth(req, next);
+        return;
+      }
+
+      verificationTarget = {
+        provider: 'local',
+        secret: this.authConfig.local!.secret,
+        issuer: this.authConfig.local!.issuer,
+      };
+    } else if (this.authConfig.mode === 'supabase') {
+      if (!tokenIssuer || tokenIssuer !== this.authConfig.supabase?.issuer) {
+        this.clearAuth(req, next);
+        return;
+      }
+
+      verificationTarget = {
+        provider: 'supabase',
+        secret: this.authConfig.supabase!.secret,
+        issuer: this.authConfig.supabase!.issuer,
+      };
+    } else {
+      const local = this.authConfig.local;
+      const supabase = this.authConfig.supabase;
+
+      if (local && tokenIssuer === local.issuer) {
+        verificationTarget = {
+          provider: 'local',
+          secret: local.secret,
+          issuer: local.issuer,
+        };
+      } else if (supabase && tokenIssuer === supabase.issuer) {
+        verificationTarget = {
+          provider: 'supabase',
+          secret: supabase.secret,
+          issuer: supabase.issuer,
+        };
+      } else {
+        this.clearAuth(req, next);
+        return;
+      }
+    }
 
     try {
-      if (!authHeader || typeof authHeader !== 'string') {
-        req.user = undefined;
-        req.auth = undefined;
-        return next();
+      const verified = jwt.verify(token, verificationTarget.secret) as jwt.JwtPayload | string;
+      if (!verified || typeof verified !== 'object') {
+        this.clearAuth(req, next);
+        return;
       }
 
-      const [scheme, token] = authHeader.split(' ');
+      const claims = verified as JwtPayload;
+      const providerFromClaims = this.deriveProviderFromClaims(claims);
 
-      this.logger.log('[JwtAuthMiddleware] PARSE', {
-        path,
-        scheme,
-        tokenLen: token ? token.length : 0,
-      });
-
-      if (scheme !== 'Bearer' || !token) {
-        req.user = undefined;
-        req.auth = undefined;
-        return next();
+      if (providerFromClaims && providerFromClaims !== verificationTarget.provider) {
+        this.clearAuth(req, next);
+        return;
       }
 
-      const secretFrom = process.env.SUPABASE_JWT_SECRET
-        ? 'SUPABASE_JWT_SECRET'
-        : 'JWT_SECRET';
-
-      const secret = this.jwtSecret;
-
-      this.logger.log('[JwtAuthMiddleware] SECRET', { path, secretFrom });
-
-      const decoded = jwt.verify(token, secret) as JwtPayload;
-
-      const provider = this.deriveProviderFromClaims(decoded);
-
-      if (!provider) {
-        req.user = undefined;
-        req.auth = undefined;
-        return next();
-      }
-
-      const externalUserId = this.extractExternalUserId(decoded, provider);
-
-      this.logger.log('[JwtAuthMiddleware] VERIFIED', {
-        path,
-        hasSub: !!decoded?.sub,
-        hasUserId: !!decoded?.user_id,
-        externalUserId,
-        hasEmail: !!decoded?.email,
-      });
+      const provider = providerFromClaims ?? verificationTarget.provider;
+      const externalUserId = this.extractExternalUserId(claims, provider);
 
       if (!externalUserId) {
-        req.user = undefined;
-        req.auth = undefined;
-        return next();
+        this.clearAuth(req, next);
+        return;
       }
+
+      this.logger.log('[JwtAuthMiddleware] VERIFIED', {
+        provider: verificationTarget.provider,
+        verificationIssuer: verificationTarget.issuer,
+        hasProviderClaim: typeof claims.provider === 'string',
+        hasSub: typeof claims.sub === 'string',
+        hasUserId: typeof claims.user_id === 'string',
+      });
 
       req.auth = {
         provider,
         externalUserId,
-        email: decoded?.email,
-        tokenClaims: decoded,
+        email: typeof claims.email === 'string' ? claims.email : undefined,
+        tokenClaims: claims,
       };
 
       req.user = {
         id: externalUserId,
-        email: decoded?.email,
-        tokenClaims: decoded,
+        email: typeof claims.email === 'string' ? claims.email : undefined,
+        tokenClaims: claims,
       };
 
-      return next();
-    } catch (err: any) {
-      const msg = err?.message || String(err);
+      next();
+    } catch (error: unknown) {
+      const err = error as { message?: string; name?: string };
       this.logger.warn('[JwtAuthMiddleware] VERIFY FAILED', {
-        path,
-        name: err?.name,
-        message: msg,
+        name: err.name,
+        message: err.message ?? String(error),
       });
 
-      req.user = undefined;
-      req.auth = undefined;
-      return next();
+      this.clearAuth(req, next);
     }
   }
 }
