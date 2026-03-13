@@ -10,7 +10,8 @@
     "prisma:generate": "prisma generate",
     "prisma:seed": "prisma db seed",
     "lint": "eslint .",
-    "format": "prettier . --write"
+    "format": "prettier . --write",
+    "prisma:check-generated": "node scripts/check-prisma-client-sync.mjs"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
