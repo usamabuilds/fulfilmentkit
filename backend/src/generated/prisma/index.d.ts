@@ -143,7 +143,12 @@ export type ForecastLevel = (typeof ForecastLevel)[keyof typeof ForecastLevel]
 export const ConnectionPlatform: {
   SHOPIFY: 'SHOPIFY',
   WOOCOMMERCE: 'WOOCOMMERCE',
-  AMAZON: 'AMAZON'
+  AMAZON: 'AMAZON',
+  ZOHO: 'ZOHO',
+  XERO: 'XERO',
+  SAGE: 'SAGE',
+  ODOO: 'ODOO',
+  QUICKBOOKS: 'QUICKBOOKS'
 };
 
 export type ConnectionPlatform = (typeof ConnectionPlatform)[keyof typeof ConnectionPlatform]

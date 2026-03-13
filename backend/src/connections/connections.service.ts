@@ -4,17 +4,9 @@ import * as crypto from 'crypto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { toListResponse } from '../common/utils/list-response';
+import { ConnectionPlatform } from '../generated/prisma';
 
 type StartPlatform = 'shopify' | 'woocommerce' | 'amazon' | 'zoho' | 'xero' | 'sage' | 'odoo' | 'quickbooks';
-type ConnectionPlatform =
-  | 'SHOPIFY'
-  | 'WOOCOMMERCE'
-  | 'AMAZON'
-  | 'ZOHO'
-  | 'XERO'
-  | 'SAGE'
-  | 'ODOO'
-  | 'QUICKBOOKS';
 type ConnectionAuthType =
   | 'oauth_callback'
   | 'api_keys_callback'
@@ -239,7 +231,7 @@ export class ConnectionsService {
     const connection = await this.prisma.connection.findFirst({
       where: {
         workspaceId,
-        platform: platformEnum as never,
+        platform: platformEnum,
       },
       select: { id: true },
     });
@@ -259,7 +251,7 @@ export class ConnectionsService {
       create: {
         connectionId: connection.id,
         workspaceId,
-        platform: platformEnum as never,
+        platform: platformEnum,
         authType: this.getAuthType(platform),
         secretCiphertext: ciphertext,
         secretMetadata: {
@@ -272,7 +264,7 @@ export class ConnectionsService {
       },
       update: {
         workspaceId,
-        platform: platformEnum as never,
+        platform: platformEnum,
         authType: this.getAuthType(platform),
         secretCiphertext: ciphertext,
         secretMetadata: {
