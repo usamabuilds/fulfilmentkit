@@ -1,44 +1,99 @@
-import { Controller, Get, Req } from '@nestjs/common';
-import { WorkspacesService } from '../workspaces/workspaces.service';
+import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { PrismaService } from './prisma/prisma.service';
 import { apiResponse } from './utils/api-response';
+
+type NextOnboardingStep = 'verify-email' | 'complete-onboarding' | null;
 
 type MeUserDto = {
   id: string;
   email: string | null;
+  emailVerified: boolean;
+  onboardingCompleted: boolean;
+  nextOnboardingStep: NextOnboardingStep;
 };
+
+type MeRequest = {
+  user?: {
+    id?: string;
+    email?: string;
+  };
+  workspaceId?: string;
+  workspaceRole?: string;
+};
+
+function getNextOnboardingStep(user: Pick<MeUserDto, 'emailVerified' | 'onboardingCompleted'>): NextOnboardingStep {
+  if (!user.emailVerified) return 'verify-email';
+  if (!user.onboardingCompleted) return 'complete-onboarding';
+  return null;
+}
 
 @Controller()
 export class MeController {
-  constructor(private readonly workspacesService: WorkspacesService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  // GET /me
-  // Workspace scoped (WorkspaceGuard requires X-Workspace-Id and sets req.workspaceId)
-  // Option A: req.user.id is the Supabase user id
   @Get('me')
-  async getMe(@Req() req: any) {
-    const workspaceId: string = req.workspaceId;
+  async getMe(@Req() req: MeRequest) {
+    const workspaceId = req.workspaceId ?? null;
+    const workspaceRole = req.workspaceRole ?? null;
 
-    const authUser = req.user as { id?: string; email?: string } | undefined;
+    const authUserId = req.user?.id;
 
     let user: MeUserDto | null = null;
-    let workspaceRole: string | null = null;
 
-    if (authUser?.id) {
-      user = {
-        id: authUser.id,
-        email: authUser.email ?? null,
-      };
+    if (authUserId) {
+      const dbUser = await this.prisma.user.findUnique({
+        where: { id: authUserId },
+        select: {
+          id: true,
+          email: true,
+          emailVerified: true,
+          onboardingCompleted: true,
+        },
+      });
 
-      workspaceRole = await this.workspacesService.getWorkspaceRoleForUser(
-        workspaceId,
-        authUser.id,
-      );
+      if (dbUser) {
+        user = {
+          ...dbUser,
+          nextOnboardingStep: getNextOnboardingStep(dbUser),
+        };
+      }
     }
 
     return apiResponse({
-        user,
-        workspaceId,
-        workspaceRole,
-      });
+      user,
+      workspaceId,
+      workspaceRole,
+    });
+  }
+
+  @Post('onboarding/complete')
+  async completeOnboarding(@Req() req: MeRequest, @Body() _body: unknown) {
+    const authUserId = req.user?.id;
+
+    if (!authUserId) {
+      return apiResponse({ updated: false });
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: authUserId },
+      data: {
+        onboardingCompleted: true,
+        onboardingCompletedAt: new Date(),
+      },
+      select: {
+        id: true,
+        email: true,
+        emailVerified: true,
+        onboardingCompleted: true,
+      },
+    });
+
+    return apiResponse({
+      updated: true,
+      user: {
+        ...updatedUser,
+        nextOnboardingStep: getNextOnboardingStep(updatedUser),
+      },
+    });
   }
 }

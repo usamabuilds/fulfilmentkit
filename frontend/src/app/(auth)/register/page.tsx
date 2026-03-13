@@ -7,9 +7,13 @@ import { apiPost } from '@/lib/api/client'
 type PlanKey = 'starter' | 'pro' | 'enterprise'
 
 interface RegisterResponse {
+  verificationRequired: boolean
   user: {
     id: string
-    email: string
+    email: string | null
+    emailVerified: boolean
+    onboardingCompleted: boolean
+    nextOnboardingStep: 'verify-email' | 'complete-onboarding' | null
   }
 }
 

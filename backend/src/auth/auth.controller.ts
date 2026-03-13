@@ -52,4 +52,11 @@ export class AuthController {
     const result = await this.authService.resendVerificationCode(parsed);
     return apiResponse(result);
   }
+  @Post('resend-verification')
+  async resendVerification(@Body() body: unknown) {
+    const parsed = ResendCodeBodySchema.parse(body);
+    const result = await this.authService.resendVerificationCode(parsed);
+    return apiResponse(result);
+  }
 }
+

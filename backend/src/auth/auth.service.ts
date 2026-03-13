@@ -7,9 +7,9 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { createHash, randomBytes, randomInt, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomInt } from 'crypto';
 import jwt from 'jsonwebtoken';
-import { Prisma } from '../generated/prisma';
+import { SelectedPlan } from '../generated/prisma';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { getAuthRuntimeConfig } from '../config/env.validation';
 import {
@@ -19,6 +19,13 @@ import {
 
 const VERIFICATION_CODE_EXPIRY_MINUTES = 15;
 const RESEND_CODE_COOLDOWN_MS = 60_000;
+
+type AuthUser = {
+  id: string;
+  email: string | null;
+  emailVerified: boolean;
+  onboardingCompleted: boolean;
+};
 
 function hashPassword(password: string, salt: string): string {
   return createHash('sha256')
@@ -38,6 +45,27 @@ function generateVerificationCode(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, '0');
 }
 
+function toSelectedPlan(plan: string | undefined): SelectedPlan | undefined {
+  if (!plan) return undefined;
+
+  const normalized = plan.trim().toUpperCase();
+
+  if (normalized === SelectedPlan.STARTER) return SelectedPlan.STARTER;
+  if (normalized === SelectedPlan.PRO) return SelectedPlan.PRO;
+  if (normalized === SelectedPlan.ENTERPRISE) return SelectedPlan.ENTERPRISE;
+
+  return undefined;
+}
+
+function getNextOnboardingStep(user: Pick<AuthUser, 'emailVerified' | 'onboardingCompleted'>):
+  | 'verify-email'
+  | 'complete-onboarding'
+  | null {
+  if (!user.emailVerified) return 'verify-email';
+  if (!user.onboardingCompleted) return 'complete-onboarding';
+  return null;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -49,8 +77,6 @@ export class AuthService {
 
   async register(params: { email: string; password: string; plan?: string }) {
     const email = params.email.trim().toLowerCase();
-
-    await this.ensureEmailVerificationTable();
 
     const existingUser = await this.prisma.user.findFirst({
       where: {
@@ -68,40 +94,52 @@ export class AuthService {
     const hash = hashPassword(params.password, salt);
     const passwordHash = `${salt}:${hash}`;
 
-    const userId = randomUUID();
+    const selectedPlan = toSelectedPlan(params.plan);
 
     const user = await this.prisma.user.create({
       data: {
-        id: userId,
         email,
         authProvider: 'local',
-        authProviderUserId: userId,
+        authProviderUserId: email,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        authProviderUserId: user.id,
+        passwordHash,
+        selectedPlan,
       },
       select: {
         id: true,
         email: true,
+        emailVerified: true,
+        onboardingCompleted: true,
       },
     });
 
-    await this.prisma.$executeRaw(
-      Prisma.sql`UPDATE "User" SET "passwordHash" = ${passwordHash} WHERE "id" = ${user.id}`,
-    );
-
     const code = generateVerificationCode();
-    await this.storeVerificationCode({ userId: user.id, email, code });
+    await this.storeVerificationCode({ userId: updatedUser.id, code });
     await this.sendVerificationCodeOrThrow(email, code);
 
     return {
-      userId: user.id,
-      email: user.email,
       verificationRequired: true,
-      plan: params.plan,
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        emailVerified: updatedUser.emailVerified,
+        onboardingCompleted: updatedUser.onboardingCompleted,
+        nextOnboardingStep: getNextOnboardingStep(updatedUser),
+      },
     };
   }
 
   async verifyEmail(params: { email: string; code: string }) {
     const email = params.email.trim().toLowerCase();
-    await this.ensureEmailVerificationTable();
 
     const user = await this.prisma.user.findFirst({
       where: {
@@ -111,6 +149,8 @@ export class AuthService {
       select: {
         id: true,
         email: true,
+        emailVerified: true,
+        onboardingCompleted: true,
       },
     });
 
@@ -118,34 +158,49 @@ export class AuthService {
       throw new UnauthorizedException('Invalid verification code');
     }
 
-    const rows = await this.prisma.$queryRaw<
-      Array<{ id: string; codeHash: string; expiresAt: Date }>
-    >(Prisma.sql`
-      SELECT "id", "codeHash", "expiresAt"
-      FROM "EmailVerificationCode"
-      WHERE "userId" = ${user.id}
-      ORDER BY "createdAt" DESC
-      LIMIT 1
-    `);
+    const verificationRecord = await this.prisma.emailVerificationCode.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        codeHash: true,
+        expiresAt: true,
+      },
+    });
 
-    const record = rows[0];
     const candidateHash = hashVerificationCode(params.code);
     const now = new Date();
 
-    if (!record || record.codeHash !== candidateHash || record.expiresAt <= now) {
+    if (!verificationRecord || verificationRecord.codeHash !== candidateHash || verificationRecord.expiresAt <= now) {
       throw new UnauthorizedException('Invalid verification code');
     }
 
-    await this.prisma.$executeRaw(
-      Prisma.sql`DELETE FROM "EmailVerificationCode" WHERE "userId" = ${user.id}`,
-    );
+    await this.prisma.$transaction([
+      this.prisma.emailVerificationCode.deleteMany({ where: { userId: user.id } }),
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          emailVerified: true,
+          emailVerifiedAt: now,
+        },
+      }),
+    ]);
 
-    return this.toAuthResponse(user);
+    const verifiedUser = await this.prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      select: {
+        id: true,
+        email: true,
+        emailVerified: true,
+        onboardingCompleted: true,
+      },
+    });
+
+    return this.toAuthResponse(verifiedUser);
   }
 
   async resendVerificationCode(params: { email: string }) {
     const email = params.email.trim().toLowerCase();
-    await this.ensureEmailVerificationTable();
 
     const user = await this.prisma.user.findFirst({
       where: {
@@ -162,15 +217,12 @@ export class AuthService {
       throw new BadRequestException('User not found');
     }
 
-    const latestRows = await this.prisma.$queryRaw<Array<{ createdAt: Date }>>(Prisma.sql`
-      SELECT "createdAt"
-      FROM "EmailVerificationCode"
-      WHERE "userId" = ${user.id}
-      ORDER BY "createdAt" DESC
-      LIMIT 1
-    `);
+    const latest = await this.prisma.emailVerificationCode.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
 
-    const latest = latestRows[0];
     if (latest && Date.now() - latest.createdAt.getTime() < RESEND_CODE_COOLDOWN_MS) {
       throw new HttpException(
         'Please wait 60 seconds before requesting a new code',
@@ -179,7 +231,7 @@ export class AuthService {
     }
 
     const code = generateVerificationCode();
-    await this.storeVerificationCode({ userId: user.id, email, code });
+    await this.storeVerificationCode({ userId: user.id, code });
     await this.sendVerificationCodeOrThrow(email, code);
 
     return {
@@ -201,41 +253,31 @@ export class AuthService {
       select: {
         id: true,
         email: true,
+        passwordHash: true,
+        emailVerified: true,
+        onboardingCompleted: true,
       },
     });
 
-    if (!user) {
+    if (!user || !user.passwordHash) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const rows = await this.prisma.$queryRaw<
-      Array<{ passwordHash: string | null; emailVerifiedAt: Date | null }>
-    >(
-      Prisma.sql`SELECT "passwordHash", "emailVerifiedAt" FROM "User" WHERE "id" = ${user.id} LIMIT 1`,
-    );
-
-    const passwordHash = rows[0]?.passwordHash;
-    const emailVerifiedAt = rows[0]?.emailVerifiedAt;
-
-    if (!passwordHash) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    const [salt, hash] = passwordHash.split(':');
+    const [salt, hash] = user.passwordHash.split(':');
     const passwordMatches = salt ? hashPassword(params.password, salt) === hash : false;
 
     if (!passwordMatches) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    if (!emailVerifiedAt) {
+    if (!user.emailVerified) {
       throw new ForbiddenException({
         message: 'Email address is not verified',
         code: 'EMAIL_NOT_VERIFIED',
       });
     }
 
-    return this.toAuthResponse({ id: user.id, email: user.email });
+    return this.toAuthResponse(user);
   }
 
   private async sendVerificationCodeOrThrow(email: string, code: string): Promise<void> {
@@ -250,50 +292,26 @@ export class AuthService {
     }
   }
 
-  private async storeVerificationCode(params: { userId: string; email: string; code: string }) {
+  private async storeVerificationCode(params: { userId: string; code: string }) {
     const expiresAt = new Date(Date.now() + VERIFICATION_CODE_EXPIRY_MINUTES * 60_000);
     const codeHash = hashVerificationCode(params.code);
 
     await this.prisma.$transaction([
-      this.prisma.$executeRaw(
-        Prisma.sql`DELETE FROM "EmailVerificationCode" WHERE "userId" = ${params.userId} OR "email" = ${params.email}`,
-      ),
-      this.prisma.$executeRaw(
-        Prisma.sql`
-          INSERT INTO "EmailVerificationCode" (
-            "id", "userId", "email", "codeHash", "expiresAt", "createdAt", "updatedAt"
-          ) VALUES (
-            ${randomUUID()}, ${params.userId}, ${params.email}, ${codeHash}, ${expiresAt}, NOW(), NOW()
-          )
-        `,
-      ),
+      this.prisma.emailVerificationCode.deleteMany({
+        where: { userId: params.userId },
+      }),
+      this.prisma.emailVerificationCode.create({
+        data: {
+          userId: params.userId,
+          codeHash,
+          expiresAt,
+          lastSentAt: new Date(),
+        },
+      }),
     ]);
   }
 
-  private async ensureEmailVerificationTable() {
-    await this.prisma.$executeRaw(
-      Prisma.sql`
-        CREATE TABLE IF NOT EXISTS "EmailVerificationCode" (
-          "id" TEXT PRIMARY KEY,
-          "userId" TEXT NOT NULL,
-          "email" TEXT NOT NULL,
-          "codeHash" TEXT NOT NULL,
-          "expiresAt" TIMESTAMP(3) NOT NULL,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-      `,
-    );
-
-    await this.prisma.$executeRaw(
-      Prisma.sql`CREATE INDEX IF NOT EXISTS "EmailVerificationCode_userId_idx" ON "EmailVerificationCode"("userId")`,
-    );
-    await this.prisma.$executeRaw(
-      Prisma.sql`CREATE INDEX IF NOT EXISTS "EmailVerificationCode_email_idx" ON "EmailVerificationCode"("email")`,
-    );
-  }
-
-  private toAuthResponse(user: { id: string; email: string | null }) {
+  private toAuthResponse(user: AuthUser) {
     const authConfig = getAuthRuntimeConfig(process.env);
 
     if (!authConfig.local) {
@@ -318,6 +336,9 @@ export class AuthService {
       user: {
         id: user.id,
         email: user.email,
+        emailVerified: user.emailVerified,
+        onboardingCompleted: user.onboardingCompleted,
+        nextOnboardingStep: getNextOnboardingStep(user),
       },
     };
   }

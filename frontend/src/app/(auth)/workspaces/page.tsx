@@ -5,11 +5,23 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/authStore'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 import { workspacesApi, type Workspace } from '@/lib/api/endpoints/workspaces'
+import { apiPost } from '@/lib/api/client'
 import { cn } from '@/lib/utils/cn'
 import { useOnboardingStore } from '@/lib/store/onboardingStore'
 
 interface HttpError extends Error {
   statusCode?: number
+}
+
+interface CompleteOnboardingResponse {
+  updated: boolean
+  user?: {
+    id: string
+    email: string | null
+    emailVerified: boolean
+    onboardingCompleted: boolean
+    nextOnboardingStep: 'verify-email' | 'complete-onboarding' | null
+  }
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -34,6 +46,8 @@ function getPostWorkspaceRoute(workspaceId: string, isInviteComplete: (workspace
 export default function WorkspacesPage() {
   const router = useRouter()
   const user = useAuthStore((s) => s.user)
+  const jwt = useAuthStore((s) => s.jwt)
+  const setAuth = useAuthStore((s) => s.setAuth)
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace)
   const isInviteStepCompleted = useOnboardingStore((s) => s.isInviteStepCompleted)
 
@@ -49,6 +63,26 @@ export default function WorkspacesPage() {
     () => workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null,
     [selectedWorkspaceId, workspaces]
   )
+
+  async function completeOnboardingIfEligible(workspaceId: string) {
+    if (!user || !jwt || user.onboardingCompleted) return
+    if (!isInviteStepCompleted(workspaceId)) return
+
+    const completion = await apiPost<CompleteOnboardingResponse>('/onboarding/complete', {})
+
+    if (!completion.data.user) return
+
+    setAuth(
+      {
+        id: completion.data.user.id,
+        email: completion.data.user.email ?? user.email,
+        emailVerified: completion.data.user.emailVerified,
+        onboardingCompleted: completion.data.user.onboardingCompleted,
+        nextOnboardingStep: completion.data.user.nextOnboardingStep,
+      },
+      jwt
+    )
+  }
 
   useEffect(() => {
     let active = true
@@ -67,6 +101,7 @@ export default function WorkspacesPage() {
         if (items.length === 1) {
           const workspace = items[0]
           setWorkspace({ id: workspace.id, name: workspace.name })
+          await completeOnboardingIfEligible(workspace.id)
           router.replace(getPostWorkspaceRoute(workspace.id, isInviteStepCompleted))
           return
         }
@@ -99,7 +134,7 @@ export default function WorkspacesPage() {
       return
     }
 
-    loadWorkspaces()
+    void loadWorkspaces()
 
     return () => {
       active = false
@@ -113,6 +148,7 @@ export default function WorkspacesPage() {
 
     try {
       setWorkspace({ id: selectedWorkspace.id, name: selectedWorkspace.name })
+      await completeOnboardingIfEligible(selectedWorkspace.id)
       router.push(getPostWorkspaceRoute(selectedWorkspace.id, isInviteStepCompleted))
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to select workspace'))
@@ -129,6 +165,7 @@ export default function WorkspacesPage() {
     try {
       const res = await workspacesApi.create({ name: name.trim() })
       setWorkspace({ id: res.data.id, name: res.data.name })
+      await completeOnboardingIfEligible(res.data.id)
       router.push(getPostWorkspaceRoute(res.data.id, isInviteStepCompleted))
     } catch (err) {
       const typedError = err as HttpError

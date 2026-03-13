@@ -3,8 +3,10 @@ CREATE TYPE "SelectedPlan" AS ENUM ('STARTER', 'PRO', 'ENTERPRISE');
 
 -- AlterTable
 ALTER TABLE "User"
+  ADD COLUMN "emailVerified" BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN "emailVerifiedAt" TIMESTAMP(3),
   ADD COLUMN "selectedPlan" "SelectedPlan",
+  ADD COLUMN "onboardingCompleted" BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN "onboardingCompletedAt" TIMESTAMP(3);
 
 -- CreateTable

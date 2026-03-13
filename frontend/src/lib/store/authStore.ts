@@ -1,9 +1,14 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 
+type NextOnboardingStep = 'verify-email' | 'complete-onboarding' | null
+
 interface User {
   id: string
   email: string
+  emailVerified: boolean
+  onboardingCompleted: boolean
+  nextOnboardingStep: NextOnboardingStep
 }
 
 interface AuthState {
