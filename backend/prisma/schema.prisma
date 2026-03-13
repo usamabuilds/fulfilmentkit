@@ -13,11 +13,6 @@ enum WorkspaceRole {
   OWNER
 }
 
-enum SelectedPlan {
-  STARTER
-  PRO
-  ENTERPRISE
-}
 
 model Workspace {
   id              String            @id @default(uuid())
@@ -54,7 +49,7 @@ model User {
   emailVerifiedAt    DateTime?
   onboardingCompleted Boolean     @default(false)
   onboardingCompletedAt DateTime?
-  selectedPlan       SelectedPlan?
+  selectedPlan       String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -69,6 +64,7 @@ model User {
 model EmailVerificationCode {
   id           String   @id @default(uuid())
   userId       String
+  code         String
   codeHash     String
   expiresAt    DateTime
   attemptCount Int      @default(0)

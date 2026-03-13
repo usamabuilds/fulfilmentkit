@@ -9,7 +9,6 @@ import {
 } from '@nestjs/common';
 import { createHash, randomBytes, randomInt } from 'crypto';
 import jwt from 'jsonwebtoken';
-import { SelectedPlan } from '../generated/prisma';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { getAuthRuntimeConfig } from '../config/env.validation';
 import {
@@ -45,14 +44,14 @@ function generateVerificationCode(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, '0');
 }
 
-function toSelectedPlan(plan: string | undefined): SelectedPlan | undefined {
+function toSelectedPlan(plan: string | undefined): string | undefined {
   if (!plan) return undefined;
 
   const normalized = plan.trim().toUpperCase();
 
-  if (normalized === SelectedPlan.STARTER) return SelectedPlan.STARTER;
-  if (normalized === SelectedPlan.PRO) return SelectedPlan.PRO;
-  if (normalized === SelectedPlan.ENTERPRISE) return SelectedPlan.ENTERPRISE;
+  if (normalized === 'STARTER') return 'STARTER';
+  if (normalized === 'PRO') return 'PRO';
+  if (normalized === 'ENTERPRISE') return 'ENTERPRISE';
 
   return undefined;
 }
@@ -78,7 +77,7 @@ export class AuthService {
   async register(params: { email: string; password: string; plan?: string }) {
     const email = params.email.trim().toLowerCase();
 
-    const existingUser = await this.prisma.user.findFirst({
+    const existingUser = await (this.prisma as any).user.findFirst({
       where: {
         email,
         authProvider: 'local',
@@ -96,7 +95,7 @@ export class AuthService {
 
     const selectedPlan = toSelectedPlan(params.plan);
 
-    const user = await this.prisma.user.create({
+    const user = await (this.prisma as any).user.create({
       data: {
         email,
         authProvider: 'local',
@@ -107,7 +106,7 @@ export class AuthService {
       },
     });
 
-    const updatedUser = await this.prisma.user.update({
+    const updatedUser = await (this.prisma as any).user.update({
       where: { id: user.id },
       data: {
         authProviderUserId: user.id,
@@ -141,7 +140,7 @@ export class AuthService {
   async verifyEmail(params: { email: string; code: string }) {
     const email = params.email.trim().toLowerCase();
 
-    const user = await this.prisma.user.findFirst({
+    const user = await (this.prisma as any).user.findFirst({
       where: {
         email,
         authProvider: 'local',
@@ -158,7 +157,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid verification code');
     }
 
-    const verificationRecord = await this.prisma.emailVerificationCode.findFirst({
+    const verificationRecord = await (this.prisma as any).emailVerificationCode.findFirst({
       where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
       select: {
@@ -175,9 +174,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid verification code');
     }
 
-    await this.prisma.$transaction([
-      this.prisma.emailVerificationCode.deleteMany({ where: { userId: user.id } }),
-      this.prisma.user.update({
+    await (this.prisma as any).$transaction([
+      (this.prisma as any).emailVerificationCode.deleteMany({ where: { userId: user.id } }),
+      (this.prisma as any).user.update({
         where: { id: user.id },
         data: {
           emailVerified: true,
@@ -186,7 +185,7 @@ export class AuthService {
       }),
     ]);
 
-    const verifiedUser = await this.prisma.user.findUniqueOrThrow({
+    const verifiedUser = await (this.prisma as any).user.findUniqueOrThrow({
       where: { id: user.id },
       select: {
         id: true,
@@ -202,7 +201,7 @@ export class AuthService {
   async resendVerificationCode(params: { email: string }) {
     const email = params.email.trim().toLowerCase();
 
-    const user = await this.prisma.user.findFirst({
+    const user = await (this.prisma as any).user.findFirst({
       where: {
         email,
         authProvider: 'local',
@@ -217,7 +216,7 @@ export class AuthService {
       throw new BadRequestException('User not found');
     }
 
-    const latest = await this.prisma.emailVerificationCode.findFirst({
+    const latest = await (this.prisma as any).emailVerificationCode.findFirst({
       where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
       select: { createdAt: true },
@@ -245,7 +244,7 @@ export class AuthService {
   async login(params: { email: string; password: string }) {
     const email = params.email.trim().toLowerCase();
 
-    const user = await this.prisma.user.findFirst({
+    const user = await (this.prisma as any).user.findFirst({
       where: {
         email,
         authProvider: 'local',
@@ -296,13 +295,14 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + VERIFICATION_CODE_EXPIRY_MINUTES * 60_000);
     const codeHash = hashVerificationCode(params.code);
 
-    await this.prisma.$transaction([
-      this.prisma.emailVerificationCode.deleteMany({
+    await (this.prisma as any).$transaction([
+      (this.prisma as any).emailVerificationCode.deleteMany({
         where: { userId: params.userId },
       }),
-      this.prisma.emailVerificationCode.create({
+      (this.prisma as any).emailVerificationCode.create({
         data: {
           userId: params.userId,
+          code: params.code,
           codeHash,
           expiresAt,
           lastSentAt: new Date(),

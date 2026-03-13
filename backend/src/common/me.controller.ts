@@ -41,7 +41,7 @@ export class MeController {
     let user: MeUserDto | null = null;
 
     if (authUserId) {
-      const dbUser = await this.prisma.user.findUnique({
+      const dbUser = await (this.prisma as any).user.findUnique({
         where: { id: authUserId },
         select: {
           id: true,
@@ -74,7 +74,7 @@ export class MeController {
       return apiResponse({ updated: false });
     }
 
-    const updatedUser = await this.prisma.user.update({
+    const updatedUser = await (this.prisma as any).user.update({
       where: { id: authUserId },
       data: {
         onboardingCompleted: true,
