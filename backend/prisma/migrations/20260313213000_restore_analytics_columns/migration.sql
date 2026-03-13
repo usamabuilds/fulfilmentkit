@@ -1,0 +1,30 @@
+-- Restore analytics columns that are required by metrics/dashboard/AI compute paths.
+ALTER TABLE "DailyMetric"
+  ADD COLUMN IF NOT EXISTS "refundsAmount" DECIMAL(65,30) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "feesAmount" DECIMAL(65,30) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "cogsAmount" DECIMAL(65,30) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "grossMarginAmount" DECIMAL(65,30) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "grossMarginPercent" DECIMAL(65,30) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "stockoutsCount" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "lowStockCount" INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE "SkuDailyMetric"
+  ADD COLUMN IF NOT EXISTS "unitsSold" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "avgPrice" DECIMAL(65,30) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "stockEnd" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "refundsAmount" DECIMAL(65,30) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "feesAmount" DECIMAL(65,30) NOT NULL DEFAULT 0;
+
+-- Ensure the Product relation exists for SKU-level metrics.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'SkuDailyMetric_productId_fkey'
+  ) THEN
+    ALTER TABLE "SkuDailyMetric"
+      ADD CONSTRAINT "SkuDailyMetric_productId_fkey"
+      FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
