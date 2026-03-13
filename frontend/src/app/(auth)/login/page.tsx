@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/authStore'
 import { apiPost } from '@/lib/api/client'
+import type { ApiClientError } from '@/lib/api/client'
 import { cn } from '@/lib/utils/cn'
 
 interface LoginResponse {
@@ -27,7 +28,20 @@ export default function LoginPage() {
       setAuth(res.data.user, res.data.token)
       router.push('/workspaces')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      if (err instanceof Error) {
+        const typedError = err as ApiClientError
+
+        if (typedError.errorCode === 'EMAIL_NOT_VERIFIED') {
+          const verifyEmailPath = `/verify-email?email=${encodeURIComponent(email)}`
+          router.push(verifyEmailPath)
+          return
+        }
+
+        setError(typedError.message)
+        return
+      }
+
+      setError('Login failed')
     } finally {
       setLoading(false)
     }

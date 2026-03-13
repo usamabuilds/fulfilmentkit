@@ -10,6 +10,11 @@ const getBaseUrl = () => {
 
 export type UnauthorizedRedirectReason = 'expired_token' | 'revoked_membership' | 'missing_workspace_header'
 
+export interface ApiClientError extends Error {
+  statusCode: number
+  errorCode?: string
+}
+
 interface UnauthorizedResolution {
   shouldHandle: boolean
   redirectPath: '/login' | '/workspaces'
@@ -80,13 +85,36 @@ function getHeaders(): HeadersInit {
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
-  const json = await res.json()
+  const json: unknown = await res.json()
 
   if (!res.ok) {
     handleUnauthorized(res.status)
-    const message = json?.message ?? `HTTP ${res.status}`
-    const error = new Error(message) as Error & { statusCode: number }
+
+    const objectPayload = typeof json === 'object' && json !== null ? json : null
+    const errorPayload =
+      objectPayload && 'error' in objectPayload && typeof objectPayload.error === 'object' && objectPayload.error !== null
+        ? objectPayload.error
+        : null
+
+    const nestedErrorMessage =
+      errorPayload && 'message' in errorPayload && typeof errorPayload.message === 'string'
+        ? errorPayload.message
+        : null
+    const nestedErrorCode =
+      errorPayload && 'code' in errorPayload && typeof errorPayload.code === 'string' ? errorPayload.code : undefined
+
+    const legacyMessage =
+      objectPayload && 'message' in objectPayload && typeof objectPayload.message === 'string'
+        ? objectPayload.message
+        : null
+    const legacyErrorString =
+      objectPayload && 'error' in objectPayload && typeof objectPayload.error === 'string' ? objectPayload.error : null
+
+    const message = nestedErrorMessage ?? legacyMessage ?? legacyErrorString ?? `HTTP ${res.status}`
+
+    const error = new Error(message) as ApiClientError
     error.statusCode = res.status
+    error.errorCode = nestedErrorCode
     throw error
   }
 
