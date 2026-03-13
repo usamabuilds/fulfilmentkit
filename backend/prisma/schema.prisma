@@ -18,6 +18,11 @@ enum ConnectionPlatform {
   SHOPIFY
   WOOCOMMERCE
   AMAZON
+  ZOHO
+  XERO
+  SAGE
+  ODOO
+  QUICKBOOKS
 }
 
 enum ConnectionStatus {

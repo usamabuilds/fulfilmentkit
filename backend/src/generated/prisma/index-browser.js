@@ -405,7 +405,12 @@ exports.ForecastLevel = exports.$Enums.ForecastLevel = {
 exports.ConnectionPlatform = exports.$Enums.ConnectionPlatform = {
   SHOPIFY: 'SHOPIFY',
   WOOCOMMERCE: 'WOOCOMMERCE',
-  AMAZON: 'AMAZON'
+  AMAZON: 'AMAZON',
+  ZOHO: 'ZOHO',
+  XERO: 'XERO',
+  SAGE: 'SAGE',
+  ODOO: 'ODOO',
+  QUICKBOOKS: 'QUICKBOOKS'
 };
 
 exports.ConnectionStatus = exports.$Enums.ConnectionStatus = {
