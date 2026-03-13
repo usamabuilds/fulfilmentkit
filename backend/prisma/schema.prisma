@@ -13,6 +13,30 @@ enum WorkspaceRole {
   OWNER
 }
 
+enum ConnectionPlatform {
+  SHOPIFY
+  WOOCOMMERCE
+  AMAZON
+}
+
+enum ConnectionStatus {
+  ACTIVE
+  DISCONNECTED
+  ERROR
+}
+
+enum SyncRunStatus {
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+enum ForecastLevel {
+  WORKSPACE
+  SKU
+}
+
 
 model Workspace {
   id              String            @id @default(uuid())
@@ -251,6 +275,7 @@ model Fee {
   orderId   String
   type      String
   amount    Decimal
+  currency  String
   createdAt DateTime @default(now())
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -264,6 +289,7 @@ model Refund {
   workspaceId String
   orderId   String
   amount    Decimal
+  currency  String
   createdAt DateTime @default(now())
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -279,6 +305,13 @@ model DailyMetric {
   revenue     Decimal
   orders      Int
   units       Int
+  refundsAmount      Decimal
+  feesAmount         Decimal
+  cogsAmount         Decimal
+  grossMarginAmount  Decimal
+  grossMarginPercent Decimal
+  stockoutsCount     Int
+  lowStockCount      Int
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -286,6 +319,7 @@ model DailyMetric {
 
   @@unique([workspaceId, day])
   @@index([workspaceId])
+  @@index([day])
 }
 
 model SkuDailyMetric {
@@ -293,8 +327,12 @@ model SkuDailyMetric {
   workspaceId String
   productId   String
   day         DateTime
-  units       Int
+  unitsSold   Int
   revenue     Decimal
+  refundsAmount Decimal
+  feesAmount  Decimal
+  avgPrice    Decimal
+  stockEnd    Int
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -304,66 +342,112 @@ model SkuDailyMetric {
   @@unique([workspaceId, productId, day])
   @@index([workspaceId])
   @@index([productId])
+  @@index([day])
 }
 
 model Connection {
   id               String   @id @default(uuid())
   workspaceId      String
-  provider         String
-  externalStoreId  String?
-  status           String
-  encryptedSecrets String?
+  platform         ConnectionPlatform
+  status           ConnectionStatus
+  displayName      String
+  lastSyncAt       DateTime?
+  lastError        String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   syncRuns   SyncRun[]
+  secret     ConnectionSecret?
 
   @@index([workspaceId])
+  @@index([platform])
+  @@unique([workspaceId, platform])
+}
+
+model ConnectionSecret {
+  id               String             @id @default(uuid())
+  connectionId     String             @unique
+  workspaceId      String
+  platform         ConnectionPlatform
+  authType         String
+  secretCiphertext Bytes
+  secretMetadata   Json?
+  lastValidatedAt  DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([platform])
+  @@index([workspaceId, platform])
 }
 
 model SyncRun {
   id           String   @id @default(uuid())
   workspaceId  String
   connectionId String
-  status       String
-  startedAt    DateTime
+  status       SyncRunStatus
+  jobId        String?
+  startedAt    DateTime?
   finishedAt   DateTime?
+  error        String?
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([connectionId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model WebhookEvent {
   id          String   @id @default(uuid())
   workspaceId String
-  provider    String
+  platform    ConnectionPlatform
+  externalEventId String
   topic       String?
   payload     Json
+  headers     Json?
+  receivedAt  DateTime @default(now())
+  processedAt DateTime?
+  error       String?
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
+  @@index([platform])
+  @@index([externalEventId])
+  @@index([processedAt])
+  @@index([receivedAt])
+  @@unique([workspaceId, platform, externalEventId])
 }
 
 model Forecast {
   id          String   @id @default(uuid())
   workspaceId String
-  productId   String
-  date        DateTime
-  units       Int
+  productId   String?
+  level       ForecastLevel
+  method      String
+  from        DateTime
+  to          DateTime
+  horizonDays Int
+  assumptions Json
+  result      Json
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
 
-  @@unique([workspaceId, productId, date])
   @@index([workspaceId])
   @@index([productId])
+  @@index([level])
+  @@index([createdAt])
 }
