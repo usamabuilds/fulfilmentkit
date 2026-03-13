@@ -3,8 +3,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/authStore'
+import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 import { apiPost } from '@/lib/api/client'
 import { cn } from '@/lib/utils/cn'
+import { resolvePostAuthRoute } from '@/lib/utils/postAuthRoute'
 
 interface LoginResponse {
   user: { id: string; email: string }
@@ -14,6 +16,7 @@ interface LoginResponse {
 export default function LoginPage() {
   const router = useRouter()
   const setAuth = useAuthStore((s) => s.setAuth)
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -25,7 +28,14 @@ export default function LoginPage() {
     try {
       const res = await apiPost<LoginResponse>('/auth/login', { email, password })
       setAuth(res.data.user, res.data.token)
-      router.push('/workspaces')
+
+      const nextRoute = await resolvePostAuthRoute()
+
+      if (nextRoute.workspace) {
+        setWorkspace({ id: nextRoute.workspace.id, name: nextRoute.workspace.name })
+      }
+
+      router.push(nextRoute.route)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
