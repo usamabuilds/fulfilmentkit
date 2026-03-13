@@ -5,10 +5,39 @@
 - Docker Desktop
 - Git
 
+## Authentication modes (`AUTH_MODE`)
+The backend supports three authentication modes, with `AUTH_MODE` as the single source of truth:
+
+- `local` (default)
+- `supabase`
+- `hybrid`
+
+### Required auth variables by mode
+- `AUTH_MODE=local`
+  - Required: `JWT_SECRET`
+- `AUTH_MODE=supabase`
+  - Required: `SUPABASE_JWT_SECRET`, `SUPABASE_JWT_ISSUER`
+- `AUTH_MODE=hybrid`
+  - Required: `JWT_SECRET`, `SUPABASE_JWT_SECRET`, `SUPABASE_JWT_ISSUER`
+
+### Issuer and secret routing
+- Local tokens are signed and verified with:
+  - `iss = fulfilmentkit-local`
+  - `JWT_SECRET`
+- Supabase tokens are verified with:
+  - `iss = SUPABASE_JWT_ISSUER`
+  - `SUPABASE_JWT_SECRET`
+- In `hybrid` mode, verification is routed strictly by the JWT `iss` claim:
+  - `iss=fulfilmentkit-local` → local secret
+  - `iss=SUPABASE_JWT_ISSUER` → supabase secret
+  - unknown or missing issuer is rejected
+
 ## Local setup
 1) Install dependencies
 ```bash
 npm install
+```
+
 ## Deployment (Render)
 
 Target: Render Web Service + Render PostgreSQL
