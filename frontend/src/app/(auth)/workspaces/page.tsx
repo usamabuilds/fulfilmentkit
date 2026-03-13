@@ -6,10 +6,12 @@ import { useAuthStore } from '@/lib/store/authStore'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 import { workspacesApi, type Workspace } from '@/lib/api/endpoints/workspaces'
 import { cn } from '@/lib/utils/cn'
+import { apiPost } from '@/lib/api/client'
 
 interface HttpError extends Error {
   statusCode?: number
 }
+
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof Error)) return fallback
@@ -60,6 +62,7 @@ export default function WorkspacesPage() {
 
         if (items.length === 1) {
           setWorkspace({ id: items[0].id, name: items[0].name })
+          await apiPost('/onboarding/complete', {})
           router.replace('/dashboard')
           return
         }
@@ -106,6 +109,7 @@ export default function WorkspacesPage() {
 
     try {
       setWorkspace({ id: selectedWorkspace.id, name: selectedWorkspace.name })
+      await apiPost('/onboarding/complete', {})
       router.push('/dashboard')
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to select workspace'))
@@ -122,6 +126,7 @@ export default function WorkspacesPage() {
     try {
       const res = await workspacesApi.create({ name: name.trim() })
       setWorkspace({ id: res.data.id, name: res.data.name })
+      await apiPost('/onboarding/complete', {})
       router.push('/dashboard')
     } catch (err) {
       const typedError = err as HttpError

@@ -47,6 +47,10 @@ model User {
   authProvider     String
   authProviderUserId String
   email            String?
+  emailVerified    Boolean   @default(false)
+  emailVerifiedAt  DateTime?
+  onboardingCompleted   Boolean   @default(false)
+  onboardingCompletedAt DateTime?
   passwordHash     String?
 
   createdAt DateTime @default(now())

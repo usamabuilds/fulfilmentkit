@@ -7,7 +7,13 @@ import { apiPost } from '@/lib/api/client'
 import { cn } from '@/lib/utils/cn'
 
 interface LoginResponse {
-  user: { id: string; email: string }
+  user: {
+    id: string
+    email: string
+    emailVerified: boolean
+    onboardingCompleted: boolean
+    nextOnboardingStep: 'verify-email' | 'complete-onboarding' | null
+  }
   token: string
 }
 
@@ -24,7 +30,13 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const res = await apiPost<LoginResponse>('/auth/login', { email, password })
-      setAuth(res.data.user, res.data.token)
+      setAuth({ id: res.data.user.id, email: res.data.user.email }, res.data.token)
+
+      if (res.data.user.onboardingCompleted) {
+        router.push('/dashboard')
+        return
+      }
+
       router.push('/workspaces')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')

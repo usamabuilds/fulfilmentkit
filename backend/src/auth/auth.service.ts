@@ -56,10 +56,16 @@ export class AuthService {
     });
 
     await this.prisma.$executeRaw(
-      Prisma.sql`UPDATE "User" SET "passwordHash" = ${passwordHash} WHERE "id" = ${user.id}`,
+      Prisma.sql`UPDATE "User" SET "passwordHash" = ${passwordHash}, "emailVerified" = true, "emailVerifiedAt" = NOW() WHERE "id" = ${user.id}`,
     );
 
-    return this.toAuthResponse(user);
+    const userStatus = await this.getOnboardingStatus(user.id);
+
+    return this.toAuthResponse({
+      id: user.id,
+      email: user.email,
+      ...userStatus,
+    });
   }
 
   async login(params: { email: string; password: string }) {
@@ -97,10 +103,54 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return this.toAuthResponse({ id: user.id, email: user.email });
+    const userStatus = await this.getOnboardingStatus(user.id);
+
+    return this.toAuthResponse({
+      id: user.id,
+      email: user.email,
+      ...userStatus,
+    });
   }
 
-  private toAuthResponse(user: { id: string; email: string | null }) {
+  private async getOnboardingStatus(userId: string): Promise<{
+    emailVerified: boolean;
+    onboardingCompleted: boolean;
+  }> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ emailVerified: boolean | null; onboardingCompleted: boolean | null }>
+    >(
+      Prisma.sql`SELECT "emailVerified", "onboardingCompleted" FROM "User" WHERE "id" = ${userId} LIMIT 1`,
+    );
+
+    const status = rows[0];
+
+    return {
+      emailVerified: status?.emailVerified ?? false,
+      onboardingCompleted: status?.onboardingCompleted ?? false,
+    };
+  }
+
+  private getNextOnboardingStep(user: {
+    emailVerified: boolean;
+    onboardingCompleted: boolean;
+  }): 'verify-email' | 'complete-onboarding' | null {
+    if (!user.emailVerified) {
+      return 'verify-email';
+    }
+
+    if (!user.onboardingCompleted) {
+      return 'complete-onboarding';
+    }
+
+    return null;
+  }
+
+  private toAuthResponse(user: {
+    id: string;
+    email: string | null;
+    emailVerified: boolean;
+    onboardingCompleted: boolean;
+  }) {
     const authConfig = getAuthRuntimeConfig(process.env);
 
     if (!authConfig.local) {
@@ -125,6 +175,9 @@ export class AuthService {
       user: {
         id: user.id,
         email: user.email,
+        emailVerified: user.emailVerified,
+        onboardingCompleted: user.onboardingCompleted,
+        nextOnboardingStep: this.getNextOnboardingStep(user),
       },
     };
   }
