@@ -8,6 +8,10 @@ const AuthBodySchema = z.object({
   password: z.string().min(8).max(128),
 });
 
+const ResendVerificationBodySchema = z.object({
+  email: z.string().email(),
+});
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -16,6 +20,13 @@ export class AuthController {
   async register(@Body() body: unknown) {
     const parsed = AuthBodySchema.parse(body);
     const result = await this.authService.register(parsed);
+    return apiResponse(result);
+  }
+
+  @Post('resend-verification-code')
+  async resendVerificationCode(@Body() body: unknown) {
+    const parsed = ResendVerificationBodySchema.parse(body);
+    const result = await this.authService.resendVerificationCode(parsed);
     return apiResponse(result);
   }
 

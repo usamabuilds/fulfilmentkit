@@ -1,16 +1,23 @@
 import {
   BadRequestException,
   Injectable,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { createHash, randomBytes, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomInt, randomUUID } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { Prisma } from '../generated/prisma';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { getAuthRuntimeConfig } from '../config/env.validation';
+import {
+  NotificationsService,
+  VerificationDeliveryError,
+} from '../notifications/notifications.service';
 
 function hashPassword(password: string, salt: string): string {
-  return createHash('sha256').update(salt + password).digest('hex');
+  return createHash('sha256')
+    .update(salt + password)
+    .digest('hex');
 }
 
 function generateSalt(): string {
@@ -19,7 +26,10 @@ function generateSalt(): string {
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async register(params: { email: string; password: string }) {
     const email = params.email.trim().toLowerCase();
@@ -59,7 +69,33 @@ export class AuthService {
       Prisma.sql`UPDATE "User" SET "passwordHash" = ${passwordHash} WHERE "id" = ${user.id}`,
     );
 
+    await this.sendVerificationCodeOrThrow(email);
+
     return this.toAuthResponse(user);
+  }
+
+  async resendVerificationCode(params: { email: string }) {
+    const email = params.email.trim().toLowerCase();
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        email,
+        authProvider: 'local',
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    await this.sendVerificationCodeOrThrow(email);
+
+    return {
+      success: true,
+    };
   }
 
   async login(params: { email: string; password: string }) {
@@ -98,6 +134,25 @@ export class AuthService {
     }
 
     return this.toAuthResponse({ id: user.id, email: user.email });
+  }
+
+  private async sendVerificationCodeOrThrow(email: string): Promise<void> {
+    const code = this.generateVerificationCode();
+
+    try {
+      await this.notificationsService.sendVerificationCode(email, code);
+    } catch (error) {
+      if (error instanceof VerificationDeliveryError) {
+        throw new ServiceUnavailableException('Failed to deliver verification code');
+      }
+
+      throw error;
+    }
+  }
+
+  private generateVerificationCode(): string {
+    const code = randomInt(0, 1_000_000);
+    return code.toString().padStart(6, '0');
   }
 
   private toAuthResponse(user: { id: string; email: string | null }) {
