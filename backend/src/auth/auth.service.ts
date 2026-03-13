@@ -3,7 +3,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { Prisma } from '../generated/prisma';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -40,11 +40,14 @@ export class AuthService {
     const hash = hashPassword(params.password, salt);
     const passwordHash = `${salt}:${hash}`;
 
+    const userId = randomUUID();
+
     const user = await this.prisma.user.create({
       data: {
+        id: userId,
         email,
         authProvider: 'local',
-        authProviderUserId: email,
+        authProviderUserId: userId,
       },
       select: {
         id: true,
