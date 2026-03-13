@@ -1,9 +1,10 @@
 import {
   BadRequestException,
   ForbiddenException,
-  Injectable,
   HttpException,
   HttpStatus,
+  Injectable,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { createHash, randomBytes, randomInt, randomUUID } from 'crypto';
@@ -11,25 +12,18 @@ import jwt from 'jsonwebtoken';
 import { Prisma } from '../generated/prisma';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { getAuthRuntimeConfig } from '../config/env.validation';
+import {
+  NotificationsService,
+  VerificationDeliveryError,
+} from '../notifications/notifications.service';
 
 const VERIFICATION_CODE_EXPIRY_MINUTES = 15;
 const RESEND_CODE_COOLDOWN_MS = 60_000;
 
-interface VerificationMailService {
-  sendVerificationCode(params: { email: string; code: string }): Promise<void>;
-}
-
-class ConsoleVerificationMailService implements VerificationMailService {
-  async sendVerificationCode(params: { email: string; code: string }): Promise<void> {
-    // Replace this implementation with your ESP provider adapter.
-    console.info(
-      `Verification code for ${params.email}: ${params.code}`,
-    );
-  }
-}
-
 function hashPassword(password: string, salt: string): string {
-  return createHash('sha256').update(salt + password).digest('hex');
+  return createHash('sha256')
+    .update(salt + password)
+    .digest('hex');
 }
 
 function generateSalt(): string {
@@ -46,11 +40,12 @@ function generateVerificationCode(): string {
 
 @Injectable()
 export class AuthService {
-  private readonly verificationMailService: VerificationMailService;
-
-  constructor(private readonly prisma: PrismaService) {
-    this.verificationMailService = new ConsoleVerificationMailService();
-  }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: Pick<NotificationsService, 'sendVerificationCode'> = {
+      sendVerificationCode: async () => undefined,
+    },
+  ) {}
 
   async register(params: { email: string; password: string; plan?: string }) {
     const email = params.email.trim().toLowerCase();
@@ -94,7 +89,7 @@ export class AuthService {
 
     const code = generateVerificationCode();
     await this.storeVerificationCode({ userId: user.id, email, code });
-    await this.verificationMailService.sendVerificationCode({ email, code });
+    await this.sendVerificationCodeOrThrow(email, code);
 
     return {
       userId: user.id,
@@ -177,12 +172,15 @@ export class AuthService {
 
     const latest = latestRows[0];
     if (latest && Date.now() - latest.createdAt.getTime() < RESEND_CODE_COOLDOWN_MS) {
-      throw new HttpException('Please wait 60 seconds before requesting a new code', HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        'Please wait 60 seconds before requesting a new code',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     const code = generateVerificationCode();
     await this.storeVerificationCode({ userId: user.id, email, code });
-    await this.verificationMailService.sendVerificationCode({ email, code });
+    await this.sendVerificationCodeOrThrow(email, code);
 
     return {
       userId: user.id,
@@ -240,11 +238,19 @@ export class AuthService {
     return this.toAuthResponse({ id: user.id, email: user.email });
   }
 
-  private async storeVerificationCode(params: {
-    userId: string;
-    email: string;
-    code: string;
-  }) {
+  private async sendVerificationCodeOrThrow(email: string, code: string): Promise<void> {
+    try {
+      await this.notificationsService.sendVerificationCode(email, code);
+    } catch (error) {
+      if (error instanceof VerificationDeliveryError) {
+        throw new ServiceUnavailableException('Failed to deliver verification code');
+      }
+
+      throw error;
+    }
+  }
+
+  private async storeVerificationCode(params: { userId: string; email: string; code: string }) {
     const expiresAt = new Date(Date.now() + VERIFICATION_CODE_EXPIRY_MINUTES * 60_000);
     const codeHash = hashVerificationCode(params.code);
 
