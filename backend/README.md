@@ -32,6 +32,11 @@ The backend supports three authentication modes, with `AUTH_MODE` as the single 
   - `iss=SUPABASE_JWT_ISSUER` → supabase secret
   - unknown or missing issuer is rejected
 
+## Prisma client generation
+- Canonical generated Prisma client path: `src/generated/prisma` (from `prisma/schema.prisma`).
+- Generate client: `pnpm run prisma:generate`
+- CI/static guard for generated sync: `pnpm run prisma:check-generated`
+
 ## Local setup
 1) Install dependencies
 ```bash

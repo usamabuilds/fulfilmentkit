@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  // Canonical Prisma Client output used by runtime imports and CI checks.
   output   = "../src/generated/prisma"
 }
 
