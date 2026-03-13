@@ -38,7 +38,9 @@ function statusToCode(status: number): string {
   }
 }
 
-function normalizeMessage(input: unknown): { message: string; details?: unknown } {
+function normalizeMessage(
+  input: unknown,
+): { message: string; details?: unknown; code?: string } {
   if (typeof input === 'string') return { message: input };
 
   if (input && typeof input === 'object') {
@@ -49,10 +51,18 @@ function normalizeMessage(input: unknown): { message: string; details?: unknown 
     }
 
     if (typeof maybe.message === 'string') {
-      return { message: maybe.message, details: maybe.details };
+      return {
+        message: maybe.message,
+        details: maybe.details,
+        ...(typeof maybe.code === 'string' ? { code: maybe.code } : {}),
+      };
     }
 
-    return { message: 'Request failed', details: input };
+    return {
+      message: 'Request failed',
+      details: input,
+      ...(typeof maybe.code === 'string' ? { code: maybe.code } : {}),
+    };
   }
 
   return { message: 'Request failed' };
@@ -111,13 +121,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       rawResponse = exception.message || 'Internal server error';
     }
 
-    const { message, details } = normalizeMessage(rawResponse);
+    const { message, details, code } = normalizeMessage(rawResponse);
 
     const body: ErrorBody = {
       success: false,
       error: {
         statusCode: status,
-        code: statusToCode(status),
+        code: code ?? statusToCode(status),
         message: status >= 500 ? 'Internal server error' : message,
         ...(details !== undefined ? { details } : {}),
         path,

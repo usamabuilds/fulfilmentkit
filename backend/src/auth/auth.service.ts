@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -80,11 +81,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const rows = await this.prisma.$queryRaw<Array<{ passwordHash: string | null }>>(
-      Prisma.sql`SELECT "passwordHash" FROM "User" WHERE "id" = ${user.id} LIMIT 1`,
+    const rows = await this.prisma.$queryRaw<
+      Array<{ passwordHash: string | null; emailVerifiedAt: Date | null }>
+    >(
+      Prisma.sql`SELECT "passwordHash", "emailVerifiedAt" FROM "User" WHERE "id" = ${user.id} LIMIT 1`,
     );
 
     const passwordHash = rows[0]?.passwordHash;
+    const emailVerifiedAt = rows[0]?.emailVerifiedAt;
 
     if (!passwordHash) {
       throw new UnauthorizedException('Invalid credentials');
@@ -95,6 +99,13 @@ export class AuthService {
 
     if (!passwordMatches) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (!emailVerifiedAt) {
+      throw new ForbiddenException({
+        message: 'Email address is not verified',
+        code: 'EMAIL_NOT_VERIFIED',
+      });
     }
 
     return this.toAuthResponse({ id: user.id, email: user.email });
