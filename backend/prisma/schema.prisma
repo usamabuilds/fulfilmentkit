@@ -247,22 +247,28 @@ model OrderItem {
 
 model Fee {
   id        String   @id @default(uuid())
+  workspaceId String
   orderId   String
   type      String
   amount    Decimal
   createdAt DateTime @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  @@index([workspaceId])
   @@index([orderId])
 }
 
 model Refund {
   id        String   @id @default(uuid())
+  workspaceId String
   orderId   String
   amount    Decimal
   createdAt DateTime @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  @@index([workspaceId])
   @@index([orderId])
 }
 
