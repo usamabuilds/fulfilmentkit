@@ -13,6 +13,12 @@ enum WorkspaceRole {
   OWNER
 }
 
+enum SelectedPlan {
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
 model Workspace {
   id              String            @id @default(uuid())
   name            String
@@ -44,22 +50,41 @@ model User {
   id String @id @default(uuid())
 
   // Auth mapping
-  authProvider     String
-  authProviderUserId String
-  email            String?
-  emailVerified    Boolean   @default(false)
-  emailVerifiedAt  DateTime?
-  onboardingCompleted   Boolean   @default(false)
+  authProvider          String
+  authProviderUserId    String
+  email                 String?
+  passwordHash          String?
+  emailVerified         Boolean       @default(false)
+  emailVerifiedAt       DateTime?
+  selectedPlan          SelectedPlan?
+  onboardingCompleted   Boolean       @default(false)
   onboardingCompletedAt DateTime?
-  passwordHash     String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  memberships WorkspaceMember[]
+  memberships             WorkspaceMember[]
+  emailVerificationCodes EmailVerificationCode[]
 
   @@unique([authProvider, authProviderUserId])
   @@index([email])
+}
+
+model EmailVerificationCode {
+  id           String   @id @default(uuid())
+  userId       String
+  codeHash     String
+  expiresAt    DateTime
+  attemptCount Int      @default(0)
+  lastSentAt   DateTime?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([codeHash])
+  @@index([userId, expiresAt])
 }
 
 model Plan {
