@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForecastLevel } from '../generated/prisma';
 import { PrismaService } from '../common/prisma/prisma.service';
 
 type DateRange = { from: string; to: string };
@@ -388,7 +389,7 @@ export class ForecastService {
         data: {
           workspaceId,
           productId: skuAvg.productId,
-          level: 'SKU',
+          level: ForecastLevel.SKU,
           method: chosenMethod,
           from: fromDt,
           to: toEx,
@@ -471,7 +472,7 @@ export class ForecastService {
       data: {
         workspaceId,
         productId: null,
-        level: 'WORKSPACE',
+        level: ForecastLevel.WORKSPACE,
         method: chosenMethod,
         from: fromDt,
         to: toEx,
