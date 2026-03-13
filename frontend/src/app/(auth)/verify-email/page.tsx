@@ -5,12 +5,13 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { apiPost } from '@/lib/api/client'
 import { useAuthStore } from '@/lib/store/authStore'
 
-type PlanKey = 'starter' | 'pro' | 'enterprise'
-
 interface VerifyEmailResponse {
   user: {
     id: string
-    email: string
+    email: string | null
+    emailVerified: boolean
+    onboardingCompleted: boolean
+    nextOnboardingStep: 'verify-email' | 'complete-onboarding' | null
   }
   token: string
 }
@@ -26,10 +27,6 @@ function parseCooldownSeconds(message: string): number | null {
   return Number.isFinite(seconds) && seconds > 0 ? seconds : null
 }
 
-function normalizePlan(value: string | null): PlanKey {
-  if (value === 'starter' || value === 'pro' || value === 'enterprise') return value
-  return 'starter'
-}
 
 function VerifyEmailForm() {
   const router = useRouter()
@@ -37,7 +34,6 @@ function VerifyEmailForm() {
   const setAuth = useAuthStore((state) => state.setAuth)
 
   const email = searchParams.get('email') ?? ''
-  const plan = normalizePlan(searchParams.get('plan'))
   const digitsLength = 6
 
   const [digits, setDigits] = useState<string[]>(Array.from({ length: digitsLength }, () => ''))
@@ -113,9 +109,17 @@ function VerifyEmailForm() {
       const res = await apiPost<VerifyEmailResponse>('/auth/verify-email', {
         email,
         code,
-        plan,
       })
-      setAuth(res.data.user, res.data.token)
+      setAuth(
+        {
+          id: res.data.user.id,
+          email: res.data.user.email ?? '',
+          emailVerified: res.data.user.emailVerified,
+          onboardingCompleted: res.data.user.onboardingCompleted,
+          nextOnboardingStep: res.data.user.nextOnboardingStep,
+        },
+        res.data.token
+      )
       router.push('/onboarding')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Verification failed')
@@ -131,7 +135,7 @@ function VerifyEmailForm() {
     setError(null)
 
     try {
-      await apiPost<ResendResponse>('/auth/resend-verification', { email, plan })
+      await apiPost<ResendResponse>('/auth/resend-code', { email })
       setCooldownSeconds(60)
     } catch (err) {
       if (err instanceof Error) {

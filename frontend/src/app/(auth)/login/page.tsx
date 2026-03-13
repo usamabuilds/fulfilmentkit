@@ -7,17 +7,22 @@ import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 import { apiPost } from '@/lib/api/client'
 import type { ApiClientError } from '@/lib/api/client'
 import { cn } from '@/lib/utils/cn'
-import { resolvePostAuthRoute } from '@/lib/utils/postAuthRoute'
 
 interface LoginResponse {
-  user: { id: string; email: string }
+  user: {
+    id: string
+    email: string | null
+    emailVerified: boolean
+    onboardingCompleted: boolean
+    nextOnboardingStep: 'verify-email' | 'complete-onboarding' | null
+  }
   token: string
 }
 
 export default function LoginPage() {
   const router = useRouter()
   const setAuth = useAuthStore((s) => s.setAuth)
-  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace)
+  const clearWorkspace = useWorkspaceStore((s) => s.clearWorkspace)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -28,15 +33,26 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const res = await apiPost<LoginResponse>('/auth/login', { email, password })
-      setAuth(res.data.user, res.data.token)
 
-      const nextRoute = await resolvePostAuthRoute()
+      setAuth(
+        {
+          id: res.data.user.id,
+          email: res.data.user.email ?? '',
+          emailVerified: res.data.user.emailVerified,
+          onboardingCompleted: res.data.user.onboardingCompleted,
+          nextOnboardingStep: res.data.user.nextOnboardingStep,
+        },
+        res.data.token
+      )
 
-      if (nextRoute.workspace) {
-        setWorkspace({ id: nextRoute.workspace.id, name: nextRoute.workspace.name })
+      clearWorkspace()
+
+      if (res.data.user.onboardingCompleted) {
+        router.push('/dashboard')
+        return
       }
 
-      router.push(nextRoute.route)
+      router.push('/workspaces')
     } catch (err) {
       if (err instanceof Error) {
         const typedError = err as ApiClientError

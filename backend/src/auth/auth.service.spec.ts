@@ -4,30 +4,34 @@ import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 
 function createAuthService(params: {
-  user: { id: string; email: string | null } | null;
-  passwordHash: string | null;
-  emailVerifiedAt: Date | null;
+  user:
+    | {
+        id: string;
+        email: string | null;
+        passwordHash: string | null;
+        emailVerified: boolean;
+        onboardingCompleted: boolean;
+      }
+    | null;
 }) {
   const prisma = {
     user: {
       findFirst: async () => params.user,
     },
-    $queryRaw: async () => [
-      {
-        passwordHash: params.passwordHash,
-        emailVerifiedAt: params.emailVerifiedAt,
-      },
-    ],
   };
 
-  return new AuthService(prisma as any);
+  return new AuthService(prisma as never);
 }
 
 test('login throws UnauthorizedException for invalid credentials', async () => {
   const service = createAuthService({
-    user: { id: 'user-1', email: 'demo@example.com' },
-    passwordHash: 'salt:wrong-hash',
-    emailVerifiedAt: new Date('2025-01-01T00:00:00.000Z'),
+    user: {
+      id: 'user-1',
+      email: 'demo@example.com',
+      passwordHash: 'salt:wrong-hash',
+      emailVerified: true,
+      onboardingCompleted: false,
+    },
   });
 
   await assert.rejects(
@@ -45,9 +49,13 @@ test('login throws ForbiddenException with EMAIL_NOT_VERIFIED for valid credenti
   const salt = 'salt';
   const hash = '00af266e5980b4c8f570c335920947d27402da0ac29b38f43233590523262348';
   const service = createAuthService({
-    user: { id: 'user-1', email: 'demo@example.com' },
-    passwordHash: `${salt}:${hash}`,
-    emailVerifiedAt: null,
+    user: {
+      id: 'user-1',
+      email: 'demo@example.com',
+      passwordHash: `${salt}:${hash}`,
+      emailVerified: false,
+      onboardingCompleted: false,
+    },
   });
 
   await assert.rejects(
@@ -72,13 +80,23 @@ test('login returns auth response for valid credentials on verified user', async
   const salt = 'salt';
   const hash = '00af266e5980b4c8f570c335920947d27402da0ac29b38f43233590523262348';
   const service = createAuthService({
-    user: { id: 'user-1', email: 'demo@example.com' },
-    passwordHash: `${salt}:${hash}`,
-    emailVerifiedAt: new Date('2025-01-01T00:00:00.000Z'),
+    user: {
+      id: 'user-1',
+      email: 'demo@example.com',
+      passwordHash: `${salt}:${hash}`,
+      emailVerified: true,
+      onboardingCompleted: false,
+    },
   });
 
   const result = await service.login({ email: 'demo@example.com', password });
 
   assert.equal(typeof result.token, 'string');
-  assert.deepEqual(result.user, { id: 'user-1', email: 'demo@example.com' });
+  assert.deepEqual(result.user, {
+    id: 'user-1',
+    email: 'demo@example.com',
+    emailVerified: true,
+    onboardingCompleted: false,
+    nextOnboardingStep: 'complete-onboarding',
+  });
 });
