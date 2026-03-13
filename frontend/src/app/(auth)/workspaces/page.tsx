@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/authStore'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 import { workspacesApi, type Workspace } from '@/lib/api/endpoints/workspaces'
+import { apiPost } from '@/lib/api/client'
 import { cn } from '@/lib/utils/cn'
 
 interface HttpError extends Error {
@@ -24,6 +25,19 @@ function getErrorMessage(error: unknown, fallback: string): string {
   }
 
   return error.message || fallback
+}
+
+
+async function completeOnboarding() {
+  await apiPost<{
+    user: {
+      id: string
+      email: string | null
+      emailVerified: boolean
+      onboardingCompleted: boolean
+      nextOnboardingStep: 'verify-email' | 'complete-onboarding' | null
+    }
+  }>('/onboarding/complete', {})
 }
 
 export default function WorkspacesPage() {
@@ -60,6 +74,7 @@ export default function WorkspacesPage() {
 
         if (items.length === 1) {
           setWorkspace({ id: items[0].id, name: items[0].name })
+          await completeOnboarding()
           router.replace('/dashboard')
           return
         }
@@ -106,6 +121,7 @@ export default function WorkspacesPage() {
 
     try {
       setWorkspace({ id: selectedWorkspace.id, name: selectedWorkspace.name })
+      await completeOnboarding()
       router.push('/dashboard')
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to select workspace'))
@@ -122,6 +138,7 @@ export default function WorkspacesPage() {
     try {
       const res = await workspacesApi.create({ name: name.trim() })
       setWorkspace({ id: res.data.id, name: res.data.name })
+      await completeOnboarding()
       router.push('/dashboard')
     } catch (err) {
       const typedError = err as HttpError

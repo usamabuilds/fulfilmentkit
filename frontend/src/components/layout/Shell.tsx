@@ -21,6 +21,9 @@ interface MeResponse {
   user: {
     id: string
     email: string | null
+    emailVerified: boolean
+    onboardingCompleted: boolean
+    nextOnboardingStep: 'verify-email' | 'complete-onboarding' | null
   } | null
   workspaceId: string | null
   workspaceRole: string | null
@@ -66,6 +69,14 @@ export function Shell({ children }: ShellProps) {
           if (!cancelled) {
             setAuthValidationState('invalid')
             router.replace('/login')
+          }
+          return
+        }
+
+        if (!validatedUser.onboardingCompleted) {
+          if (!cancelled) {
+            setAuthValidationState('invalid')
+            router.replace('/workspaces')
           }
           return
         }
@@ -123,7 +134,6 @@ export function Shell({ children }: ShellProps) {
       </div>
       <LeftSidebar />
 
-      {/* Mobile page nav — shown below 1024px when module has multiple pages */}
       {activeModule && activeModule.pages.length > 1 && (
         <div className="lg:hidden fixed bottom-4 right-4 z-50">
           <button

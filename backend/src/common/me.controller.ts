@@ -1,44 +1,144 @@
-import { Controller, Get, Req } from '@nestjs/common';
+import { Controller, Get, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { Prisma } from '../generated/prisma';
+import { PrismaService } from './prisma/prisma.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { apiResponse } from './utils/api-response';
+
+type NextOnboardingStep = 'verify-email' | 'complete-onboarding' | null;
 
 type MeUserDto = {
   id: string;
   email: string | null;
+  emailVerified: boolean;
+  onboardingCompleted: boolean;
+  nextOnboardingStep: NextOnboardingStep;
 };
 
 @Controller()
 export class MeController {
-  constructor(private readonly workspacesService: WorkspacesService) {}
+  constructor(
+    private readonly workspacesService: WorkspacesService,
+    private readonly prisma: PrismaService,
+  ) {}
 
-  // GET /me
-  // Workspace scoped (WorkspaceGuard requires X-Workspace-Id and sets req.workspaceId)
-  // Option A: req.user.id is the Supabase user id
   @Get('me')
   async getMe(@Req() req: any) {
-    const workspaceId: string = req.workspaceId;
+    const workspaceId = typeof req.workspaceId === 'string' ? req.workspaceId : null;
+    const authUser = req.user as { id?: string } | undefined;
 
-    const authUser = req.user as { id?: string; email?: string } | undefined;
+    if (!authUser?.id) {
+      return apiResponse({ user: null, workspaceId, workspaceRole: null });
+    }
 
-    let user: MeUserDto | null = null;
-    let workspaceRole: string | null = null;
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        email: string | null;
+        emailVerified: boolean;
+        onboardingCompleted: boolean;
+      }>
+    >(Prisma.sql`
+      SELECT
+        "id",
+        "email",
+        COALESCE("emailVerified", false) AS "emailVerified",
+        COALESCE("onboardingCompleted", false) AS "onboardingCompleted"
+      FROM "User"
+      WHERE "id" = ${authUser.id}
+      LIMIT 1
+    `);
 
-    if (authUser?.id) {
-      user = {
-        id: authUser.id,
-        email: authUser.email ?? null,
-      };
+    const persistedUser = rows[0];
 
-      workspaceRole = await this.workspacesService.getWorkspaceRoleForUser(
-        workspaceId,
-        authUser.id,
-      );
+    if (!persistedUser) {
+      return apiResponse({ user: null, workspaceId, workspaceRole: null });
+    }
+
+    const user: MeUserDto = {
+      id: persistedUser.id,
+      email: persistedUser.email,
+      emailVerified: persistedUser.emailVerified,
+      onboardingCompleted: persistedUser.onboardingCompleted,
+      nextOnboardingStep: this.resolveNextOnboardingStep({
+        emailVerified: persistedUser.emailVerified,
+        onboardingCompleted: persistedUser.onboardingCompleted,
+      }),
+    };
+
+    const workspaceRole = workspaceId
+      ? await this.workspacesService.getWorkspaceRoleForUser(workspaceId, persistedUser.id)
+      : null;
+
+    return apiResponse({ user, workspaceId, workspaceRole });
+  }
+
+  @Post('onboarding/complete')
+  async completeOnboarding(@Req() req: any) {
+    const authUser = req.user as { id?: string } | undefined;
+
+    if (!authUser?.id) {
+      throw new UnauthorizedException('Authentication required');
+    }
+
+    const completedAt = new Date();
+
+    await this.prisma.$executeRaw(
+      Prisma.sql`
+        UPDATE "User"
+        SET "onboardingCompleted" = true, "onboardingCompletedAt" = ${completedAt}
+        WHERE "id" = ${authUser.id}
+      `,
+    );
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        email: string | null;
+        emailVerified: boolean;
+        onboardingCompleted: boolean;
+      }>
+    >(Prisma.sql`
+      SELECT
+        "id",
+        "email",
+        COALESCE("emailVerified", false) AS "emailVerified",
+        COALESCE("onboardingCompleted", false) AS "onboardingCompleted"
+      FROM "User"
+      WHERE "id" = ${authUser.id}
+      LIMIT 1
+    `);
+
+    const user = rows[0];
+    if (!user) {
+      throw new UnauthorizedException('Authentication required');
     }
 
     return apiResponse({
-        user,
-        workspaceId,
-        workspaceRole,
-      });
+      user: {
+        id: user.id,
+        email: user.email,
+        emailVerified: user.emailVerified,
+        onboardingCompleted: user.onboardingCompleted,
+        nextOnboardingStep: this.resolveNextOnboardingStep({
+          emailVerified: user.emailVerified,
+          onboardingCompleted: user.onboardingCompleted,
+        }),
+      },
+    });
+  }
+
+  private resolveNextOnboardingStep(params: {
+    emailVerified: boolean;
+    onboardingCompleted: boolean;
+  }): NextOnboardingStep {
+    if (!params.emailVerified) {
+      return 'verify-email';
+    }
+
+    if (!params.onboardingCompleted) {
+      return 'complete-onboarding';
+    }
+
+    return null;
   }
 }
