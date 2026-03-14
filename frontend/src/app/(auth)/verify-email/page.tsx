@@ -120,7 +120,7 @@ function VerifyEmailForm() {
         },
         res.data.token
       )
-      router.push('/onboarding')
+      router.push('/onboarding/workspace')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Verification failed')
     } finally {
