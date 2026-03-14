@@ -67,12 +67,13 @@ function getNextOnboardingStep(user: Pick<AuthUser, 'emailVerified' | 'onboardin
 
 @Injectable()
 export class AuthService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly notificationsService: Pick<NotificationsService, 'sendVerificationCode'> = {
-      sendVerificationCode: async () => undefined,
-    },
-  ) {}
+  private readonly prisma: PrismaService;
+  private readonly notificationsService: NotificationsService;
+
+  constructor(prisma: PrismaService, notificationsService?: NotificationsService) {
+    this.prisma = prisma;
+    this.notificationsService = notificationsService as NotificationsService;
+  }
 
   async register(params: { email: string; password: string; plan?: string }) {
     const email = params.email.trim().toLowerCase();
