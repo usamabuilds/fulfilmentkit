@@ -11,6 +11,7 @@ import { createHash, randomBytes, randomInt } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { getAuthRuntimeConfig } from '../config/env.validation';
+// Runtime import required for Nest DI metadata (do not convert to `import type`).
 import {
   NotificationsService,
   VerificationDeliveryError,
@@ -70,7 +71,11 @@ export class AuthService {
   private readonly prisma: PrismaService;
   private readonly notificationsService: NotificationsService;
 
-  constructor(prisma: PrismaService, notificationsService?: NotificationsService) {
+  constructor(
+    prisma: PrismaService,
+    // Must stay a concrete injected class to preserve Nest runtime metadata.
+    notificationsService?: NotificationsService,
+  ) {
     this.prisma = prisma;
     this.notificationsService = notificationsService as NotificationsService;
   }
