@@ -8,6 +8,95 @@ import { formatDateTime } from '@/lib/utils/formatDate'
 type JsonValue = string | number | boolean | null | JsonObject | JsonValue[]
 type JsonObject = { [key: string]: JsonValue }
 
+
+type RiskSeverity = 'low' | 'medium' | 'high'
+type RiskTimeToBreak = { label: string; days: number | null; confidence: RiskSeverity }
+type PlanTopRisk = {
+  title: string
+  severity: RiskSeverity
+  why: string
+  evidence: JsonValue
+  timeToBreak: RiskTimeToBreak
+}
+
+function isRiskSeverity(value: unknown): value is RiskSeverity {
+  return value === 'low' || value === 'medium' || value === 'high'
+}
+
+function getSeverityBadgeClass(severity: RiskSeverity): string {
+  if (severity === 'high') return 'bg-red-500/15 text-red-200 ring-red-500/40'
+  if (severity === 'medium') return 'bg-amber-500/15 text-amber-200 ring-amber-500/40'
+  return 'bg-emerald-500/15 text-emerald-200 ring-emerald-500/40'
+}
+
+function toPlanTopRisk(value: unknown): PlanTopRisk | null {
+  const obj = toJsonObject(value)
+  if (!obj) return null
+
+  const title = obj.title
+  const severity = obj.severity
+  const why = obj.why
+  const evidence = obj.evidence
+  const timeToBreakObj = toJsonObject(obj.timeToBreak)
+
+  if (typeof title !== 'string' || !isRiskSeverity(severity) || typeof why !== 'string' || !timeToBreakObj) {
+    return null
+  }
+
+  const timeLabel = timeToBreakObj.label
+  const timeDays = timeToBreakObj.days
+  const timeConfidence = timeToBreakObj.confidence
+
+  const parsedDays = typeof timeDays === 'number' && Number.isFinite(timeDays) ? timeDays : null
+
+  if (typeof timeLabel !== 'string' || !isRiskSeverity(timeConfidence)) {
+    return null
+  }
+
+  return {
+    title,
+    severity,
+    why,
+    evidence: evidence ?? null,
+    timeToBreak: {
+      label: timeLabel,
+      days: parsedDays,
+      confidence: timeConfidence,
+    },
+  }
+}
+
+function renderTopRisks(value: JsonValue): JSX.Element {
+  if (!Array.isArray(value)) {
+    return renderJsonValue(value)
+  }
+
+  const risks = value.map((item) => toPlanTopRisk(item)).filter((item): item is PlanTopRisk => item !== null)
+
+  if (risks.length === 0) {
+    return <p className="text-body text-text-secondary">No top risks are available for this plan yet.</p>
+  }
+
+  return (
+    <div className="space-y-3">
+      {risks.map((risk) => (
+        <article key={`${risk.title}-${risk.severity}`} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className="text-subhead text-text-primary">{risk.title}</h4>
+            <span className={`rounded-full px-2 py-0.5 text-caption-2 uppercase tracking-wide ring-1 ${getSeverityBadgeClass(risk.severity)}`}>
+              {risk.severity}
+            </span>
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-caption-2 text-text-secondary ring-1 ring-white/15">
+              {risk.timeToBreak.label} · {risk.timeToBreak.confidence} confidence
+            </span>
+          </div>
+          <p className="mt-2 text-body text-text-secondary">{risk.why}</p>
+        </article>
+      ))}
+    </div>
+  )
+}
+
 function toJsonObject(value: unknown): JsonObject | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null
@@ -159,7 +248,7 @@ export default function PlanDetailPage() {
             {planOutputBlocks.map(([blockKey, blockValue]) => (
               <article key={blockKey} className="glass-panel p-6">
                 <h3 className="text-headline text-text-primary">{formatBlockLabel(blockKey)}</h3>
-                <div className="mt-3">{renderJsonValue(blockValue)}</div>
+                <div className="mt-3">{blockKey === 'topRisks' ? renderTopRisks(blockValue) : renderJsonValue(blockValue)}</div>
               </article>
             ))}
           </div>

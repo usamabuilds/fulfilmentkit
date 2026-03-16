@@ -41,7 +41,19 @@ type SkuAgg = {
 type Severity = 'low' | 'medium' | 'high';
 type Impact = 'low' | 'medium' | 'high';
 
-type PlanningTopRisk = { title: string; severity: Severity; why: string; evidence: any };
+type PlanningRiskTimeToBreak = {
+  label: string;
+  days: number | null;
+  confidence: 'low' | 'medium' | 'high';
+};
+
+type PlanningTopRisk = {
+  title: string;
+  severity: Severity;
+  why: string;
+  evidence: any;
+  timeToBreak: PlanningRiskTimeToBreak;
+};
 type PlanningOpportunity = { title: string; impact: Impact; why: string; evidence: any };
 type PlanningNext7Day = { day: string; actions: string[]; expectedOutcome: string };
 
@@ -379,6 +391,103 @@ export class AiToolsetService {
       days.push(d.toISOString().slice(0, 10));
     }
     return days;
+  }
+
+
+  private estimateTimeToBreakDaysFromDaysLeft(daysLeft: number | null): number | null {
+    if (daysLeft === null || !Number.isFinite(daysLeft)) return null;
+    return Math.max(0, Math.ceil(daysLeft));
+  }
+
+  private estimateRiskTimeToBreak(args: {
+    title: string;
+    severity: Severity;
+    stockoutHigh: Array<{ daysLeft: number | null }>;
+    lowStockHigh: Array<{ onHand: number | null }>;
+    stockoutHorizonDays: number;
+    lowStockThreshold: number;
+    trendDeltaPct: number | null;
+    absoluteDelta?: number | null;
+  }): PlanningRiskTimeToBreak {
+    const {
+      title,
+      severity,
+      stockoutHigh,
+      lowStockHigh,
+      stockoutHorizonDays,
+      lowStockThreshold,
+      trendDeltaPct,
+      absoluteDelta,
+    } = args;
+
+    const stockoutDaysCandidates = stockoutHigh
+      .map((item) => this.estimateTimeToBreakDaysFromDaysLeft(item.daysLeft))
+      .filter((days): days is number => days !== null);
+
+    if (stockoutDaysCandidates.length > 0) {
+      const fastestBreak = Math.min(...stockoutDaysCandidates);
+      return {
+        label: fastestBreak <= 0 ? 'Already broken' : `~${fastestBreak} day${fastestBreak === 1 ? '' : 's'}`,
+        days: fastestBreak,
+        confidence: stockoutDaysCandidates.length >= 2 ? 'high' : 'medium',
+      };
+    }
+
+    if (title.toLowerCase().includes('stockout') && severity === 'high') {
+      return { label: 'Already broken', days: 0, confidence: 'high' };
+    }
+
+    if (lowStockHigh.length > 0) {
+      const onHandValues = lowStockHigh
+        .map((item) => item.onHand)
+        .filter((qty): qty is number => qty !== null && Number.isFinite(qty) && qty > 0);
+
+      if (onHandValues.length > 0) {
+        const minOnHand = Math.min(...onHandValues);
+        const thresholdSafe = Math.max(1, lowStockThreshold);
+        const pctOfThreshold = minOnHand / thresholdSafe;
+        const estimatedDays = Math.max(1, Math.ceil(stockoutHorizonDays * pctOfThreshold));
+
+        return {
+          label: `~${estimatedDays} day${estimatedDays === 1 ? '' : 's'}`,
+          days: estimatedDays,
+          confidence: onHandValues.length >= 2 ? 'medium' : 'low',
+        };
+      }
+    }
+
+    if (trendDeltaPct !== null && Number.isFinite(trendDeltaPct) && trendDeltaPct > 0) {
+      if (severity === 'high') {
+        return {
+          label: 'Within 7 days (trend worsening)',
+          days: 7,
+          confidence: Math.abs(trendDeltaPct) >= 0.25 ? 'medium' : 'low',
+        };
+      }
+
+      if (severity === 'medium') {
+        return {
+          label: 'Within 14 days (trend worsening)',
+          days: 14,
+          confidence: Math.abs(trendDeltaPct) >= 0.25 ? 'medium' : 'low',
+        };
+      }
+    }
+
+    if (absoluteDelta !== null && absoluteDelta !== undefined && Number.isFinite(absoluteDelta) && absoluteDelta > 0) {
+      const days = severity === 'high' ? 7 : severity === 'medium' ? 14 : 30;
+      return {
+        label: `Within ${days} days (absolute increase observed)`,
+        days,
+        confidence: 'low',
+      };
+    }
+
+    return {
+      label: 'Insufficient data to estimate',
+      days: null,
+      confidence: 'low',
+    };
   }
 
   private previousRangeSameLength(range: KpiDateRange): KpiDateRange {
@@ -1822,12 +1931,14 @@ export class AiToolsetService {
     const { workspaceId, range } = args;
 
     const compareTo = this.previousRangeSameLength(range);
+    const stockoutHorizonDays = 14;
+    const lowStockThreshold = 10;
 
     const [kpi, ops, stockout, lowStock, margin, refundSpike, feeSpike] = await Promise.all([
       this.getKpiSummary({ workspaceId, range }),
       this.getOpsRisk({ workspaceId, range }),
-      this.getStockoutRisk({ workspaceId, range, horizonDays: 14, limit: 20 }),
-      this.getLowStockRisk({ workspaceId, threshold: 10, limit: 20 }),
+      this.getStockoutRisk({ workspaceId, range, horizonDays: stockoutHorizonDays, limit: 20 }),
+      this.getLowStockRisk({ workspaceId, threshold: lowStockThreshold, limit: 20 }),
       this.getMarginLeakageRisk({ workspaceId, range, compareTo }),
       this.getRefundSpikeRisk({ workspaceId, range, compareTo }),
       this.getFeeSpikeRisk({ workspaceId, range, compareTo }),
@@ -1853,6 +1964,15 @@ export class AiToolsetService {
       severity: ops.data.risk as Severity,
       why: ops.data.signals.map((s) => s.message).join(' '),
       evidence: { opsRisk: ops.data },
+      timeToBreak: this.estimateRiskTimeToBreak({
+        title: 'Ops risk (combined signals)',
+        severity: ops.data.risk as Severity,
+        stockoutHigh: (stockout.data.items ?? []).filter((i) => i.risk === 'high'),
+        lowStockHigh: (lowStock.data.items ?? []).filter((i) => i.risk === 'high'),
+        stockoutHorizonDays,
+        lowStockThreshold,
+        trendDeltaPct: null,
+      }),
     });
 
     const stockoutHigh = (stockout.data.items ?? []).filter((i) => i.risk === 'high').slice(0, 5);
@@ -1862,6 +1982,15 @@ export class AiToolsetService {
         severity: 'high',
         why: 'One or more SKUs are currently stocked out. This can cause missed sales and delayed fulfillment.',
         evidence: { items: stockoutHigh },
+        timeToBreak: this.estimateRiskTimeToBreak({
+          title: 'Stockouts detected (onHand = 0)',
+          severity: 'high',
+          stockoutHigh,
+          lowStockHigh: [],
+          stockoutHorizonDays,
+          lowStockThreshold,
+          trendDeltaPct: null,
+        }),
       });
     }
 
@@ -1871,7 +2000,16 @@ export class AiToolsetService {
         title: 'Very low stock detected',
         severity: 'medium',
         why: 'Some SKUs are below the low stock threshold and may stock out soon.',
-        evidence: { items: lowStockHigh, threshold: (lowStock.data as any).threshold ?? 10 },
+        evidence: { items: lowStockHigh, threshold: lowStockThreshold },
+        timeToBreak: this.estimateRiskTimeToBreak({
+          title: 'Very low stock detected',
+          severity: 'medium',
+          stockoutHigh,
+          lowStockHigh,
+          stockoutHorizonDays,
+          lowStockThreshold,
+          trendDeltaPct: null,
+        }),
       });
     }
 
@@ -1884,6 +2022,16 @@ export class AiToolsetService {
         drivers: margin.data.drivers,
         compareTo: margin.data.compareTo ?? compareTo,
       },
+      timeToBreak: this.estimateRiskTimeToBreak({
+        title: 'Margin leakage risk',
+        severity: margin.data.risk as Severity,
+        stockoutHigh: [],
+        lowStockHigh: [],
+        stockoutHorizonDays,
+        lowStockThreshold,
+        trendDeltaPct: margin.data.marginPct.deltaPct,
+        absoluteDelta: margin.data.marginPct.delta,
+      }),
     });
 
     topRisks.push({
@@ -1891,6 +2039,16 @@ export class AiToolsetService {
       severity: refundSpike.data.risk as Severity,
       why: `Refund rate is ${this.fmtPct(refundSpike.data.refundRate.value)} vs prior period ${compareTo.from} to ${compareTo.to}.`,
       evidence: { refundRate: refundSpike.data.refundRate, compareTo },
+      timeToBreak: this.estimateRiskTimeToBreak({
+        title: 'Refund spike risk',
+        severity: refundSpike.data.risk as Severity,
+        stockoutHigh: [],
+        lowStockHigh: [],
+        stockoutHorizonDays,
+        lowStockThreshold,
+        trendDeltaPct: refundSpike.data.refundRate.deltaPct,
+        absoluteDelta: refundSpike.data.refundRate.delta,
+      }),
     });
 
     topRisks.push({
@@ -1898,6 +2056,16 @@ export class AiToolsetService {
       severity: feeSpike.data.risk as Severity,
       why: `Fee rate is ${this.fmtPct(feeSpike.data.feeRate.value)} vs prior period ${compareTo.from} to ${compareTo.to}.`,
       evidence: { feeRate: feeSpike.data.feeRate, compareTo },
+      timeToBreak: this.estimateRiskTimeToBreak({
+        title: 'Fee spike risk',
+        severity: feeSpike.data.risk as Severity,
+        stockoutHigh: [],
+        lowStockHigh: [],
+        stockoutHorizonDays,
+        lowStockThreshold,
+        trendDeltaPct: feeSpike.data.feeRate.deltaPct,
+        absoluteDelta: feeSpike.data.feeRate.delta,
+      }),
     });
 
     topRisks.sort((a, b) => this.sevScore(b.severity) - this.sevScore(a.severity));
