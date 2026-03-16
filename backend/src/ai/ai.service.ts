@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { Prisma } from '../generated/prisma';
 import { toListResponse } from '../common/utils/list-response';
 
 type AddUserMessageArgs = {
@@ -112,6 +113,8 @@ export class AiService {
     args: AddUserMessageArgs,
   ) {
     const { content, metadata } = args;
+    const metadataValue =
+      metadata == null ? Prisma.DbNull : (metadata as Prisma.InputJsonValue);
 
     // ensure conversation exists + workspace scoped
     const convo = await this.prisma.aiConversation.findFirst({
@@ -129,7 +132,7 @@ export class AiService {
         conversationId,
         role: 'user',
         content,
-        metadata: metadata ?? null,
+        metadata: metadataValue,
       },
       select: { id: true, role: true, content: true, metadata: true, createdAt: true },
     });
@@ -164,6 +167,8 @@ export class AiService {
   // ✅ Log tool call (AiToolCall) with params/result JSON
   async logToolCall(workspaceId: string, args: LogToolCallArgs) {
     const { messageId, provider, toolName, arguments: toolArgs, result } = args;
+    const resultValue =
+      result == null ? Prisma.DbNull : (result as Prisma.InputJsonValue);
 
     // Ensure message exists + workspace scoped
     const msg = await this.prisma.aiMessage.findFirst({
@@ -181,7 +186,7 @@ export class AiService {
         provider,
         toolName,
         arguments: toolArgs ?? {},
-        result: result ?? null,
+        result: resultValue,
       },
       select: {
         id: true,
