@@ -20,6 +20,20 @@ type LogToolCallArgs = {
 export class AiService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private toNullableJsonInput(
+    value: unknown,
+  ): Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    if (value === null) {
+      return Prisma.DbNull;
+    }
+
+    return value as Prisma.InputJsonValue;
+  }
+
   // ✅ Create conversation
   async createConversation(workspaceId: string) {
     const convo = await this.prisma.aiConversation.create({
@@ -113,8 +127,7 @@ export class AiService {
     args: AddUserMessageArgs,
   ) {
     const { content, metadata } = args;
-    const metadataValue =
-      metadata == null ? Prisma.DbNull : (metadata as Prisma.InputJsonValue);
+    const metadataValue = this.toNullableJsonInput(metadata);
 
     // ensure conversation exists + workspace scoped
     const convo = await this.prisma.aiConversation.findFirst({
@@ -167,8 +180,7 @@ export class AiService {
   // ✅ Log tool call (AiToolCall) with params/result JSON
   async logToolCall(workspaceId: string, args: LogToolCallArgs) {
     const { messageId, provider, toolName, arguments: toolArgs, result } = args;
-    const resultValue =
-      result == null ? Prisma.DbNull : (result as Prisma.InputJsonValue);
+    const resultValue = this.toNullableJsonInput(result);
 
     // Ensure message exists + workspace scoped
     const msg = await this.prisma.aiMessage.findFirst({
