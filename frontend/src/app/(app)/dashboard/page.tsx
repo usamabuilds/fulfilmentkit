@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { RecentOrdersTable } from '@/components/modules/dashboard/RecentOrdersTable'
 import { StatCard } from '@/components/modules/dashboard/StatCard'
-import { useDashboardStats } from '@/lib/hooks/useDashboard'
+import type { DashboardAlert, DashboardAlertLevel } from '@/lib/api/endpoints/dashboard'
+import { useDashboardAlerts, useDashboardStats } from '@/lib/hooks/useDashboard'
 import { useOrders } from '@/lib/hooks/useOrders'
 import { formatCurrency } from '@/lib/utils/formatCurrency'
 
@@ -54,6 +55,38 @@ function formatPercent(value: string | number): string {
   return `${numericValue.toFixed(2)}%`
 }
 
+function getAlertLevelClasses(level: DashboardAlertLevel): string {
+  if (level === 'critical') {
+    return 'bg-red-500/15 text-red-200 border border-red-400/40'
+  }
+
+  if (level === 'warning') {
+    return 'bg-amber-500/15 text-amber-200 border border-amber-400/40'
+  }
+
+  return 'bg-sky-500/15 text-sky-200 border border-sky-400/40'
+}
+
+function getAlertLevelPriority(level: DashboardAlertLevel): number {
+  if (level === 'critical') {
+    return 0
+  }
+
+  if (level === 'warning') {
+    return 1
+  }
+
+  return 2
+}
+
+function getTypeLabel(type: DashboardAlert['type']): string | null {
+  if (type === 'refund_spikes') {
+    return 'Refund Spike'
+  }
+
+  return null
+}
+
 export default function DashboardPage() {
   const [rangeMode, setRangeMode] = useState<RangeMode>('30d')
   const [customFrom, setCustomFrom] = useState('')
@@ -73,6 +106,7 @@ export default function DashboardPage() {
   )
 
   const { data: statsData, isLoading: statsLoading } = useDashboardStats(rangeParams, effectiveRange.isValid)
+  const { data: alertsData, isLoading: alertsLoading } = useDashboardAlerts(rangeParams, effectiveRange.isValid)
   const { data: ordersData, isLoading: ordersLoading } = useOrders({ pageSize: 5 })
 
   const stats = statsData?.data
@@ -92,6 +126,12 @@ export default function DashboardPage() {
   const hasSummaryPayload = stats !== null && stats !== undefined
   const allKpisUnavailable = kpiValues.every((value) => value === null || value === undefined || value === '')
   const isStatsReady = hasSummaryPayload && !allKpisUnavailable
+  const prioritizedAlerts = useMemo(() => {
+    const alerts = alertsData?.data?.alerts ?? []
+    return [...alerts]
+      .sort((a, b) => getAlertLevelPriority(a.level) - getAlertLevelPriority(b.level))
+      .slice(0, 3)
+  }, [alertsData])
 
   return (
     <div className="flex flex-col gap-6">
@@ -233,8 +273,56 @@ export default function DashboardPage() {
           <p className="text-body text-text-secondary">Trends visualizations coming soon.</p>
         </div>
         <div className="glass-panel p-5 min-h-40">
-          <h2 className="text-title-3 text-text-primary mb-2">Alerts</h2>
-          <p className="text-body text-text-secondary">Operational alerts will appear here.</p>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-title-3 text-text-primary">Alerts</h2>
+            <Link
+              href="/dashboard/alerts"
+              className="text-subhead text-text-secondary transition-colors hover:text-text-primary"
+            >
+              View all
+            </Link>
+          </div>
+
+          {alertsLoading ? (
+            <div className="flex flex-col gap-2">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={`dashboard-alert-summary-skeleton-${index}`} className="skeleton h-14" />
+              ))}
+            </div>
+          ) : prioritizedAlerts.length === 0 ? (
+            <p className="text-body text-text-secondary">No active alerts.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {prioritizedAlerts.map((alert) => {
+                const typeLabel = getTypeLabel(alert.type)
+
+                return (
+                  <div
+                    key={`${alert.type}-${alert.level}-${alert.title}`}
+                    className="rounded-[12px] border border-white/10 bg-black/10 p-3"
+                  >
+                    <div className="mb-1 flex items-start justify-between gap-2">
+                      <p className="text-subhead text-text-primary leading-snug">{alert.title}</p>
+                      <span className={`rounded-full px-2 py-0.5 text-footnote uppercase tracking-wide ${getAlertLevelClasses(alert.level)}`}>
+                        {alert.level}
+                      </span>
+                    </div>
+                    <p className="text-footnote text-text-secondary">{alert.message}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {typeLabel ? (
+                        <span className="rounded-full border border-amber-400/40 bg-amber-500/15 px-2 py-0.5 text-footnote text-amber-200">
+                          {typeLabel}
+                        </span>
+                      ) : null}
+                      {alert.count !== undefined ? (
+                        <span className="text-footnote text-text-secondary">Count: {alert.count}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
