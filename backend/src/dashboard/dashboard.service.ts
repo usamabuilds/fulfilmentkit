@@ -875,12 +875,152 @@ export class DashboardService {
       });
     }
 
-    alerts.push({
-      type: 'refund_spikes',
-      level: 'info',
-      title: 'Refund spike monitoring',
-      message: 'Refund spike detection will be enabled in a later milestone',
-    });
+    const warningRatioMultiplier = new Prisma.Decimal('1.5');
+    const criticalRatioMultiplier = new Prisma.Decimal('2');
+    const warningAbsoluteDelta = new Prisma.Decimal('1');
+    const criticalAbsoluteDelta = new Prisma.Decimal('3');
+    const highRefundDayRatioThreshold = new Prisma.Decimal('5');
+
+    const computeRefundRatio = async (from: Date, to: Date) => {
+      const normalizedFrom = startOfDayUtc(from);
+      const normalizedTo = startOfDayUtc(to);
+
+      const metricRows = await this.prisma.dailyMetric.findMany({
+        where: {
+          workspaceId,
+          day: {
+            gte: normalizedFrom,
+            lte: normalizedTo,
+          },
+        },
+        select: {
+          day: true,
+          revenue: true,
+          refundsAmount: true,
+        },
+      });
+
+      if (metricRows.length > 0) {
+        const revenue = metricRows.reduce(
+          (acc, r) => acc.plus(new Prisma.Decimal(decimalToString(r.revenue))),
+          new Prisma.Decimal('0'),
+        );
+
+        const refunds = metricRows.reduce(
+          (acc, r) => acc.plus(new Prisma.Decimal(decimalToString(r.refundsAmount))),
+          new Prisma.Decimal('0'),
+        );
+
+        let highRefundDays = 0;
+        for (const r of metricRows) {
+          const dayRevenue = new Prisma.Decimal(decimalToString(r.revenue));
+          if (dayRevenue.lte(0)) continue;
+
+          const dayRefunds = new Prisma.Decimal(decimalToString(r.refundsAmount));
+          const dayRatioPercent = dayRefunds.div(dayRevenue).mul(100);
+          if (dayRatioPercent.gte(highRefundDayRatioThreshold)) highRefundDays += 1;
+        }
+
+        const ratioPercent = revenue.gt(0) ? refunds.div(revenue).mul(100) : new Prisma.Decimal('0');
+
+        return {
+          ratioPercent,
+          source: 'dailyMetric' as const,
+          highRefundDays,
+        };
+      }
+
+      const orderWhere: any = {
+        workspaceId,
+        orderedAt: {
+          gte: normalizedFrom,
+          lte: toEndOfDayUtc(to),
+        },
+      };
+      const refundsWhere: any = {
+        workspaceId,
+        createdAt: {
+          gte: normalizedFrom,
+          lte: toEndOfDayUtc(to),
+        },
+      };
+
+      const [ordersAgg, refundsAgg] = await Promise.all([
+        this.prisma.order.aggregate({
+          where: orderWhere,
+          _sum: {
+            total: true,
+          },
+        }),
+        this.prisma.refund.aggregate({
+          where: refundsWhere,
+          _sum: {
+            amount: true,
+          },
+        }),
+      ]);
+
+      const revenue = new Prisma.Decimal(decimalToString(ordersAgg._sum.total ?? '0'));
+      const refunds = new Prisma.Decimal(decimalToString(refundsAgg._sum.amount ?? '0'));
+      const ratioPercent = revenue.gt(0) ? refunds.div(revenue).mul(100) : new Prisma.Decimal('0');
+
+      return {
+        ratioPercent,
+        source: 'orders+refunds' as const,
+        highRefundDays: 0,
+      };
+    };
+
+    if (rangeFrom && rangeTo) {
+      const windowDays = Math.max(
+        1,
+        Math.ceil((rangeTo.getTime() - rangeFrom.getTime()) / (24 * 60 * 60 * 1000)),
+      );
+      const prevTo = addDaysUtc(startOfDayUtc(rangeFrom), -1);
+      const prevFrom = addDaysUtc(prevTo, -windowDays + 1);
+
+      const [currentRefunds, previousRefunds] = await Promise.all([
+        computeRefundRatio(rangeFrom, rangeTo),
+        computeRefundRatio(prevFrom, prevTo),
+      ]);
+
+      const baselineRatio = previousRefunds.ratioPercent;
+      const currentRatio = currentRefunds.ratioPercent;
+      const ratioDelta = currentRatio.minus(baselineRatio);
+
+      const baselinePositive = baselineRatio.gt(0);
+      const ratioMultiple = baselinePositive
+        ? currentRatio.div(baselineRatio)
+        : currentRatio.gt(warningAbsoluteDelta)
+          ? new Prisma.Decimal('999')
+          : new Prisma.Decimal('1');
+
+      const warningByMultiplier = baselinePositive && ratioMultiple.gte(warningRatioMultiplier);
+      const criticalByMultiplier = baselinePositive && ratioMultiple.gte(criticalRatioMultiplier);
+      const warningByDelta = ratioDelta.gte(warningAbsoluteDelta);
+      const criticalByDelta = ratioDelta.gte(criticalAbsoluteDelta);
+
+      if (warningByMultiplier || warningByDelta) {
+        const level: AlertLevel = criticalByMultiplier || criticalByDelta ? 'critical' : 'warning';
+
+        alerts.push({
+          type: 'refund_spikes',
+          level,
+          title: 'Refund spike detected',
+          message: [
+            `current refund ratio ${decimalToString(currentRatio)}%`,
+            `baseline ${decimalToString(baselineRatio)}%`,
+            `delta ${decimalToString(ratioDelta)}pp`,
+            baselinePositive ? `multiple ${decimalToString(ratioMultiple)}x` : 'multiple n/a',
+            `thresholds warning ${decimalToString(warningRatioMultiplier)}x or +${decimalToString(
+              warningAbsoluteDelta,
+            )}pp`,
+            `source ${currentRefunds.source}`,
+          ].join('; '),
+          count: currentRefunds.highRefundDays > 0 ? currentRefunds.highRefundDays : undefined,
+        });
+      }
+    }
 
     // Keep accepted from/to in the payload so frontend can display context if needed
     return {
