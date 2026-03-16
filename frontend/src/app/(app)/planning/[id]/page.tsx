@@ -26,6 +26,12 @@ type PlanOpportunity = {
   evidenceSummary: string | null
 }
 
+type PlanNextDay = {
+  day: string
+  actions: string[]
+  expectedOutcome: string
+}
+
 function isRiskSeverity(value: unknown): value is RiskSeverity {
   return value === 'low' || value === 'medium' || value === 'high'
 }
@@ -157,6 +163,61 @@ function renderOpportunities(value: JsonValue | undefined): JSX.Element {
   )
 }
 
+function toPlanNextDay(value: unknown): PlanNextDay | null {
+  const obj = toJsonObject(value)
+  if (!obj) return null
+
+  const day = obj.day
+  const actions = obj.actions
+  const expectedOutcome = obj.expectedOutcome
+
+  if (typeof day !== 'string' || !Array.isArray(actions) || typeof expectedOutcome !== 'string') {
+    return null
+  }
+
+  const actionList = actions.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+
+  return {
+    day,
+    actions: actionList,
+    expectedOutcome,
+  }
+}
+
+function renderNext7DaysPlan(value: JsonValue | undefined): JSX.Element {
+  if (!value || !Array.isArray(value)) {
+    return <p className="text-body text-text-secondary">No next 7 days plan is available for this plan yet.</p>
+  }
+
+  const nextDays = value.map((item) => toPlanNextDay(item)).filter((item): item is PlanNextDay => item !== null)
+
+  if (nextDays.length === 0) {
+    return <p className="text-body text-text-secondary">No next 7 days plan is available for this plan yet.</p>
+  }
+
+  return (
+    <ol className="space-y-4">
+      {nextDays.map((entry, index) => (
+        <li key={`${entry.day}-${index}`} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <h4 className="text-subhead text-text-primary">{entry.day}</h4>
+          {entry.actions.length > 0 ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {entry.actions.map((action, actionIndex) => (
+                <li key={`${entry.day}-action-${actionIndex}`} className="text-body text-text-primary">
+                  {action}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-body text-text-secondary">No actions listed for this day.</p>
+          )}
+          <p className="mt-3 text-caption-1 text-text-secondary">Expected outcome: {entry.expectedOutcome}</p>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
 function toJsonObject(value: unknown): JsonObject | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null
@@ -227,9 +288,12 @@ export default function PlanDetailPage() {
     ? statusBulletsValue.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : []
   const planOutputBlocks = resultBlocks
-    ? Object.entries(resultBlocks).filter(([blockKey]) => blockKey !== 'statusBullets' && blockKey !== 'opportunities')
+    ? Object.entries(resultBlocks).filter(
+      ([blockKey]) => blockKey !== 'statusBullets' && blockKey !== 'opportunities' && blockKey !== 'next7DaysPlan',
+    )
     : []
   const opportunities = resultBlocks?.opportunities
+  const next7DaysPlan = resultBlocks?.next7DaysPlan
   const assumptions = toJsonObject(plan?.assumptions)
 
   if (isLoading) {
@@ -304,6 +368,11 @@ export default function PlanDetailPage() {
       <section className="space-y-4">
         <h2 className="text-title-3 text-text-primary">Opportunities</h2>
         <div className="glass-panel p-6">{renderOpportunities(opportunities)}</div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-title-3 text-text-primary">Next 7 days plan</h2>
+        <div className="glass-panel p-6">{renderNext7DaysPlan(next7DaysPlan)}</div>
       </section>
 
       <section className="space-y-4">
