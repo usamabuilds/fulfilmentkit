@@ -196,6 +196,7 @@ model Order {
   orderNumber String?
   status      String
   channel     String?
+  shipCountryCode String?
   orderedAt   DateTime?
   currency    String
   subtotal    Decimal

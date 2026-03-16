@@ -230,6 +230,7 @@ async function main() {
       update: {
         orderNumber: '1001',
         channel: 'shopify',
+        shipCountryCode: 'US',
         orderedAt,
         status: 'paid',
         currency: 'USD',
@@ -243,6 +244,7 @@ async function main() {
         externalRef: 'ORDER-EXT-001',
         orderNumber: '1001',
         channel: 'shopify',
+        shipCountryCode: 'US',
         orderedAt,
         status: 'paid',
         currency: 'USD',
