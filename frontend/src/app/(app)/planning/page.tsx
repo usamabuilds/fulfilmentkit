@@ -42,7 +42,7 @@ export default function PlanningPage() {
             <Link key={plan.id} href={`/planning/${plan.id}`}>
               <div className="glass-card flex items-center justify-between p-5">
                 <div>
-                  <p className="text-headline text-text-primary">{plan.name}</p>
+                  <p className="text-headline text-text-primary">{plan.title ?? 'Untitled plan'}</p>
                   <p className="mt-0.5 text-footnote text-text-tertiary">{formatDate(plan.createdAt)}</p>
                 </div>
                 <span className="rounded-full bg-black/5 px-2.5 py-1 text-caption-2 text-text-secondary">{plan.status}</span>
