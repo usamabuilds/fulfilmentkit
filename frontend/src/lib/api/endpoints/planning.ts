@@ -2,9 +2,12 @@ import { apiGet, apiGetList, apiPost } from '@/lib/api/client'
 
 export interface Plan {
   id: string
-  name: string
+  name?: string
+  title: string | null
   status: string
   createdAt: string
+  result: Record<string, unknown> | null
+  assumptions: Record<string, unknown> | null
 }
 
 export interface CreatePlanDto {
