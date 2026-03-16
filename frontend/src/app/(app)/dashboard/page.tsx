@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { RecentOrdersTable } from '@/components/modules/dashboard/RecentOrdersTable'
 import { StatCard } from '@/components/modules/dashboard/StatCard'
@@ -76,6 +77,20 @@ export default function DashboardPage() {
 
   const stats = statsData?.data
   const orders = ordersData?.data?.items ?? []
+  const kpiValues: Array<number | string | null | undefined> = [
+    stats?.revenue,
+    stats?.orders,
+    stats?.units,
+    stats?.refundsAmount,
+    stats?.feesAmount,
+    stats?.grossMarginAmount,
+    stats?.grossMarginPercent,
+    stats?.stockoutsCount,
+    stats?.lowStockCount,
+  ]
+  const hasSummaryPayload = stats !== null && stats !== undefined
+  const allKpisUnavailable = kpiValues.every((value) => value === null || value === undefined || value === '')
+  const isStatsReady = hasSummaryPayload && !allKpisUnavailable
 
   return (
     <div className="flex flex-col gap-6">
@@ -143,51 +158,64 @@ export default function DashboardPage() {
         ) : null}
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {statsLoading ? (
-          <>
-            {Array.from({ length: 9 }).map((_, index) => (
-              <div key={`dashboard-stat-skeleton-${index}`} className="skeleton h-24" />
-            ))}
-          </>
-        ) : (
-          <>
-            <StatCard
-              label="Revenue"
-              value={formatCurrency(Number(stats?.revenue ?? '0'))}
-              accent="success"
-            />
-            <StatCard label="Orders" value={stats?.orders ?? 0} />
-            <StatCard label="Units" value={stats?.units ?? 0} accent="warning" />
-            <StatCard
-              label="Refunds Amount"
-              value={formatCurrency(Number(stats?.refundsAmount ?? '0'))}
-            />
-            <StatCard
-              label="Fees Amount"
-              value={formatCurrency(Number(stats?.feesAmount ?? '0'))}
-            />
-            <StatCard
-              label="Gross Margin Amount"
-              value={formatCurrency(Number(stats?.grossMarginAmount ?? '0'))}
-            />
-            <StatCard
-              label="Gross Margin Percent"
-              value={formatPercent(stats?.grossMarginPercent ?? '0')}
-            />
-            <StatCard
-              label="Stockouts Count"
-              value={stats?.stockoutsCount ?? 0}
-              accent={stats?.stockoutsCount ? 'destructive' : 'default'}
-            />
-            <StatCard
-              label="Low Stock Count"
-              value={stats?.lowStockCount ?? 0}
-              accent={stats?.lowStockCount ? 'destructive' : 'default'}
-            />
-          </>
-        )}
-      </div>
+      {statsLoading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 9 }).map((_, index) => (
+            <div key={`dashboard-stat-skeleton-${index}`} className="skeleton h-24" />
+          ))}
+        </div>
+      ) : !isStatsReady ? (
+        <div className="glass-panel p-6 flex flex-col gap-3">
+          <h2 className="text-title-3 text-text-primary">No metrics yet</h2>
+          <p className="text-body text-text-secondary max-w-3xl">
+            Dashboard KPIs are not ready yet. Run metrics compute to generate your summary, or sync data first and come back in a moment.
+          </p>
+          <div>
+            <Link
+              href="/metrics/compute"
+              className="inline-flex rounded-[10px] bg-black/10 px-4 py-2 text-subhead text-text-primary transition-all hover:bg-black/15"
+            >
+              Go to Metrics Compute
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            label="Revenue"
+            value={formatCurrency(Number(stats?.revenue ?? '0'))}
+            accent="success"
+          />
+          <StatCard label="Orders" value={stats?.orders ?? 0} />
+          <StatCard label="Units" value={stats?.units ?? 0} accent="warning" />
+          <StatCard
+            label="Refunds Amount"
+            value={formatCurrency(Number(stats?.refundsAmount ?? '0'))}
+          />
+          <StatCard
+            label="Fees Amount"
+            value={formatCurrency(Number(stats?.feesAmount ?? '0'))}
+          />
+          <StatCard
+            label="Gross Margin Amount"
+            value={formatCurrency(Number(stats?.grossMarginAmount ?? '0'))}
+          />
+          <StatCard
+            label="Gross Margin Percent"
+            value={formatPercent(stats?.grossMarginPercent ?? '0')}
+          />
+          <StatCard
+            label="Stockouts Count"
+            value={stats?.stockoutsCount ?? 0}
+            accent={stats?.stockoutsCount ? 'destructive' : 'default'}
+          />
+          <StatCard
+            label="Low Stock Count"
+            value={stats?.lowStockCount ?? 0}
+            accent={stats?.lowStockCount ? 'destructive' : 'default'}
+          />
+        </div>
+      )}
 
       <div>
         <h2 className="text-title-3 text-text-primary mb-3">Recent Orders</h2>
