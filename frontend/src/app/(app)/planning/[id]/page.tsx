@@ -308,7 +308,7 @@ export default function PlanDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data, isLoading, isError } = usePlan(id)
   const plan = data?.data
-  const planName = plan?.title ?? plan?.name ?? 'Untitled plan'
+  const planName = plan?.title ?? 'Untitled plan'
   const resultBlocks = toJsonObject(plan?.result)
   const statusBulletsValue = resultBlocks?.statusBullets
   const statusBullets = Array.isArray(statusBulletsValue)
