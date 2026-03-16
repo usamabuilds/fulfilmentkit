@@ -51,6 +51,24 @@ export interface DashboardBreakdown {
   items: DashboardBreakdownItem[]
 }
 
+export type DashboardAlertType = 'stockouts' | 'low_stock' | 'margin_leakage' | 'refund_spikes'
+
+export type DashboardAlertLevel = 'critical' | 'warning' | 'info'
+
+export interface DashboardAlert {
+  type: DashboardAlertType
+  level: DashboardAlertLevel
+  title: string
+  message: string
+  count?: number
+}
+
+export interface DashboardAlertsResponse {
+  from: string
+  to: string
+  alerts: DashboardAlert[]
+}
+
 export const dashboardApi = {
   getStats: (params?: DashboardStatsParams) => {
     const query = new URLSearchParams()
@@ -81,5 +99,14 @@ export const dashboardApi = {
     const queryString = query.toString()
     const path = queryString ? `/dashboard/breakdown?${queryString}` : '/dashboard/breakdown'
     return apiGet<DashboardBreakdown>(path)
+  },
+  getAlerts: (params?: DashboardStatsParams) => {
+    const query = new URLSearchParams()
+    if (params?.from) query.set('from', params.from)
+    if (params?.to) query.set('to', params.to)
+
+    const queryString = query.toString()
+    const path = queryString ? `/dashboard/alerts?${queryString}` : '/dashboard/alerts'
+    return apiGet<DashboardAlertsResponse>(path)
   },
 }

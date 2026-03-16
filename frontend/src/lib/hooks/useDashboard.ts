@@ -34,7 +34,6 @@ export function useDashboardTrends(params: DashboardTrendsParams, enabled = true
   })
 }
 
-
 export function useDashboardBreakdown(params: DashboardBreakdownParams, enabled = true) {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
 
@@ -48,6 +47,16 @@ export function useDashboardBreakdown(params: DashboardBreakdownParams, enabled 
       params.to ?? null,
     ],
     queryFn: () => dashboardApi.getBreakdown(params),
+    enabled: !!workspaceId && enabled,
+  })
+}
+
+export function useDashboardAlerts(params?: DashboardStatsParams, enabled = true) {
+  const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
+
+  return useQuery({
+    queryKey: ['dashboard', 'alerts', workspaceId, params?.from ?? null, params?.to ?? null],
+    queryFn: () => dashboardApi.getAlerts(params),
     enabled: !!workspaceId && enabled,
   })
 }
