@@ -73,6 +73,13 @@ export default function PlanDetailPage() {
   const plan = data?.data
   const planName = plan?.title ?? plan?.name ?? 'Untitled plan'
   const resultBlocks = toJsonObject(plan?.result)
+  const statusBulletsValue = resultBlocks?.statusBullets
+  const statusBullets = Array.isArray(statusBulletsValue)
+    ? statusBulletsValue.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : []
+  const planOutputBlocks = resultBlocks
+    ? Object.entries(resultBlocks).filter(([blockKey]) => blockKey !== 'statusBullets')
+    : []
   const assumptions = toJsonObject(plan?.assumptions)
 
   if (isLoading) {
@@ -128,11 +135,28 @@ export default function PlanDetailPage() {
       </div>
 
       <section className="space-y-4">
+        <h2 className="text-title-3 text-text-primary">Status bullets</h2>
+        <div className="glass-panel p-6">
+          {statusBullets.length > 0 ? (
+            <ul className="list-disc space-y-2 pl-5">
+              {statusBullets.map((bullet) => (
+                <li key={bullet} className="text-body text-text-primary">
+                  {bullet}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-body text-text-secondary">No status bullets are available for this plan yet.</p>
+          )}
+        </div>
+      </section>
+
+      <section className="space-y-4">
         <h2 className="text-title-3 text-text-primary">Plan output</h2>
 
-        {resultBlocks && Object.keys(resultBlocks).length > 0 ? (
+        {planOutputBlocks.length > 0 ? (
           <div className="grid gap-4">
-            {Object.entries(resultBlocks).map(([blockKey, blockValue]) => (
+            {planOutputBlocks.map(([blockKey, blockValue]) => (
               <article key={blockKey} className="glass-panel p-6">
                 <h3 className="text-headline text-text-primary">{formatBlockLabel(blockKey)}</h3>
                 <div className="mt-3">{renderJsonValue(blockValue)}</div>
