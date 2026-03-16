@@ -44,6 +44,15 @@ function getDateRange(mode: RangeMode, customFrom: string, customTo: string) {
   }
 }
 
+function formatPercent(value: string | number): string {
+  const numericValue = Number(value)
+  if (Number.isNaN(numericValue)) {
+    return '0.00%'
+  }
+
+  return `${numericValue.toFixed(2)}%`
+}
+
 export default function DashboardPage() {
   const [rangeMode, setRangeMode] = useState<RangeMode>('30d')
   const [customFrom, setCustomFrom] = useState('')
@@ -137,22 +146,42 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {statsLoading ? (
           <>
-            <div className="skeleton h-24" />
-            <div className="skeleton h-24" />
-            <div className="skeleton h-24" />
-            <div className="skeleton h-24" />
+            {Array.from({ length: 9 }).map((_, index) => (
+              <div key={`dashboard-stat-skeleton-${index}`} className="skeleton h-24" />
+            ))}
           </>
         ) : (
           <>
-            <StatCard label="Orders" value={stats?.orders ?? 0} />
             <StatCard
               label="Revenue"
               value={formatCurrency(Number(stats?.revenue ?? '0'))}
               accent="success"
             />
+            <StatCard label="Orders" value={stats?.orders ?? 0} />
             <StatCard label="Units" value={stats?.units ?? 0} accent="warning" />
             <StatCard
-              label="Low Stock Items"
+              label="Refunds Amount"
+              value={formatCurrency(Number(stats?.refundsAmount ?? '0'))}
+            />
+            <StatCard
+              label="Fees Amount"
+              value={formatCurrency(Number(stats?.feesAmount ?? '0'))}
+            />
+            <StatCard
+              label="Gross Margin Amount"
+              value={formatCurrency(Number(stats?.grossMarginAmount ?? '0'))}
+            />
+            <StatCard
+              label="Gross Margin Percent"
+              value={formatPercent(stats?.grossMarginPercent ?? '0')}
+            />
+            <StatCard
+              label="Stockouts Count"
+              value={stats?.stockoutsCount ?? 0}
+              accent={stats?.stockoutsCount ? 'destructive' : 'default'}
+            />
+            <StatCard
+              label="Low Stock Count"
               value={stats?.lowStockCount ?? 0}
               accent={stats?.lowStockCount ? 'destructive' : 'default'}
             />
