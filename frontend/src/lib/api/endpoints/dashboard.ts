@@ -5,6 +5,7 @@ export interface DashboardStats {
   orders: number
   units: number
   refundsAmount: string
+  refundRatePercent: string
   feesAmount: string
   grossMarginAmount: string
   grossMarginPercent: string

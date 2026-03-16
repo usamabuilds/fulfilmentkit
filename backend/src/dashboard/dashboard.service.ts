@@ -150,6 +150,10 @@ export class DashboardService {
           ? grossMarginAmount.div(revenue).mul(100)
           : new Prisma.Decimal('0');
 
+        const refundRatePercent = revenue.gt(0)
+          ? refundsAmount.div(revenue).mul(100)
+          : new Prisma.Decimal('0');
+
         // Alerts counts remain derived from raw inventory (stable)
         const inventoryRows = await this.prisma.inventory.findMany({
           where: { workspaceId },
@@ -170,6 +174,7 @@ export class DashboardService {
           units,
 
           refundsAmount: decimalToString(refundsAmount),
+          refundRatePercent: decimalToString(refundRatePercent),
           feesAmount: decimalToString(feesAmount),
 
           cogsAmount: decimalToString(cogsAmount),
@@ -260,6 +265,10 @@ export class DashboardService {
       ? grossMarginAmount.div(revenue).mul(100)
       : new Prisma.Decimal('0');
 
+    const refundRatePercent = revenue.gt(0)
+      ? refundsAmount.div(revenue).mul(100)
+      : new Prisma.Decimal('0');
+
     let stockoutsCount = 0;
     let lowStockCount = 0;
 
@@ -274,6 +283,7 @@ export class DashboardService {
       units,
 
       refundsAmount: decimalToString(refundsAmount),
+      refundRatePercent: decimalToString(refundRatePercent),
       feesAmount: decimalToString(feesAmount),
 
       cogsAmount: decimalToString(cogsAmount),

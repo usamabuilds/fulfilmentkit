@@ -82,6 +82,7 @@ export default function DashboardPage() {
     stats?.orders,
     stats?.units,
     stats?.refundsAmount,
+    stats?.refundRatePercent,
     stats?.feesAmount,
     stats?.grossMarginAmount,
     stats?.grossMarginPercent,
@@ -160,7 +161,7 @@ export default function DashboardPage() {
 
       {statsLoading ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 9 }).map((_, index) => (
+          {Array.from({ length: 10 }).map((_, index) => (
             <div key={`dashboard-stat-skeleton-${index}`} className="skeleton h-24" />
           ))}
         </div>
@@ -191,6 +192,10 @@ export default function DashboardPage() {
           <StatCard
             label="Refunds Amount"
             value={formatCurrency(Number(stats?.refundsAmount ?? '0'))}
+          />
+          <StatCard
+            label="Refund Rate"
+            value={formatPercent(stats?.refundRatePercent ?? '0')}
           />
           <StatCard
             label="Fees Amount"
