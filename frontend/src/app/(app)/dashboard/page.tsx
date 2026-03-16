@@ -30,17 +30,17 @@ export default function DashboardPage() {
           </>
         ) : (
           <>
-            <StatCard label="Total Orders" value={stats?.totalOrders ?? 0} />
+            <StatCard label="Orders" value={stats?.orders ?? 0} />
             <StatCard
-              label="Total Revenue"
-              value={formatCurrency(stats?.totalRevenue ?? 0)}
+              label="Revenue"
+              value={formatCurrency(Number(stats?.revenue ?? '0'))}
               accent="success"
             />
-            <StatCard label="Pending Orders" value={stats?.pendingOrders ?? 0} accent="warning" />
+            <StatCard label="Units" value={stats?.units ?? 0} accent="warning" />
             <StatCard
               label="Low Stock Items"
-              value={stats?.lowStockItems ?? 0}
-              accent={stats?.lowStockItems ? 'destructive' : 'default'}
+              value={stats?.lowStockCount ?? 0}
+              accent={stats?.lowStockCount ? 'destructive' : 'default'}
             />
           </>
         )}

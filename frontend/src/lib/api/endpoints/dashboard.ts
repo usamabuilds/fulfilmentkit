@@ -1,10 +1,15 @@
 import { apiGet } from '@/lib/api/client'
 
 export interface DashboardStats {
-  totalOrders: number
-  totalRevenue: number
-  pendingOrders: number
-  lowStockItems: number
+  revenue: string
+  orders: number
+  units: number
+  refundsAmount: string
+  feesAmount: string
+  grossMarginAmount: string
+  grossMarginPercent: string
+  stockoutsCount: number
+  lowStockCount: number
 }
 
 export const dashboardApi = {
