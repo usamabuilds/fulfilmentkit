@@ -19,6 +19,13 @@ type PlanTopRisk = {
   timeToBreak: RiskTimeToBreak
 }
 
+type PlanOpportunity = {
+  title: string
+  impact: string
+  why: string
+  evidenceSummary: string | null
+}
+
 function isRiskSeverity(value: unknown): value is RiskSeverity {
   return value === 'low' || value === 'medium' || value === 'high'
 }
@@ -66,6 +73,28 @@ function toPlanTopRisk(value: unknown): PlanTopRisk | null {
   }
 }
 
+function toPlanOpportunity(value: unknown): PlanOpportunity | null {
+  const obj = toJsonObject(value)
+  if (!obj) return null
+
+  const title = obj.title
+  const impact = obj.impact
+  const why = obj.why
+  const evidenceObj = toJsonObject(obj.evidence)
+  const evidenceSummary = evidenceObj?.summary
+
+  if (typeof title !== 'string' || typeof impact !== 'string' || typeof why !== 'string') {
+    return null
+  }
+
+  return {
+    title,
+    impact,
+    why,
+    evidenceSummary: typeof evidenceSummary === 'string' ? evidenceSummary : null,
+  }
+}
+
 function renderTopRisks(value: JsonValue): JSX.Element {
   if (!Array.isArray(value)) {
     return renderJsonValue(value)
@@ -91,6 +120,37 @@ function renderTopRisks(value: JsonValue): JSX.Element {
             </span>
           </div>
           <p className="mt-2 text-body text-text-secondary">{risk.why}</p>
+        </article>
+      ))}
+    </div>
+  )
+}
+
+function renderOpportunities(value: JsonValue | undefined): JSX.Element {
+  if (!value || !Array.isArray(value)) {
+    return <p className="text-body text-text-secondary">No opportunities are available for this plan yet.</p>
+  }
+
+  const opportunities = value.map((item) => toPlanOpportunity(item)).filter((item): item is PlanOpportunity => item !== null)
+
+  if (opportunities.length === 0) {
+    return <p className="text-body text-text-secondary">No opportunities are available for this plan yet.</p>
+  }
+
+  return (
+    <div className="space-y-3">
+      {opportunities.map((opportunity) => (
+        <article key={`${opportunity.title}-${opportunity.impact}`} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className="text-subhead text-text-primary">{opportunity.title}</h4>
+            <span className="rounded-full bg-cyan-500/15 px-2 py-0.5 text-caption-2 uppercase tracking-wide text-cyan-200 ring-1 ring-cyan-500/40">
+              {opportunity.impact}
+            </span>
+          </div>
+          <p className="mt-2 text-body text-text-secondary">{opportunity.why}</p>
+          {opportunity.evidenceSummary ? (
+            <p className="mt-2 text-caption-1 text-text-tertiary">Evidence: {opportunity.evidenceSummary}</p>
+          ) : null}
         </article>
       ))}
     </div>
@@ -167,8 +227,9 @@ export default function PlanDetailPage() {
     ? statusBulletsValue.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : []
   const planOutputBlocks = resultBlocks
-    ? Object.entries(resultBlocks).filter(([blockKey]) => blockKey !== 'statusBullets')
+    ? Object.entries(resultBlocks).filter(([blockKey]) => blockKey !== 'statusBullets' && blockKey !== 'opportunities')
     : []
+  const opportunities = resultBlocks?.opportunities
   const assumptions = toJsonObject(plan?.assumptions)
 
   if (isLoading) {
@@ -238,6 +299,11 @@ export default function PlanDetailPage() {
             <p className="text-body text-text-secondary">No status bullets are available for this plan yet.</p>
           )}
         </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-title-3 text-text-primary">Opportunities</h2>
+        <div className="glass-panel p-6">{renderOpportunities(opportunities)}</div>
       </section>
 
       <section className="space-y-4">
