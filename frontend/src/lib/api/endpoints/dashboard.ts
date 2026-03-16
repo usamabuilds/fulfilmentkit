@@ -12,6 +12,19 @@ export interface DashboardStats {
   lowStockCount: number
 }
 
+export interface DashboardStatsParams {
+  from?: string
+  to?: string
+}
+
 export const dashboardApi = {
-  getStats: () => apiGet<DashboardStats>('/dashboard/summary'),
+  getStats: (params?: DashboardStatsParams) => {
+    const query = new URLSearchParams()
+    if (params?.from) query.set('from', params.from)
+    if (params?.to) query.set('to', params.to)
+
+    const queryString = query.toString()
+    const path = queryString ? `/dashboard/summary?${queryString}` : '/dashboard/summary'
+    return apiGet<DashboardStats>(path)
+  },
 }
