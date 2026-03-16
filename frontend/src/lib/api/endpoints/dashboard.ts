@@ -33,6 +33,24 @@ export interface DashboardTrends {
   points: DashboardTrendPoint[]
 }
 
+export type DashboardBreakdownBy = 'channel' | 'country' | 'sku'
+
+export interface DashboardBreakdownParams {
+  by: DashboardBreakdownBy
+  from?: string
+  to?: string
+}
+
+export interface DashboardBreakdownItem {
+  key: string
+  value: string
+  share: string
+}
+
+export interface DashboardBreakdown {
+  items: DashboardBreakdownItem[]
+}
+
 export const dashboardApi = {
   getStats: (params?: DashboardStatsParams) => {
     const query = new URLSearchParams()
@@ -53,5 +71,15 @@ export const dashboardApi = {
     const queryString = query.toString()
     const path = queryString ? `/dashboard/trends?${queryString}` : '/dashboard/trends'
     return apiGet<DashboardTrends>(path)
+  },
+  getBreakdown: (params: DashboardBreakdownParams) => {
+    const query = new URLSearchParams()
+    query.set('by', params.by)
+    if (params.from) query.set('from', params.from)
+    if (params.to) query.set('to', params.to)
+
+    const queryString = query.toString()
+    const path = queryString ? `/dashboard/breakdown?${queryString}` : '/dashboard/breakdown'
+    return apiGet<DashboardBreakdown>(path)
   },
 }
