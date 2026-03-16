@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import {
   dashboardApi,
+  type DashboardBreakdownParams,
   type DashboardStatsParams,
   type DashboardTrendsParams,
 } from '@/lib/api/endpoints/dashboard'
@@ -29,6 +30,24 @@ export function useDashboardTrends(params: DashboardTrendsParams, enabled = true
       params.to ?? null,
     ],
     queryFn: () => dashboardApi.getTrends(params),
+    enabled: !!workspaceId && enabled,
+  })
+}
+
+
+export function useDashboardBreakdown(params: DashboardBreakdownParams, enabled = true) {
+  const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
+
+  return useQuery({
+    queryKey: [
+      'dashboard',
+      'breakdown',
+      workspaceId,
+      params.by,
+      params.from ?? null,
+      params.to ?? null,
+    ],
+    queryFn: () => dashboardApi.getBreakdown(params),
     enabled: !!workspaceId && enabled,
   })
 }
