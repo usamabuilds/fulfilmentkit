@@ -717,6 +717,144 @@ export class DashboardService {
 
     const alerts: DashboardAlert[] = [];
 
+    const marginThresholdPercent = new Prisma.Decimal('20');
+    const criticalThresholdPercent = new Prisma.Decimal('10');
+    const warningDropThreshold = new Prisma.Decimal('5');
+    const criticalDropThreshold = new Prisma.Decimal('10');
+
+    const computeGrossMarginPercent = async (from?: Date, to?: Date) => {
+      const dayWhere: any = { workspaceId };
+      if (from || to) {
+        dayWhere.day = {};
+        if (from) dayWhere.day.gte = startOfDayUtc(from);
+        if (to) dayWhere.day.lte = startOfDayUtc(to);
+      }
+
+      const metricRows = await this.prisma.dailyMetric.findMany({
+        where: dayWhere,
+        select: {
+          revenue: true,
+          grossMarginAmount: true,
+        },
+      });
+
+      if (metricRows.length > 0) {
+        const revenue = metricRows.reduce(
+          (acc, r) => acc.plus(new Prisma.Decimal(decimalToString(r.revenue))),
+          new Prisma.Decimal('0'),
+        );
+
+        const grossMarginAmount = metricRows.reduce(
+          (acc, r) => acc.plus(new Prisma.Decimal(decimalToString(r.grossMarginAmount))),
+          new Prisma.Decimal('0'),
+        );
+
+        const grossMarginPercent = revenue.gt(0)
+          ? grossMarginAmount.div(revenue).mul(100)
+          : new Prisma.Decimal('0');
+
+        return {
+          grossMarginPercent,
+          source: 'dailyMetric' as const,
+        };
+      }
+
+      const orderWhere: any = { workspaceId };
+      const feeWhere: any = { workspaceId };
+
+      if (from || to) {
+        orderWhere.orderedAt = {};
+        feeWhere.createdAt = {};
+        if (from) {
+          orderWhere.orderedAt.gte = startOfDayUtc(from);
+          feeWhere.createdAt.gte = startOfDayUtc(from);
+        }
+        if (to) {
+          orderWhere.orderedAt.lte = toEndOfDayUtc(to);
+          feeWhere.createdAt.lte = toEndOfDayUtc(to);
+        }
+      }
+
+      const [ordersAgg, feesAgg] = await Promise.all([
+        this.prisma.order.aggregate({
+          where: orderWhere,
+          _sum: {
+            total: true,
+          },
+        }),
+        this.prisma.fee.aggregate({
+          where: feeWhere,
+          _sum: {
+            amount: true,
+          },
+        }),
+      ]);
+
+      const revenue = new Prisma.Decimal(decimalToString(ordersAgg._sum.total ?? '0'));
+      const feesAmount = new Prisma.Decimal(decimalToString(feesAgg._sum.amount ?? '0'));
+      const grossMarginAmount = revenue.minus(feesAmount);
+      const grossMarginPercent = revenue.gt(0)
+        ? grossMarginAmount.div(revenue).mul(100)
+        : new Prisma.Decimal('0');
+
+      return {
+        grossMarginPercent,
+        source: 'orders' as const,
+      };
+    };
+
+    const currentMargin = await computeGrossMarginPercent(rangeFrom, rangeTo);
+
+    // v1 deterministic margin leakage rule:
+    // - Warning when gross margin percent is below 20% over the selected range.
+    // - Critical when gross margin percent is below 10%, or drops by >=10pp vs previous equivalent window.
+    // - Warning when gross margin drops by >=5pp vs previous equivalent window.
+    let previousMarginPercent: Prisma.Decimal | null = null;
+    let marginDrop: Prisma.Decimal | null = null;
+
+    if (rangeFrom && rangeTo) {
+      const windowDays = Math.max(
+        1,
+        Math.ceil((rangeTo.getTime() - rangeFrom.getTime()) / (24 * 60 * 60 * 1000)),
+      );
+      const prevTo = addDaysUtc(startOfDayUtc(rangeFrom), -1);
+      const prevFrom = addDaysUtc(prevTo, -windowDays + 1);
+
+      const previousMargin = await computeGrossMarginPercent(prevFrom, prevTo);
+      previousMarginPercent = previousMargin.grossMarginPercent;
+      marginDrop = previousMarginPercent.minus(currentMargin.grossMarginPercent);
+    }
+
+    const belowWarning = currentMargin.grossMarginPercent.lt(marginThresholdPercent);
+    const belowCritical = currentMargin.grossMarginPercent.lt(criticalThresholdPercent);
+    const dropWarning = marginDrop ? marginDrop.gte(warningDropThreshold) : false;
+    const dropCritical = marginDrop ? marginDrop.gte(criticalDropThreshold) : false;
+
+    if (belowWarning || dropWarning) {
+      const level: AlertLevel = belowCritical || dropCritical ? 'critical' : 'warning';
+
+      const evidenceParts = [
+        `current gross margin ${decimalToString(currentMargin.grossMarginPercent)}%`,
+        `threshold ${decimalToString(marginThresholdPercent)}%`,
+      ];
+
+      if (previousMarginPercent && marginDrop) {
+        evidenceParts.push(
+          `previous window ${decimalToString(previousMarginPercent)}%`,
+          `drop ${decimalToString(marginDrop)}pp`,
+        );
+      }
+
+      evidenceParts.push(`source ${currentMargin.source}`);
+
+      alerts.push({
+        type: 'margin_leakage',
+        level,
+        title: 'Margin leakage detected',
+        message: evidenceParts.join('; '),
+      });
+    }
+
     if (stockoutsCount > 0) {
       alerts.push({
         type: 'stockouts',
@@ -736,14 +874,6 @@ export class DashboardService {
         count: lowStockCount,
       });
     }
-
-    // Placeholders allowed v1
-    alerts.push({
-      type: 'margin_leakage',
-      level: 'info',
-      title: 'Margin leakage monitoring',
-      message: 'Margin leakage detection will be enabled in a later milestone',
-    });
 
     alerts.push({
       type: 'refund_spikes',
