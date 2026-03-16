@@ -55,9 +55,7 @@ function decimalToString(v: any) {
 }
 
 function toEndOfDayUtc(d: Date) {
-  return new Date(
-    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999),
-  );
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
 }
 
 function startOfDayUtc(d: Date) {
@@ -148,8 +146,9 @@ export class DashboardService {
           new Prisma.Decimal('0'),
         );
 
-        const grossMarginPercent =
-          revenue.gt(0) ? grossMarginAmount.div(revenue).mul(100) : new Prisma.Decimal('0');
+        const grossMarginPercent = revenue.gt(0)
+          ? grossMarginAmount.div(revenue).mul(100)
+          : new Prisma.Decimal('0');
 
         // Alerts counts remain derived from raw inventory (stable)
         const inventoryRows = await this.prisma.inventory.findMany({
@@ -257,8 +256,9 @@ export class DashboardService {
     const cogsAmount = new Prisma.Decimal('0');
 
     const grossMarginAmount = revenue.minus(cogsAmount).minus(feesAmount);
-    const grossMarginPercent =
-      revenue.gt(0) ? grossMarginAmount.div(revenue).mul(100) : new Prisma.Decimal('0');
+    const grossMarginPercent = revenue.gt(0)
+      ? grossMarginAmount.div(revenue).mul(100)
+      : new Prisma.Decimal('0');
 
     let stockoutsCount = 0;
     let lowStockCount = 0;
@@ -291,8 +291,7 @@ export class DashboardService {
     const rangeFrom = args.from ? startOfDayUtc(args.from) : startOfDayUtc(new Date());
     const rangeTo = args.to ? toEndOfDayUtc(args.to) : toEndOfDayUtc(new Date());
 
-    const bucketStart =
-      groupBy === 'week' ? startOfWeekUtc(rangeFrom) : startOfDayUtc(rangeFrom);
+    const bucketStart = groupBy === 'week' ? startOfWeekUtc(rangeFrom) : startOfDayUtc(rangeFrom);
 
     const points: Array<{ date: string; value: string | number }> = [];
 
@@ -343,9 +342,7 @@ export class DashboardService {
 
       for (const r of dailyRows) {
         const keyDate =
-          groupBy === 'week'
-            ? isoDate(startOfWeekUtc(r.day))
-            : isoDate(startOfDayUtc(r.day));
+          groupBy === 'week' ? isoDate(startOfWeekUtc(r.day)) : isoDate(startOfDayUtc(r.day));
 
         const cur = bucketSums.get(keyDate) ?? {
           orders: 0,
@@ -500,8 +497,8 @@ export class DashboardService {
         groupBy === 'week'
           ? isoDate(startOfWeekUtc(r.createdAt))
           : isoDate(startOfDayUtc(r.createdAt));
-        const cur = sums.get(keyDate) ?? new Prisma.Decimal('0');
-        sums.set(keyDate, cur.plus(new Prisma.Decimal(decimalToString(r.amount))));
+      const cur = sums.get(keyDate) ?? new Prisma.Decimal('0');
+      sums.set(keyDate, cur.plus(new Prisma.Decimal(decimalToString(r.amount))));
     }
 
     for (const [dateKey, v] of sums.entries()) {
@@ -540,6 +537,46 @@ export class DashboardService {
 
       for (const o of orders) {
         const key = o.channel ?? 'unknown';
+        const v = new Prisma.Decimal(decimalToString(o.total));
+        const cur = totals.get(key) ?? new Prisma.Decimal('0');
+        totals.set(key, cur.plus(v));
+        grand = grand.plus(v);
+      }
+
+      const items = Array.from(totals.entries())
+        .map(([key, value]) => {
+          const share = grand.gt(0) ? value.div(grand).mul(100) : new Prisma.Decimal('0');
+          return {
+            key,
+            value: decimalToString(value),
+            share: decimalToString(share),
+          };
+        })
+        .sort((a, b) => Number(b.value) - Number(a.value));
+
+      return { items };
+    }
+
+    if (by === 'country') {
+      const orders = (await (this.prisma.order as any).findMany({
+        where: {
+          workspaceId,
+          orderedAt: {
+            gte: rangeFrom,
+            lte: rangeTo,
+          },
+        },
+        select: {
+          shipCountryCode: true,
+          total: true,
+        },
+      })) as Array<{ shipCountryCode: string | null; total: Prisma.Decimal | string | number }>;
+
+      const totals = new Map<string, Prisma.Decimal>();
+      let grand = new Prisma.Decimal('0');
+
+      for (const o of orders) {
+        const key = o.shipCountryCode ?? 'unknown';
         const v = new Prisma.Decimal(decimalToString(o.total));
         const cur = totals.get(key) ?? new Prisma.Decimal('0');
         totals.set(key, cur.plus(v));
