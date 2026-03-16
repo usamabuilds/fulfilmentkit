@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useAiConversations, useCreateConversation } from '@/lib/hooks/useAi'
 import { cn } from '@/lib/utils/cn'
 import { formatDateTime } from '@/lib/utils/formatDate'
@@ -46,10 +47,10 @@ export default function AiPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {conversations.map((conv) => (
-            <div key={conv.id} className="glass-card p-5">
+            <Link key={conv.id} href={`/ai/${conv.id}`} className="glass-card block p-5 transition-colors hover:bg-white/10">
               <p className="text-headline text-text-primary">{conv.title}</p>
               <p className="mt-0.5 text-footnote text-text-tertiary">{formatDateTime(conv.createdAt)}</p>
-            </div>
+            </Link>
           ))}
         </div>
       )}

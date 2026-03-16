@@ -5,10 +5,9 @@ import { AiToolsetService } from './ai-toolset.service';
 import { Roles } from '../common/auth/roles.decorator';
 import { apiResponse } from '../common/utils/api-response';
 
-const AddMessagesSchema = z.object({
-  userMessage: z.string().min(1),
-  assistantMessage: z.string().min(1),
-  metadata: z.any().optional(),
+const AddUserMessageSchema = z.object({
+  content: z.string().min(1),
+  metadata: z.unknown().optional(),
 });
 
 const LogToolCallSchema = z.object({
@@ -194,17 +193,17 @@ export class AiController {
     return apiResponse(result.data);
   }
 
-  // ✅ Store user message + assistant message
+  // ✅ Store user message and trigger assistant reply
   @Roles('VIEWER', 'ADMIN', 'OWNER')
   @Post('conversations/:id/messages')
-  async addMessages(
+  async addUserMessage(
     @Req() req: any,
     @Param('id') conversationId: string,
     @Body() body: any,
   ) {
     const workspaceId = req.workspaceId as string;
-    const parsed = AddMessagesSchema.parse(body);
-    const result = await this.aiService.addMessages(workspaceId, conversationId, parsed);
+    const parsed = AddUserMessageSchema.parse(body);
+    const result = await this.aiService.addUserMessage(workspaceId, conversationId, parsed);
     return apiResponse(result.data);
   }
 

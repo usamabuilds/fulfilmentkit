@@ -2,18 +2,17 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { toListResponse } from '../common/utils/list-response';
 
-type AddMessagesArgs = {
-  userMessage: string;
-  assistantMessage: string;
-  metadata?: any;
+type AddUserMessageArgs = {
+  content: string;
+  metadata?: unknown;
 };
 
 type LogToolCallArgs = {
   messageId: string; // usually the assistant message id
   provider: string; // e.g. "openai"
   toolName: string; // e.g. "web.search" or "calculator"
-  arguments: any; // JSON
-  result?: any; // JSON (optional)
+  arguments: unknown; // JSON
+  result?: unknown; // JSON (optional)
 };
 
 @Injectable()
@@ -106,13 +105,13 @@ export class AiService {
     };
   }
 
-  // ✅ Store user message + assistant message
-  async addMessages(
+  // ✅ Store user message, then append assistant reply
+  async addUserMessage(
     workspaceId: string,
     conversationId: string,
-    args: AddMessagesArgs,
+    args: AddUserMessageArgs,
   ) {
-    const { userMessage, assistantMessage, metadata } = args;
+    const { content, metadata } = args;
 
     // ensure conversation exists + workspace scoped
     const convo = await this.prisma.aiConversation.findFirst({
@@ -124,40 +123,42 @@ export class AiService {
       throw new NotFoundException('Conversation not found');
     }
 
-    // create both messages in one transaction
-    const [userMsg, assistantMsg] = await this.prisma.$transaction([
-      this.prisma.aiMessage.create({
-        data: {
-          workspaceId,
-          conversationId,
-          role: 'user',
-          content: userMessage,
-          metadata: metadata ?? null,
-        },
-        select: { id: true, role: true, content: true, createdAt: true },
-      }),
-      this.prisma.aiMessage.create({
-        data: {
-          workspaceId,
-          conversationId,
-          role: 'assistant',
-          content: assistantMessage,
-          metadata: metadata ?? null,
-        },
-        select: { id: true, role: true, content: true, createdAt: true },
-      }),
-    ]);
+    const userMsg = await this.prisma.aiMessage.create({
+      data: {
+        workspaceId,
+        conversationId,
+        role: 'user',
+        content,
+        metadata: metadata ?? null,
+      },
+      select: { id: true, role: true, content: true, metadata: true, createdAt: true },
+    });
+
+    const assistantReply = this.generateAssistantReply(content);
+
+    await this.prisma.aiMessage.create({
+      data: {
+        workspaceId,
+        conversationId,
+        role: 'assistant',
+        content: assistantReply,
+      },
+    });
 
     return {
       success: true,
       data: {
-        conversationId,
-        created: [
-          { ...userMsg, createdAt: userMsg.createdAt.toISOString() },
-          { ...assistantMsg, createdAt: assistantMsg.createdAt.toISOString() },
-        ],
+        id: userMsg.id,
+        role: userMsg.role,
+        content: userMsg.content,
+        metadata: userMsg.metadata,
+        createdAt: userMsg.createdAt.toISOString(),
       },
     };
+  }
+
+  private generateAssistantReply(userContent: string): string {
+    return `Thanks for your message: "${userContent}". I am preparing a fuller response.`;
   }
 
   // ✅ Log tool call (AiToolCall) with params/result JSON

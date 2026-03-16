@@ -1,4 +1,4 @@
-import { apiGetList, apiPost } from '@/lib/api/client'
+import { apiGet, apiGetList, apiPost } from '@/lib/api/client'
 
 export interface AiMessage {
   id: string
@@ -13,6 +13,12 @@ export interface AiConversation {
   createdAt: string
 }
 
+export interface AiConversationMessages {
+  id: string
+  title: string
+  messages: AiMessage[]
+}
+
 export interface AiToolResult {
   id: string
   tool: string
@@ -24,7 +30,7 @@ export interface AiToolResult {
 export const aiApi = {
   listConversations: () => apiGetList<AiConversation>('/ai/conversations'),
 
-  getMessages: (conversationId: string) => apiGetList<AiMessage>(`/ai/conversations/${conversationId}/messages`),
+  getMessages: (conversationId: string) => apiGet<AiConversationMessages>(`/ai/conversations/${conversationId}`),
 
   sendMessage: (conversationId: string, content: string) =>
     apiPost<AiMessage>(`/ai/conversations/${conversationId}/messages`, { content }),
