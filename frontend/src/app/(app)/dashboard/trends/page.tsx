@@ -6,6 +6,10 @@ import { useDashboardTrends } from '@/lib/hooks/useDashboard'
 type TrendMetric = 'revenue' | 'orders' | 'margin' | 'refunds' | 'fees'
 type TrendGrouping = 'day' | 'week'
 type RangeMode = '7d' | '30d' | '90d' | 'custom'
+type NormalizedTrendPoint = {
+  date: string
+  value: number
+}
 
 const metricOptions: Array<{ label: string; value: TrendMetric }> = [
   { label: 'Revenue', value: 'revenue' },
@@ -49,6 +53,115 @@ function getDateRange(mode: RangeMode, customFrom: string, customTo: string) {
   }
 }
 
+function formatTickLabel(dateValue: string, grouping: TrendGrouping): string {
+  const date = new Date(`${dateValue}T00:00:00`)
+  if (Number.isNaN(date.getTime())) {
+    return dateValue
+  }
+
+  if (grouping === 'week') {
+    return `Wk of ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+  }
+
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function formatAxisValue(value: number): string {
+  if (value >= 1000000) {
+    return `${(value / 1000000).toFixed(1)}M`
+  }
+
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}K`
+  }
+
+  return value.toFixed(0)
+}
+
+interface TrendsLineChartProps {
+  points: NormalizedTrendPoint[]
+  groupBy: TrendGrouping
+}
+
+function TrendsLineChart({ points, groupBy }: TrendsLineChartProps) {
+  const chartWidth = 860
+  const chartHeight = 280
+  const padding = { top: 16, right: 16, bottom: 52, left: 56 }
+  const graphWidth = chartWidth - padding.left - padding.right
+  const graphHeight = chartHeight - padding.top - padding.bottom
+  const maxValue = Math.max(...points.map((point) => point.value), 0)
+  const minValue = Math.min(...points.map((point) => point.value), 0)
+  const valueRange = maxValue - minValue || 1
+  const yTickCount = 4
+  const xStep = points.length > 1 ? graphWidth / (points.length - 1) : 0
+
+  const plottedPoints = points.map((point, index) => {
+    const x = padding.left + xStep * index
+    const y = padding.top + ((maxValue - point.value) / valueRange) * graphHeight
+    return { ...point, x, y }
+  })
+
+  const polyline = plottedPoints.map((point) => `${point.x},${point.y}`).join(' ')
+  const xTickIndexes = Array.from(new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])).filter(
+    (index) => index >= 0,
+  )
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="w-full overflow-x-auto rounded-[12px] bg-black/5 p-3">
+        <svg
+          viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+          className="h-[280px] min-w-[720px] w-full"
+          role="img"
+          aria-label="Trend chart"
+        >
+          {Array.from({ length: yTickCount + 1 }, (_, idx) => {
+            const ratio = idx / yTickCount
+            const y = padding.top + ratio * graphHeight
+            const tickValue = maxValue - ratio * valueRange
+            return (
+              <g key={`y-${idx}`}>
+                <line x1={padding.left} x2={chartWidth - padding.right} y1={y} y2={y} className="stroke-black/10" />
+                <text x={padding.left - 10} y={y + 4} textAnchor="end" className="fill-text-secondary text-[11px]">
+                  {formatAxisValue(tickValue)}
+                </text>
+              </g>
+            )
+          })}
+
+          {polyline ? <polyline points={polyline} fill="none" className="stroke-black/60" strokeWidth="2.5" /> : null}
+
+          {plottedPoints.map((point) => (
+            <circle key={`${point.date}-${point.value}`} cx={point.x} cy={point.y} r="3" className="fill-black/70" />
+          ))}
+
+          {xTickIndexes.map((index) => {
+            const point = plottedPoints[index]
+            if (!point) {
+              return null
+            }
+
+            return (
+              <text key={`x-${point.date}`} x={point.x} y={chartHeight - 14} textAnchor="middle" className="fill-text-secondary text-[11px]">
+                {formatTickLabel(point.date, groupBy)}
+              </text>
+            )
+          })}
+        </svg>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+        {points.map((point) => (
+          <div key={`${point.date}-${point.value}`} className="rounded-[10px] bg-black/5 px-3 py-2">
+            <p className="text-subhead text-text-primary">{formatTickLabel(point.date, groupBy)}</p>
+            <p className="text-body text-text-secondary">{point.value.toLocaleString()}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function DashboardTrendsPage() {
   const [metric, setMetric] = useState<TrendMetric>('revenue')
   const [groupBy, setGroupBy] = useState<TrendGrouping>('day')
@@ -73,6 +186,16 @@ export default function DashboardTrendsPage() {
 
   const { data, isLoading, isFetching } = useDashboardTrends(queryParams, effectiveRange.isValid)
   const trendPoints = data?.data?.points ?? []
+  const normalizedTrendPoints = useMemo<NormalizedTrendPoint[]>(
+    () =>
+      trendPoints
+        .map((point) => ({
+          date: point.date,
+          value: typeof point.value === 'number' ? point.value : Number.parseFloat(point.value),
+        }))
+        .filter((point) => Number.isFinite(point.value)),
+    [trendPoints],
+  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -178,19 +301,17 @@ export default function DashboardTrendsPage() {
             <div className="skeleton h-6 w-48" />
             <div className="skeleton h-32 w-full" />
           </div>
-        ) : trendPoints.length === 0 ? (
-          <p className="text-body text-text-secondary">No trend data available for this selection.</p>
+        ) : normalizedTrendPoints.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 rounded-[12px] bg-black/5 px-6 py-12 text-center">
+            <p className="text-subhead text-text-primary">No trend points yet</p>
+            <p className="text-body text-text-secondary">
+              Try a different metric or date range to populate the chart.
+            </p>
+          </div>
         ) : (
           <div className="flex flex-col gap-3">
-            <p className="text-subhead text-text-secondary">{trendPoints.length} points loaded.</p>
-            <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
-              {trendPoints.map((point) => (
-                <li key={`${point.date}-${String(point.value)}`} className="rounded-[10px] bg-black/5 px-3 py-2">
-                  <p className="text-subhead text-text-primary">{point.date}</p>
-                  <p className="text-body text-text-secondary">{point.value}</p>
-                </li>
-              ))}
-            </ul>
+            <p className="text-subhead text-text-secondary">{normalizedTrendPoints.length} points loaded.</p>
+            <TrendsLineChart points={normalizedTrendPoints} groupBy={groupBy} />
           </div>
         )}
       </div>
