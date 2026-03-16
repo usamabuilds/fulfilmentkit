@@ -184,8 +184,8 @@ export default function DashboardTrendsPage() {
     [metric, groupBy, effectiveRange.from, effectiveRange.to],
   )
 
-  const { data, isLoading, isFetching } = useDashboardTrends(queryParams, effectiveRange.isValid)
-  const trendPoints = data?.data?.points ?? []
+  const { data, isLoading, isFetching, isError, refetch } = useDashboardTrends(queryParams, effectiveRange.isValid)
+  const trendPoints = Array.isArray(data?.data?.points) ? data.data.points : []
   const normalizedTrendPoints = useMemo<NormalizedTrendPoint[]>(
     () =>
       trendPoints
@@ -196,6 +196,10 @@ export default function DashboardTrendsPage() {
         .filter((point) => Number.isFinite(point.value)),
     [trendPoints],
   )
+  const hasLoadedResponse = Boolean(data)
+  const isInitialLoading = isLoading && !hasLoadedResponse
+  const hasTrendPoints = normalizedTrendPoints.length > 0
+  const showEmptyState = hasLoadedResponse && !isError && !hasTrendPoints
 
   return (
     <div className="flex flex-col gap-6">
@@ -295,23 +299,53 @@ export default function DashboardTrendsPage() {
         ) : null}
       </div>
 
+      {isError ? (
+        <div className="glass-panel p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-subhead text-text-primary">We couldn&apos;t refresh trends right now.</p>
+            <p className="text-body text-text-secondary">Showing any previously loaded data below. Try again in a moment.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              void refetch()
+            }}
+            className="rounded-[10px] bg-black/10 px-4 py-2 text-subhead text-text-primary transition-all hover:bg-black/15"
+          >
+            {isFetching ? 'Retrying...' : 'Retry'}
+          </button>
+        </div>
+      ) : null}
+
       <div className="glass-panel p-6">
-        {isLoading || isFetching ? (
-          <div className="flex flex-col gap-2">
+        {isInitialLoading ? (
+          <div className="flex flex-col gap-3">
             <div className="skeleton h-6 w-48" />
             <div className="skeleton h-32 w-full" />
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={`trends-point-skeleton-${index}`} className="skeleton h-14" />
+              ))}
+            </div>
           </div>
-        ) : normalizedTrendPoints.length === 0 ? (
+        ) : showEmptyState ? (
           <div className="flex flex-col items-center justify-center gap-2 rounded-[12px] bg-black/5 px-6 py-12 text-center">
             <p className="text-subhead text-text-primary">No trend points yet</p>
             <p className="text-body text-text-secondary">
-              Try a different metric or date range to populate the chart.
+              We couldn&apos;t find any data points for this selection. Try a different metric or date range.
             </p>
           </div>
-        ) : (
+        ) : hasTrendPoints ? (
           <div className="flex flex-col gap-3">
-            <p className="text-subhead text-text-secondary">{normalizedTrendPoints.length} points loaded.</p>
+            <p className="text-subhead text-text-secondary">
+              {normalizedTrendPoints.length} points loaded{isFetching ? ' • refreshing...' : '.'}
+            </p>
             <TrendsLineChart points={normalizedTrendPoints} groupBy={groupBy} />
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-2 rounded-[12px] bg-black/5 px-6 py-12 text-center">
+            <p className="text-subhead text-text-primary">Choose a valid date range to load trends</p>
+            <p className="text-body text-text-secondary">Once the range is valid, trends will appear automatically.</p>
           </div>
         )}
       </div>
