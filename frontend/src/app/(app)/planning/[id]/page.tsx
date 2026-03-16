@@ -32,6 +32,13 @@ type PlanNextDay = {
   expectedOutcome: string
 }
 
+type AssumptionHighlights = {
+  dateRange: JsonValue | null
+  dataScope: JsonValue | null
+  compareRangeLogic: JsonValue | null
+  explicitExclusions: JsonValue | null
+}
+
 function isRiskSeverity(value: unknown): value is RiskSeverity {
   return value === 'low' || value === 'medium' || value === 'high'
 }
@@ -218,6 +225,26 @@ function renderNext7DaysPlan(value: JsonValue | undefined): JSX.Element {
   )
 }
 
+function getFirstDefinedField(source: JsonObject, keys: string[]): JsonValue | null {
+  for (const key of keys) {
+    const value = source[key]
+    if (value !== undefined && value !== null) {
+      return value
+    }
+  }
+
+  return null
+}
+
+function getAssumptionHighlights(assumptions: JsonObject): AssumptionHighlights {
+  return {
+    dateRange: getFirstDefinedField(assumptions, ['dateRange', 'date_range', 'range']),
+    dataScope: getFirstDefinedField(assumptions, ['dataScope', 'data_scope', 'scope']),
+    compareRangeLogic: getFirstDefinedField(assumptions, ['compareRangeLogic', 'compare_range_logic', 'comparisonLogic']),
+    explicitExclusions: getFirstDefinedField(assumptions, ['explicitExclusions', 'exclusions', 'excludedItems']),
+  }
+}
+
 function toJsonObject(value: unknown): JsonObject | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null
@@ -289,12 +316,13 @@ export default function PlanDetailPage() {
     : []
   const planOutputBlocks = resultBlocks
     ? Object.entries(resultBlocks).filter(
-      ([blockKey]) => blockKey !== 'statusBullets' && blockKey !== 'opportunities' && blockKey !== 'next7DaysPlan',
+      ([blockKey]) => blockKey !== 'statusBullets' && blockKey !== 'opportunities' && blockKey !== 'next7DaysPlan' && blockKey !== 'assumptions',
     )
     : []
   const opportunities = resultBlocks?.opportunities
   const next7DaysPlan = resultBlocks?.next7DaysPlan
-  const assumptions = toJsonObject(plan?.assumptions)
+  const assumptions = toJsonObject(plan?.assumptions) ?? toJsonObject(resultBlocks?.assumptions)
+  const assumptionHighlights = assumptions ? getAssumptionHighlights(assumptions) : null
 
   if (isLoading) {
     return (
@@ -398,7 +426,39 @@ export default function PlanDetailPage() {
         <h2 className="text-title-3 text-text-primary">Assumptions</h2>
         <div className="glass-panel p-6">
           {assumptions ? (
-            renderJsonValue(assumptions)
+            <details className="group rounded-2xl border border-white/10 bg-white/5 p-4">
+              <summary className="cursor-pointer list-none text-subhead text-text-primary">
+                View assumptions and data framing details
+              </summary>
+              <div className="mt-4 space-y-4">
+                <div className="space-y-3">
+                  <h3 className="text-subhead text-text-secondary">Key assumptions</h3>
+                  <dl className="space-y-3">
+                    <div>
+                      <dt className="text-caption-1 uppercase tracking-wide text-text-tertiary">Date range</dt>
+                      <dd className="mt-1">{assumptionHighlights?.dateRange ? renderJsonValue(assumptionHighlights.dateRange) : <p className="text-body text-text-secondary">Not specified.</p>}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-caption-1 uppercase tracking-wide text-text-tertiary">Data scope</dt>
+                      <dd className="mt-1">{assumptionHighlights?.dataScope ? renderJsonValue(assumptionHighlights.dataScope) : <p className="text-body text-text-secondary">Not specified.</p>}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-caption-1 uppercase tracking-wide text-text-tertiary">Compare range logic</dt>
+                      <dd className="mt-1">{assumptionHighlights?.compareRangeLogic ? renderJsonValue(assumptionHighlights.compareRangeLogic) : <p className="text-body text-text-secondary">Not specified.</p>}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-caption-1 uppercase tracking-wide text-text-tertiary">Explicit exclusions</dt>
+                      <dd className="mt-1">{assumptionHighlights?.explicitExclusions ? renderJsonValue(assumptionHighlights.explicitExclusions) : <p className="text-body text-text-secondary">Not specified.</p>}</dd>
+                    </div>
+                  </dl>
+                </div>
+
+                <div className="border-t border-white/10 pt-4">
+                  <h3 className="text-subhead text-text-secondary">All assumption fields</h3>
+                  <div className="mt-2">{renderJsonValue(assumptions)}</div>
+                </div>
+              </div>
+            </details>
           ) : (
             <p className="text-body text-text-secondary">No assumptions were provided for this plan.</p>
           )}
