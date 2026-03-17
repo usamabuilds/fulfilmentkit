@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { normalizeUpdatedUserPreferencesResponse, normalizeUserPreferencesResponse } from './endpoints/settings'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { resolveUnauthorizedResolution } from './client'
 
@@ -20,6 +21,68 @@ function runIntegrationTests() {
   assert.equal(missingWorkspaceHeaderResolution.shouldHandle, true)
   assert.equal(missingWorkspaceHeaderResolution.redirectPath, '/workspaces')
   assert.equal(missingWorkspaceHeaderResolution.reason, 'missing_workspace_header')
+
+  const normalizedPreferences = normalizeUserPreferencesResponse({
+    preferences: {
+      timezone: 'Europe/London',
+      locale: 'en-GB',
+      defaultCurrency: 'GBP',
+      planningCadence: 'biweekly',
+    },
+  })
+  assert.deepEqual(normalizedPreferences, {
+    preferences: {
+      timezone: 'Europe/London',
+      locale: 'en-GB',
+      defaultCurrency: 'GBP',
+      planningCadence: 'biweekly',
+    },
+  })
+
+  const normalizedMalformedPreferences = normalizeUserPreferencesResponse({
+    preferences: {
+      timezone: 123,
+      locale: null,
+      defaultCurrency: true,
+      planningCadence: ['weekly'],
+    },
+  })
+  assert.deepEqual(normalizedMalformedPreferences, {
+    preferences: {
+      timezone: null,
+      locale: null,
+      defaultCurrency: null,
+      planningCadence: null,
+    },
+  })
+
+  const normalizedUpdatedPreferences = normalizeUpdatedUserPreferencesResponse({
+    updated: true,
+    preferences: {
+      timezone: 'UTC',
+      locale: 'en-US',
+      defaultCurrency: 'USD',
+      planningCadence: 'weekly',
+    },
+  })
+  assert.deepEqual(normalizedUpdatedPreferences, {
+    updated: true,
+    preferences: {
+      timezone: 'UTC',
+      locale: 'en-US',
+      defaultCurrency: 'USD',
+      planningCadence: 'weekly',
+    },
+  })
+
+  const normalizedMalformedUpdatedPreferences = normalizeUpdatedUserPreferencesResponse({
+    updated: 'yes',
+    preferences: 'invalid',
+  })
+  assert.deepEqual(normalizedMalformedUpdatedPreferences, {
+    updated: false,
+    preferences: null,
+  })
 }
 
 runIntegrationTests()

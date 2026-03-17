@@ -1,15 +1,42 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { OrderStatusBadge } from '@/components/modules/orders/OrderStatusBadge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PageSkeleton } from '@/components/ui/PageSkeleton'
 import { useOrders } from '@/lib/hooks/useOrders'
+import { useMyPreferences } from '@/lib/hooks/useSettings'
 import { formatCurrency } from '@/lib/utils/formatCurrency'
 import { formatDate } from '@/lib/utils/formatDate'
 
 const PAGE_SIZE = 20
+
+
+function toInputDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function getDefaultDateRangeForCadence(cadence: string | null): { from: string; to: string } {
+  const toDate = new Date()
+  const fromDate = new Date(toDate)
+
+  if (cadence === 'weekly') {
+    fromDate.setDate(toDate.getDate() - 7)
+  } else if (cadence === 'biweekly') {
+    fromDate.setDate(toDate.getDate() - 14)
+  } else {
+    fromDate.setDate(toDate.getDate() - 30)
+  }
+
+  return {
+    from: toInputDate(fromDate),
+    to: toInputDate(toDate),
+  }
+}
 
 function parseAmount(value: string): number {
   const parsed = Number.parseFloat(value)
@@ -22,6 +49,23 @@ export default function OrdersPage() {
   const [status, setStatus] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  const preferencesQuery = useMyPreferences()
+
+
+  useEffect(() => {
+    if (fromDate || toDate) {
+      return
+    }
+
+    const cadence = preferencesQuery.data?.data.preferences?.planningCadence
+    if (cadence !== 'weekly' && cadence !== 'biweekly' && cadence !== 'monthly') {
+      return
+    }
+
+    const defaults = getDefaultDateRangeForCadence(cadence)
+    setFromDate(defaults.from)
+    setToDate(defaults.to)
+  }, [fromDate, preferencesQuery.data, toDate])
 
   const queryParams = useMemo(
     () => ({

@@ -144,6 +144,43 @@ function assertRemovedContract(payload: unknown): asserts payload is RemoveWorks
   }
 }
 
+
+export function normalizeUserPreferences(preferences: unknown): UserPreferences | null {
+  if (typeof preferences !== 'object' || preferences === null) {
+    return null
+  }
+
+  const candidate = preferences as Record<string, unknown>
+
+  return {
+    timezone: typeof candidate.timezone === 'string' ? candidate.timezone : null,
+    locale: typeof candidate.locale === 'string' ? candidate.locale : null,
+    defaultCurrency: typeof candidate.defaultCurrency === 'string' ? candidate.defaultCurrency : null,
+    planningCadence: typeof candidate.planningCadence === 'string' ? candidate.planningCadence : null,
+  }
+}
+
+export function normalizeUserPreferencesResponse(payload: unknown): UserPreferencesResponse {
+  if (typeof payload !== 'object' || payload === null) {
+    return { preferences: null }
+  }
+
+  const candidate = payload as Record<string, unknown>
+  return { preferences: normalizeUserPreferences(candidate.preferences) }
+}
+
+export function normalizeUpdatedUserPreferencesResponse(payload: unknown): UpdateUserPreferencesResponse {
+  if (typeof payload !== 'object' || payload === null) {
+    return { updated: false, preferences: null }
+  }
+
+  const candidate = payload as Record<string, unknown>
+  return {
+    updated: typeof candidate.updated === 'boolean' ? candidate.updated : false,
+    preferences: normalizeUserPreferences(candidate.preferences),
+  }
+}
+
 function assertWorkspaceRoleContract(role: unknown): asserts role is WorkspaceRoleDefinition {
   if (typeof role !== 'object' || role === null) {
     throw new Error('Invalid role payload: expected object')
@@ -168,10 +205,15 @@ export const settingsApi = {
   updateWorkspaceOnboardingSettings: (dto: WorkspaceOnboardingSettingsDto) =>
     apiPatch<WorkspaceSettings>('/settings', dto),
 
-  getMyPreferences: () => apiGet<UserPreferencesResponse>('/me/preferences'),
+  getMyPreferences: async (): Promise<{ data: UserPreferencesResponse }> => {
+    const response = await apiGet<unknown>('/me/preferences')
+    return { ...response, data: normalizeUserPreferencesResponse(response.data) }
+  },
 
-  updateMyPreferences: (dto: UpdateUserPreferencesDto) =>
-    apiPatch<UpdateUserPreferencesResponse>('/me/preferences', dto),
+  updateMyPreferences: async (dto: UpdateUserPreferencesDto): Promise<{ data: UpdateUserPreferencesResponse }> => {
+    const response = await apiPatch<unknown>('/me/preferences', dto)
+    return { ...response, data: normalizeUpdatedUserPreferencesResponse(response.data) }
+  },
 
   listMembers: async (): Promise<ApiListResponse<WorkspaceMember>> => {
     const response = await apiGetList<unknown>('/settings/members')

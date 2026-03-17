@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import {
   settingsApi,
   type CreateWorkspaceRoleDto,
@@ -9,6 +10,7 @@ import {
   type WorkspaceOnboardingSettingsDto,
 } from '@/lib/api/endpoints/settings'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
+import { usePreferencesStore } from '@/lib/store/preferencesStore'
 
 const settingsKeys = {
   workspace: (workspaceId?: string) => ['settings', 'workspace', workspaceId] as const,
@@ -59,18 +61,30 @@ export function useUpdateWorkspaceOnboardingSettings() {
   })
 }
 export function useMyPreferences() {
-  return useQuery({
+  const setPreferences = usePreferencesStore((state) => state.setPreferences)
+
+  const query = useQuery({
     queryKey: settingsKeys.preferences,
     queryFn: () => settingsApi.getMyPreferences(),
   })
+
+  useEffect(() => {
+    if (query.data) {
+      setPreferences(query.data.data.preferences)
+    }
+  }, [query.data, setPreferences])
+
+  return query
 }
 
 export function useUpdateMyPreferences() {
   const queryClient = useQueryClient()
+  const setPreferences = usePreferencesStore((state) => state.setPreferences)
 
   return useMutation({
     mutationFn: (dto: UpdateUserPreferencesDto) => settingsApi.updateMyPreferences(dto),
-    onSuccess: () => {
+    onSuccess: (response) => {
+      setPreferences(response.data.preferences)
       queryClient.invalidateQueries({ queryKey: settingsKeys.preferences })
     },
   })

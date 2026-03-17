@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useDashboardBreakdown } from '@/lib/hooks/useDashboard'
+import { formatCurrency } from '@/lib/utils/formatCurrency'
 
 type BreakdownBy = 'channel' | 'country' | 'sku'
 type RangeMode = '30d' | '90d' | 'custom'
@@ -38,20 +39,6 @@ function getDateRange(mode: RangeMode, customFrom: string, customTo: string) {
     to: formatDate(toDate),
     isValid: true,
   }
-}
-
-function formatCurrency(value: string): string {
-  const amount = Number(value)
-  if (Number.isNaN(amount)) {
-    return '$0.00'
-  }
-
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount)
 }
 
 function formatShare(share: string): string {
@@ -205,7 +192,7 @@ export default function DashboardBreakdownPage() {
                 <div key={`${item.key}-${item.value}`} className="rounded-[12px] bg-black/5 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-subhead text-text-primary">{toBucketLabel(item.key)}</p>
-                    <p className="text-body text-text-secondary">{formatCurrency(item.value)}</p>
+                    <p className="text-body text-text-secondary">{formatCurrency(Number(item.value))}</p>
                   </div>
                   <p className="text-footnote text-text-secondary mt-1">Revenue share: {formatShare(item.share)}</p>
                 </div>
