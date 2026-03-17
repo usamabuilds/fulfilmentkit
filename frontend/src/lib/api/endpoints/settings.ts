@@ -41,6 +41,10 @@ export interface UpdateWorkspaceMemberRoleDto {
   roleDefinitionId?: string
 }
 
+export interface RemoveWorkspaceMemberResponse {
+  removed: boolean
+}
+
 export interface CreateWorkspaceRoleDto {
   name: string
   description?: string | null
@@ -95,6 +99,18 @@ function assertWorkspaceMemberContract(member: unknown): asserts member is Works
   }
 }
 
+function assertRemovedContract(payload: unknown): asserts payload is RemoveWorkspaceMemberResponse {
+  if (typeof payload !== 'object' || payload === null) {
+    throw new Error('Invalid remove member payload: expected object')
+  }
+
+  const candidate = payload as Record<string, unknown>
+
+  if (typeof candidate.removed !== 'boolean') {
+    throw new Error('Invalid remove member payload: missing removed flag')
+  }
+}
+
 function assertWorkspaceRoleContract(role: unknown): asserts role is WorkspaceRoleDefinition {
   if (typeof role !== 'object' || role === null) {
     throw new Error('Invalid role payload: expected object')
@@ -131,6 +147,12 @@ export const settingsApi = {
   updateMemberRole: async (userId: string, dto: UpdateWorkspaceMemberRoleDto): Promise<WorkspaceMember> => {
     const response = await apiPatch<unknown>(`/settings/members/${userId}/role`, dto)
     assertWorkspaceMemberContract(response.data)
+    return response.data
+  },
+
+  removeMember: async (userId: string): Promise<RemoveWorkspaceMemberResponse> => {
+    const response = await apiDelete<unknown>(`/settings/members/${userId}`)
+    assertRemovedContract(response.data)
     return response.data
   },
 

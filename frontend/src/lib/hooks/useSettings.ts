@@ -19,12 +19,13 @@ export function useWorkspaceSettings() {
 
 export function useUpdateWorkspace() {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
+  const workspaceRole = useWorkspaceStore((s) => s.workspace?.role)
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace)
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (dto: { name: string }) => settingsApi.updateWorkspace(dto),
     onSuccess: (res) => {
-      setWorkspace({ id: res.data.id, name: res.data.name })
+      setWorkspace({ id: res.data.id, name: res.data.name, role: workspaceRole ?? null })
       queryClient.invalidateQueries({ queryKey: ['settings', 'workspace', workspaceId] })
     },
   })
@@ -51,15 +52,6 @@ export function useInviteWorkspaceMember() {
   })
 }
 
-export function useWorkspaceRoles() {
-  const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
-  return useQuery({
-    queryKey: ['settings', 'roles', workspaceId],
-    queryFn: () => settingsApi.listRoles(),
-    enabled: !!workspaceId,
-  })
-}
-
 export function useUpdateWorkspaceMemberRole() {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
   const queryClient = useQueryClient()
@@ -70,6 +62,27 @@ export function useUpdateWorkspaceMemberRole() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings', 'members', workspaceId] })
     },
+  })
+}
+
+export function useRemoveWorkspaceMember() {
+  const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (userId: string) => settingsApi.removeMember(userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', 'members', workspaceId] })
+    },
+  })
+}
+
+export function useWorkspaceRoles() {
+  const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
+  return useQuery({
+    queryKey: ['settings', 'roles', workspaceId],
+    queryFn: () => settingsApi.listRoles(),
+    enabled: !!workspaceId,
   })
 }
 

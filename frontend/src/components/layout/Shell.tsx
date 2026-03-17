@@ -39,6 +39,7 @@ export function Shell({ children }: ShellProps) {
   const user = useAuthStore((s) => s.user)
   const workspace = useWorkspaceStore((s) => s.workspace)
   const setAuth = useAuthStore((s) => s.setAuth)
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace)
   const activeModule = modules.find((m) => pathname.startsWith(m.basePath))
 
   useEffect(() => {
@@ -71,6 +72,10 @@ export function Shell({ children }: ShellProps) {
             router.replace('/login')
           }
           return
+        }
+
+        if (workspace && workspace.id === validatedWorkspaceId && workspace.role !== validatedWorkspaceRole) {
+          setWorkspace({ ...workspace, role: validatedWorkspaceRole })
         }
 
         if (!validatedUser.onboardingCompleted) {
@@ -107,7 +112,7 @@ export function Shell({ children }: ShellProps) {
     return () => {
       cancelled = true
     }
-  }, [jwt, router, setAuth, user?.email, validationKey, workspace])
+  }, [jwt, router, setAuth, setWorkspace, user?.email, validationKey, workspace])
 
   useEffect(() => {
     const unsubscribeAuth = useAuthStore.subscribe((state) => {
