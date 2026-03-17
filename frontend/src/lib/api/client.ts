@@ -1,5 +1,6 @@
 import { useAuthStore } from '../store/authStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
+import { usePreferencesStore } from '../store/preferencesStore'
 import type { ApiListResponse, ApiResponse } from './types'
 
 const getBaseUrl = () => {
@@ -67,6 +68,7 @@ function handleUnauthorized(statusCode: number) {
 
   useAuthStore.getState().clearAuth()
   useWorkspaceStore.getState().clearWorkspace()
+  usePreferencesStore.getState().clearPreferences()
   redirectTo(resolution.redirectPath)
 }
 

@@ -1,8 +1,8 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useMemo, useState, type FormEvent } from 'react'
-import { useUpdateWorkspaceOnboardingSettings, type WorkspaceOnboardingSettingsDto } from '@/lib/hooks/useSettings'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useMyPreferences, useUpdateWorkspaceOnboardingSettings, type WorkspaceOnboardingSettingsDto } from '@/lib/hooks/useSettings'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 
 const TIMEZONE_OPTIONS = [
@@ -38,6 +38,7 @@ export default function OnboardingWorkspacePage() {
   const router = useRouter()
   const workspace = useWorkspaceStore((state) => state.workspace)
   const updateWorkspaceOnboardingSettings = useUpdateWorkspaceOnboardingSettings()
+  const preferencesQuery = useMyPreferences()
 
   const [formValues, setFormValues] = useState<WorkspaceOnboardingSettingsDto>({
     name: workspace?.name ?? '',
@@ -49,6 +50,24 @@ export default function OnboardingWorkspacePage() {
   const [formError, setFormError] = useState<string | null>(null)
 
   const trimmedWorkspaceName = useMemo(() => formValues.name.trim(), [formValues.name])
+
+  useEffect(() => {
+    const preferences = preferencesQuery.data?.data.preferences
+    if (!preferences) {
+      return
+    }
+
+    setFormValues((current) => ({
+      ...current,
+      timezone: preferences.timezone ?? current.timezone,
+      locale: preferences.locale ?? current.locale,
+      defaultCurrency: preferences.defaultCurrency ?? current.defaultCurrency,
+      planningCadence:
+        preferences.planningCadence === 'weekly' || preferences.planningCadence === 'biweekly' || preferences.planningCadence === 'monthly'
+          ? preferences.planningCadence
+          : current.planningCadence,
+    }))
+  }, [preferencesQuery.data])
 
   function updateField<Key extends keyof WorkspaceOnboardingSettingsDto>(field: Key, value: WorkspaceOnboardingSettingsDto[Key]) {
     setFormValues((current) => ({ ...current, [field]: value }))

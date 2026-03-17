@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils/cn'
 import { useAuthStore } from '@/lib/store/authStore'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 import { apiGet } from '@/lib/api/client'
+import { useMyPreferences } from '@/lib/hooks/useSettings'
 
 interface ShellProps {
   children: React.ReactNode
@@ -41,6 +42,7 @@ export function Shell({ children }: ShellProps) {
   const setAuth = useAuthStore((s) => s.setAuth)
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace)
   const activeModule = modules.find((m) => pathname.startsWith(m.basePath))
+  useMyPreferences()
 
   useEffect(() => {
     if (!jwt) {
