@@ -56,7 +56,7 @@ export class RolesService {
         await this.prisma.$executeRaw`
           INSERT INTO "WorkspaceRoleDefinition" ("id", "workspaceId", "name", "description", "permissions", "isSystem", "legacyRole", "createdAt", "updatedAt")
           VALUES (
-            lower(substr(md5(random()::text || clock_timestamp()::text), 1, 8) || '-' || substr(md5(random()::text || clock_timestamp()::text), 9, 4) || '-' || substr(md5(random()::text || clock_timestamp()::text), 13, 4) || '-' || substr(md5(random()::text || clock_timestamp()::text), 17, 4) || '-' || substr(md5(random()::text || clock_timestamp()::text), 21, 12)),
+            gen_random_uuid()::text,
             ${workspaceId},
             ${LEGACY_ROLE_NAMES[role]},
             ${`Default ${role.toLowerCase()} role`},
@@ -87,7 +87,7 @@ export class RolesService {
     try {
       const created = await this.prisma.$queryRaw<RoleRow[]>`
         INSERT INTO "WorkspaceRoleDefinition" ("id", "workspaceId", "name", "description", "permissions", "isSystem", "createdAt", "updatedAt")
-        VALUES (lower(substr(md5(random()::text || clock_timestamp()::text), 1, 8) || '-' || substr(md5(random()::text || clock_timestamp()::text), 9, 4) || '-' || substr(md5(random()::text || clock_timestamp()::text), 13, 4) || '-' || substr(md5(random()::text || clock_timestamp()::text), 17, 4) || '-' || substr(md5(random()::text || clock_timestamp()::text), 21, 12)), ${input.workspaceId}, ${input.name}, ${input.description ?? null}, ${JSON.stringify(permissions)}::jsonb, false, NOW(), NOW())
+        VALUES (gen_random_uuid()::text, ${input.workspaceId}, ${input.name}, ${input.description ?? null}, ${JSON.stringify(permissions)}::jsonb, false, NOW(), NOW())
         RETURNING "id", "name", "description", "permissions", "isSystem", "legacyRole", "createdAt", "updatedAt"
       `;
       return created[0];
