@@ -3,16 +3,24 @@ import {
   settingsApi,
   type CreateWorkspaceRoleDto,
   type InviteWorkspaceMemberDto,
+  type UpdateUserPreferencesDto,
   type UpdateWorkspaceMemberRoleDto,
   type UpdateWorkspaceRoleDto,
   type WorkspaceOnboardingSettingsDto,
 } from '@/lib/api/endpoints/settings'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 
+const settingsKeys = {
+  workspace: (workspaceId?: string) => ['settings', 'workspace', workspaceId] as const,
+  preferences: ['settings', 'preferences'] as const,
+  members: (workspaceId?: string) => ['settings', 'members', workspaceId] as const,
+  roles: (workspaceId?: string) => ['settings', 'roles', workspaceId] as const,
+}
+
 export function useWorkspaceSettings() {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
   return useQuery({
-    queryKey: ['settings', 'workspace', workspaceId],
+    queryKey: settingsKeys.workspace(workspaceId),
     queryFn: () => settingsApi.getWorkspace(),
     enabled: !!workspaceId,
   })
@@ -27,7 +35,7 @@ export function useUpdateWorkspace() {
     mutationFn: (dto: { name: string }) => settingsApi.updateWorkspace(dto),
     onSuccess: (res) => {
       setWorkspace({ id: res.data.id, name: res.data.name, role: workspaceRole ?? null })
-      queryClient.invalidateQueries({ queryKey: ['settings', 'workspace', workspaceId] })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.workspace(workspaceId) })
     },
   })
 }
@@ -46,14 +54,32 @@ export function useUpdateWorkspaceOnboardingSettings() {
     mutationFn: (dto: WorkspaceOnboardingSettingsDto) => settingsApi.updateWorkspaceOnboardingSettings(dto),
     onSuccess: (res) => {
       setWorkspace({ id: res.data.id, name: res.data.name, role: workspaceRole ?? null })
-      queryClient.invalidateQueries({ queryKey: ['settings', 'workspace', workspaceId] })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.workspace(workspaceId) })
     },
   })
 }
+export function useMyPreferences() {
+  return useQuery({
+    queryKey: settingsKeys.preferences,
+    queryFn: () => settingsApi.getMyPreferences(),
+  })
+}
+
+export function useUpdateMyPreferences() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (dto: UpdateUserPreferencesDto) => settingsApi.updateMyPreferences(dto),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: settingsKeys.preferences })
+    },
+  })
+}
+
 export function useWorkspaceMembers() {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
   return useQuery({
-    queryKey: ['settings', 'members', workspaceId],
+    queryKey: settingsKeys.members(workspaceId),
     queryFn: () => settingsApi.listMembers(),
     enabled: !!workspaceId,
   })
@@ -66,7 +92,7 @@ export function useInviteWorkspaceMember() {
   return useMutation({
     mutationFn: (dto: InviteWorkspaceMemberDto) => settingsApi.inviteMember(dto),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings', 'members', workspaceId] })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.members(workspaceId) })
     },
   })
 }
@@ -79,7 +105,7 @@ export function useUpdateWorkspaceMemberRole() {
     mutationFn: ({ userId, dto }: { userId: string; dto: UpdateWorkspaceMemberRoleDto }) =>
       settingsApi.updateMemberRole(userId, dto),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings', 'members', workspaceId] })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.members(workspaceId) })
     },
   })
 }
@@ -91,7 +117,7 @@ export function useRemoveWorkspaceMember() {
   return useMutation({
     mutationFn: (userId: string) => settingsApi.removeMember(userId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings', 'members', workspaceId] })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.members(workspaceId) })
     },
   })
 }
@@ -99,7 +125,7 @@ export function useRemoveWorkspaceMember() {
 export function useWorkspaceRoles() {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
   return useQuery({
-    queryKey: ['settings', 'roles', workspaceId],
+    queryKey: settingsKeys.roles(workspaceId),
     queryFn: () => settingsApi.listRoles(),
     enabled: !!workspaceId,
   })
@@ -112,7 +138,7 @@ export function useCreateWorkspaceRole() {
   return useMutation({
     mutationFn: (dto: CreateWorkspaceRoleDto) => settingsApi.createRole(dto),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings', 'roles', workspaceId] })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.roles(workspaceId) })
     },
   })
 }
@@ -124,8 +150,8 @@ export function useUpdateWorkspaceRole() {
   return useMutation({
     mutationFn: ({ id, dto }: { id: string; dto: UpdateWorkspaceRoleDto }) => settingsApi.updateRole(id, dto),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings', 'roles', workspaceId] })
-      queryClient.invalidateQueries({ queryKey: ['settings', 'members', workspaceId] })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.roles(workspaceId) })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.members(workspaceId) })
     },
   })
 }
@@ -137,7 +163,7 @@ export function useDeleteWorkspaceRole() {
   return useMutation({
     mutationFn: (id: string) => settingsApi.deleteRole(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings', 'roles', workspaceId] })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.roles(workspaceId) })
     },
   })
 }

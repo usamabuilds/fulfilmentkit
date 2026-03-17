@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Req } from '@nestjs/common';
+import { z } from 'zod';
 import { PrismaService } from './prisma/prisma.service';
 import { apiResponse } from './utils/api-response';
 
@@ -31,6 +32,22 @@ type OnboardingCompleteBody = {
   defaultCurrency?: unknown;
   planningCadence?: unknown;
 };
+
+type UserPreferencesDto = {
+  timezone: string | null;
+  locale: string | null;
+  defaultCurrency: string | null;
+  planningCadence: string | null;
+};
+
+const PreferenceUpdateSchema = z.object({
+  timezone: z.string().trim().min(1).optional(),
+  locale: z.string().trim().min(1).optional(),
+  defaultCurrency: z.string().trim().min(1).optional(),
+  planningCadence: z.string().trim().min(1).optional(),
+});
+
+type PreferenceUpdateBody = z.infer<typeof PreferenceUpdateSchema>;
 
 function toOptionalString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
@@ -129,5 +146,55 @@ export class MeController {
         nextOnboardingStep: getNextOnboardingStep(updatedUser),
       },
     });
+  }
+
+  @Get('me/preferences')
+  async getPreferences(@Req() req: MeRequest) {
+    const authUserId = req.user?.id;
+
+    if (!authUserId) {
+      return apiResponse({ preferences: null });
+    }
+
+    const preferences = await (this.prisma as any).user.findUnique({
+      where: { id: authUserId },
+      select: {
+        timezone: true,
+        locale: true,
+        defaultCurrency: true,
+        planningCadence: true,
+      },
+    });
+
+    return apiResponse({ preferences });
+  }
+
+  @Patch('me/preferences')
+  async updatePreferences(@Req() req: MeRequest, @Body() body: unknown) {
+    const authUserId = req.user?.id;
+
+    if (!authUserId) {
+      return apiResponse({ updated: false, preferences: null });
+    }
+
+    const parsedBody: PreferenceUpdateBody = PreferenceUpdateSchema.parse(body ?? {});
+
+    const preferences: UserPreferencesDto = await (this.prisma as any).user.update({
+      where: { id: authUserId },
+      data: {
+        timezone: toOptionalString(parsedBody.timezone),
+        locale: toOptionalString(parsedBody.locale),
+        defaultCurrency: toOptionalString(parsedBody.defaultCurrency),
+        planningCadence: toOptionalString(parsedBody.planningCadence),
+      },
+      select: {
+        timezone: true,
+        locale: true,
+        defaultCurrency: true,
+        planningCadence: true,
+      },
+    });
+
+    return apiResponse({ updated: true, preferences });
   }
 }
