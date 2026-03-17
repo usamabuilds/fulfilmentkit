@@ -7,6 +7,10 @@ type NextOnboardingStep = 'verify-email' | 'complete-onboarding' | null;
 type MeUserDto = {
   id: string;
   email: string | null;
+  timezone: string | null;
+  locale: string | null;
+  defaultCurrency: string | null;
+  planningCadence: string | null;
   emailVerified: boolean;
   onboardingCompleted: boolean;
   nextOnboardingStep: NextOnboardingStep;
@@ -21,7 +25,22 @@ type MeRequest = {
   workspaceRole?: string;
 };
 
-function getNextOnboardingStep(user: Pick<MeUserDto, 'emailVerified' | 'onboardingCompleted'>): NextOnboardingStep {
+type OnboardingCompleteBody = {
+  timezone?: unknown;
+  locale?: unknown;
+  defaultCurrency?: unknown;
+  planningCadence?: unknown;
+};
+
+function toOptionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function getNextOnboardingStep(
+  user: Pick<MeUserDto, 'emailVerified' | 'onboardingCompleted'>,
+): NextOnboardingStep {
   if (!user.emailVerified) return 'verify-email';
   if (!user.onboardingCompleted) return 'complete-onboarding';
   return null;
@@ -46,6 +65,10 @@ export class MeController {
         select: {
           id: true,
           email: true,
+          timezone: true,
+          locale: true,
+          defaultCurrency: true,
+          planningCadence: true,
           emailVerified: true,
           onboardingCompleted: true,
         },
@@ -67,7 +90,10 @@ export class MeController {
   }
 
   @Post('onboarding/complete')
-  async completeOnboarding(@Req() req: MeRequest, @Body() _body: unknown) {
+  async completeOnboarding(
+    @Req() req: MeRequest,
+    @Body() body: OnboardingCompleteBody | undefined,
+  ) {
     const authUserId = req.user?.id;
 
     if (!authUserId) {
@@ -79,10 +105,18 @@ export class MeController {
       data: {
         onboardingCompleted: true,
         onboardingCompletedAt: new Date(),
+        timezone: toOptionalString(body?.timezone),
+        locale: toOptionalString(body?.locale),
+        defaultCurrency: toOptionalString(body?.defaultCurrency),
+        planningCadence: toOptionalString(body?.planningCadence),
       },
       select: {
         id: true,
         email: true,
+        timezone: true,
+        locale: true,
+        defaultCurrency: true,
+        planningCadence: true,
         emailVerified: true,
         onboardingCompleted: true,
       },

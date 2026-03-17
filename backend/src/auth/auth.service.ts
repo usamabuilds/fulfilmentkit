@@ -23,6 +23,10 @@ const RESEND_CODE_COOLDOWN_MS = 60_000;
 type AuthUser = {
   id: string;
   email: string | null;
+  timezone: string | null;
+  locale: string | null;
+  defaultCurrency: string | null;
+  planningCadence: string | null;
   emailVerified: boolean;
   onboardingCompleted: boolean;
 };
@@ -57,10 +61,9 @@ function toSelectedPlan(plan: string | undefined): string | undefined {
   return undefined;
 }
 
-function getNextOnboardingStep(user: Pick<AuthUser, 'emailVerified' | 'onboardingCompleted'>):
-  | 'verify-email'
-  | 'complete-onboarding'
-  | null {
+function getNextOnboardingStep(
+  user: Pick<AuthUser, 'emailVerified' | 'onboardingCompleted'>,
+): 'verify-email' | 'complete-onboarding' | null {
   if (!user.emailVerified) return 'verify-email';
   if (!user.onboardingCompleted) return 'complete-onboarding';
   return null;
@@ -122,6 +125,10 @@ export class AuthService {
       select: {
         id: true,
         email: true,
+        timezone: true,
+        locale: true,
+        defaultCurrency: true,
+        planningCadence: true,
         emailVerified: true,
         onboardingCompleted: true,
       },
@@ -136,6 +143,10 @@ export class AuthService {
       user: {
         id: updatedUser.id,
         email: updatedUser.email,
+        timezone: updatedUser.timezone,
+        locale: updatedUser.locale,
+        defaultCurrency: updatedUser.defaultCurrency,
+        planningCadence: updatedUser.planningCadence,
         emailVerified: updatedUser.emailVerified,
         onboardingCompleted: updatedUser.onboardingCompleted,
         nextOnboardingStep: getNextOnboardingStep(updatedUser),
@@ -154,6 +165,10 @@ export class AuthService {
       select: {
         id: true,
         email: true,
+        timezone: true,
+        locale: true,
+        defaultCurrency: true,
+        planningCadence: true,
         emailVerified: true,
         onboardingCompleted: true,
       },
@@ -176,7 +191,11 @@ export class AuthService {
     const candidateHash = hashVerificationCode(params.code);
     const now = new Date();
 
-    if (!verificationRecord || verificationRecord.codeHash !== candidateHash || verificationRecord.expiresAt <= now) {
+    if (
+      !verificationRecord ||
+      verificationRecord.codeHash !== candidateHash ||
+      verificationRecord.expiresAt <= now
+    ) {
       throw new UnauthorizedException('Invalid verification code');
     }
 
@@ -196,6 +215,10 @@ export class AuthService {
       select: {
         id: true,
         email: true,
+        timezone: true,
+        locale: true,
+        defaultCurrency: true,
+        planningCadence: true,
         emailVerified: true,
         onboardingCompleted: true,
       },
@@ -259,6 +282,10 @@ export class AuthService {
         id: true,
         email: true,
         passwordHash: true,
+        timezone: true,
+        locale: true,
+        defaultCurrency: true,
+        planningCadence: true,
         emailVerified: true,
         onboardingCompleted: true,
       },
@@ -342,6 +369,10 @@ export class AuthService {
       user: {
         id: user.id,
         email: user.email,
+        timezone: user.timezone,
+        locale: user.locale,
+        defaultCurrency: user.defaultCurrency,
+        planningCadence: user.planningCadence,
         emailVerified: user.emailVerified,
         onboardingCompleted: user.onboardingCompleted,
         nextOnboardingStep: getNextOnboardingStep(user),
