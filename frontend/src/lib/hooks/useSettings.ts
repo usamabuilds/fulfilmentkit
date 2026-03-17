@@ -5,6 +5,7 @@ import {
   type InviteWorkspaceMemberDto,
   type UpdateWorkspaceMemberRoleDto,
   type UpdateWorkspaceRoleDto,
+  type WorkspaceOnboardingSettingsDto,
 } from '@/lib/api/endpoints/settings'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 
@@ -31,6 +32,24 @@ export function useUpdateWorkspace() {
   })
 }
 
+
+
+export type { WorkspaceOnboardingSettingsDto }
+
+export function useUpdateWorkspaceOnboardingSettings() {
+  const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
+  const workspaceRole = useWorkspaceStore((s) => s.workspace?.role)
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace)
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (dto: WorkspaceOnboardingSettingsDto) => settingsApi.updateWorkspaceOnboardingSettings(dto),
+    onSuccess: (res) => {
+      setWorkspace({ id: res.data.id, name: res.data.name, role: workspaceRole ?? null })
+      queryClient.invalidateQueries({ queryKey: ['settings', 'workspace', workspaceId] })
+    },
+  })
+}
 export function useWorkspaceMembers() {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
   return useQuery({
