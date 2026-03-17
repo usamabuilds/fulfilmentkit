@@ -41,11 +41,14 @@ export default function ForecastPage() {
             <Link key={forecast.id} href={`/forecast/${forecast.id}`}>
               <div className="glass-card p-5 flex items-center justify-between">
                 <div>
-                  <p className="text-headline text-text-primary">{forecast.name}</p>
+                  <p className="text-headline text-text-primary">{forecast.level === 'SKU' ? 'SKU Forecast' : 'Workspace Forecast'}</p>
+                  <p className="text-footnote text-text-tertiary mt-0.5">
+                    {forecast.method} • {forecast.horizonDays} day horizon
+                  </p>
                   <p className="text-footnote text-text-tertiary mt-0.5">{formatDate(forecast.createdAt)}</p>
                 </div>
                 <span className="text-caption-2 px-2.5 py-1 rounded-full bg-black/5 text-text-secondary">
-                  {forecast.status}
+                  {forecast.level}
                 </span>
               </div>
             </Link>
