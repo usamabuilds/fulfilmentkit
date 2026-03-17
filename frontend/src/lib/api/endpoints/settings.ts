@@ -9,6 +9,17 @@ export interface WorkspaceSettings {
 
 export type LegacyWorkspaceRole = 'OWNER' | 'ADMIN' | 'VIEWER'
 
+
+export type PlanningCadence = 'weekly' | 'biweekly' | 'monthly'
+
+export interface WorkspaceOnboardingSettingsDto {
+  name: string
+  timezone: string
+  locale: string
+  defaultCurrency: string
+  planningCadence: PlanningCadence
+}
+
 export interface WorkspaceRoleDefinition {
   id: string
   name: string
@@ -131,6 +142,9 @@ export const settingsApi = {
   getWorkspace: () => apiGet<WorkspaceSettings>('/settings'),
 
   updateWorkspace: (dto: { name: string }) => apiPatch<WorkspaceSettings>('/settings', dto),
+
+  updateWorkspaceOnboardingSettings: (dto: WorkspaceOnboardingSettingsDto) =>
+    apiPatch<WorkspaceSettings>('/settings', dto),
 
   listMembers: async (): Promise<ApiListResponse<WorkspaceMember>> => {
     const response = await apiGetList<unknown>('/settings/members')
