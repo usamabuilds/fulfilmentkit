@@ -17,10 +17,14 @@ import { WorkspaceRole } from '../generated/prisma';
 const InviteMemberBodySchema = z.object({
   email: z.string().email().transform((value) => value.trim().toLowerCase()),
   role: z.nativeEnum(WorkspaceRole).optional().default(WorkspaceRole.VIEWER),
+  roleDefinitionId: z.string().uuid().optional(),
 });
 
 const UpdateMemberRoleBodySchema = z.object({
-  role: z.nativeEnum(WorkspaceRole),
+  role: z.nativeEnum(WorkspaceRole).optional(),
+  roleDefinitionId: z.string().uuid().optional(),
+}).refine((value) => value.role !== undefined || value.roleDefinitionId !== undefined, {
+  message: 'role or roleDefinitionId is required',
 });
 
 @Controller('settings/members')
@@ -44,6 +48,7 @@ export class SettingsMembersController {
       workspaceId,
       email: parsed.email,
       role: parsed.role,
+      roleDefinitionId: parsed.roleDefinitionId,
     });
 
     return apiResponse(result);
@@ -63,6 +68,7 @@ export class SettingsMembersController {
       workspaceId,
       userId,
       role: parsed.role,
+      roleDefinitionId: parsed.roleDefinitionId,
     });
 
     return apiResponse(result);

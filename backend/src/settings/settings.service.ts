@@ -4,19 +4,22 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { PrismaService } from '../common/prisma/prisma.service';
 import { WorkspaceRole } from '../generated/prisma';
+import { PrismaService } from '../common/prisma/prisma.service';
+import { RolesService } from '../roles/roles.service';
 
 type InviteMemberArgs = {
   workspaceId: string;
   email: string;
   role: WorkspaceRole;
+  roleDefinitionId?: string;
 };
 
 type UpdateMemberRoleArgs = {
   workspaceId: string;
   userId: string;
-  role: WorkspaceRole;
+  role?: WorkspaceRole;
+  roleDefinitionId?: string;
 };
 
 type RemoveMemberArgs = {
@@ -25,9 +28,58 @@ type RemoveMemberArgs = {
   actingUserId?: string;
 };
 
+type RoleDefinitionRow = {
+  id: string;
+  name: string;
+  permissions: unknown;
+  legacyRole: WorkspaceRole | null;
+};
+
 @Injectable()
 export class SettingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rolesService: RolesService,
+  ) {}
+
+  private async resolveRoleDefinition(args: {
+    workspaceId: string;
+    role?: WorkspaceRole;
+    roleDefinitionId?: string;
+  }) {
+    await this.rolesService.ensureDefaultRoleDefinitions(args.workspaceId);
+
+    if (args.roleDefinitionId) {
+      const rows = await this.prisma.$queryRaw<RoleDefinitionRow[]>`
+        SELECT "id", "name", "permissions", "legacyRole"
+        FROM "WorkspaceRoleDefinition"
+        WHERE "id" = ${args.roleDefinitionId} AND "workspaceId" = ${args.workspaceId}
+        LIMIT 1
+      `;
+
+      if (!rows[0]) {
+        throw new NotFoundException('Role definition not found');
+      }
+
+      return {
+        roleDefinitionId: rows[0].id,
+        role: rows[0].legacyRole ?? args.role ?? WorkspaceRole.VIEWER,
+      };
+    }
+
+    const selectedRole = args.role ?? WorkspaceRole.VIEWER;
+    const rows = await this.prisma.$queryRaw<RoleDefinitionRow[]>`
+      SELECT "id", "name", "permissions", "legacyRole"
+      FROM "WorkspaceRoleDefinition"
+      WHERE "workspaceId" = ${args.workspaceId} AND "legacyRole" = ${selectedRole}
+      LIMIT 1
+    `;
+
+    return {
+      roleDefinitionId: rows[0]?.id,
+      role: selectedRole,
+    };
+  }
 
   async getWorkspaceSettings(workspaceId: string) {
     const workspace = await this.prisma.workspace.findUnique({
@@ -50,45 +102,55 @@ export class SettingsService {
   async updateWorkspaceSettings(workspaceId: string, input: { name: string }) {
     const workspace = await this.prisma.workspace.update({
       where: { id: workspaceId },
-      data: {
-        name: input.name,
-      },
-      select: {
-        id: true,
-        name: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      data: { name: input.name },
+      select: { id: true, name: true, createdAt: true, updatedAt: true },
     });
 
     return workspace;
   }
 
   async listWorkspaceMembers(workspaceId: string) {
-    const members = await this.prisma.workspaceMember.findMany({
-      where: { workspaceId },
-      orderBy: [{ createdAt: 'asc' }],
-      select: {
-        userId: true,
-        role: true,
-        createdAt: true,
-        user: {
-          select: {
-            email: true,
-          },
-        },
-      },
-    });
+    await this.rolesService.ensureDefaultRoleDefinitions(workspaceId);
 
-    return members.map((member) => ({
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        userId: string;
+        email: string;
+        role: WorkspaceRole;
+        roleDefinitionId: string | null;
+        roleName: string | null;
+        permissions: unknown;
+        joinedAt: Date;
+      }>
+    >`
+      SELECT
+        wm."userId",
+        u."email",
+        wm."role",
+        wm."roleDefinitionId",
+        rd."name" AS "roleName",
+        rd."permissions" AS "permissions",
+        wm."createdAt" AS "joinedAt"
+      FROM "WorkspaceMember" wm
+      INNER JOIN "User" u ON u."id" = wm."userId"
+      LEFT JOIN "WorkspaceRoleDefinition" rd ON rd."id" = wm."roleDefinitionId"
+      WHERE wm."workspaceId" = ${workspaceId}
+      ORDER BY wm."createdAt" ASC
+    `;
+
+    return rows.map((member) => ({
       userId: member.userId,
-      email: member.user.email,
+      email: member.email,
       role: member.role,
-      joinedAt: member.createdAt,
+      roleDefinitionId: member.roleDefinitionId,
+      roleName: member.roleName ?? member.role,
+      permissions: Array.isArray(member.permissions) ? member.permissions : [],
+      joinedAt: member.joinedAt,
     }));
   }
 
   async inviteMember(args: InviteMemberArgs) {
+    const resolvedRole = await this.resolveRoleDefinition(args);
     const normalizedEmail = args.email.trim().toLowerCase();
 
     const existingUser = await this.prisma.user.findFirst({
@@ -125,7 +187,7 @@ export class SettingsService {
       data: {
         workspaceId: args.workspaceId,
         userId: user.id,
-        role: args.role,
+        role: resolvedRole.role,
       },
       select: {
         userId: true,
@@ -139,15 +201,37 @@ export class SettingsService {
       },
     });
 
+    if (resolvedRole.roleDefinitionId) {
+      await this.prisma.$executeRaw`
+        UPDATE "WorkspaceMember"
+        SET "roleDefinitionId" = ${resolvedRole.roleDefinitionId}
+        WHERE "workspaceId" = ${args.workspaceId} AND "userId" = ${user.id}
+      `;
+    }
+
+    const roleRows = resolvedRole.roleDefinitionId
+      ? await this.prisma.$queryRaw<RoleDefinitionRow[]>`
+          SELECT "id", "name", "permissions", "legacyRole"
+          FROM "WorkspaceRoleDefinition"
+          WHERE "id" = ${resolvedRole.roleDefinitionId}
+          LIMIT 1
+        `
+      : [];
+
     return {
       userId: membership.userId,
       email: membership.user.email,
       role: membership.role,
+      roleDefinitionId: roleRows[0]?.id ?? null,
+      roleName: roleRows[0]?.name ?? membership.role,
+      permissions: Array.isArray(roleRows[0]?.permissions) ? roleRows[0].permissions : [],
       joinedAt: membership.createdAt,
     };
   }
 
   async updateMemberRole(args: UpdateMemberRoleArgs) {
+    const resolvedRole = await this.resolveRoleDefinition(args);
+
     const membership = await this.prisma.workspaceMember.findUnique({
       where: {
         workspaceId_userId: {
@@ -169,9 +253,7 @@ export class SettingsService {
           userId: args.userId,
         },
       },
-      data: {
-        role: args.role,
-      },
+      data: { role: resolvedRole.role },
       select: {
         userId: true,
         role: true,
@@ -184,10 +266,30 @@ export class SettingsService {
       },
     });
 
+    if (resolvedRole.roleDefinitionId) {
+      await this.prisma.$executeRaw`
+        UPDATE "WorkspaceMember"
+        SET "roleDefinitionId" = ${resolvedRole.roleDefinitionId}
+        WHERE "workspaceId" = ${args.workspaceId} AND "userId" = ${args.userId}
+      `;
+    }
+
+    const roleRows = resolvedRole.roleDefinitionId
+      ? await this.prisma.$queryRaw<RoleDefinitionRow[]>`
+          SELECT "id", "name", "permissions", "legacyRole"
+          FROM "WorkspaceRoleDefinition"
+          WHERE "id" = ${resolvedRole.roleDefinitionId}
+          LIMIT 1
+        `
+      : [];
+
     return {
       userId: updated.userId,
       email: updated.user.email,
       role: updated.role,
+      roleDefinitionId: roleRows[0]?.id ?? null,
+      roleName: roleRows[0]?.name ?? updated.role,
+      permissions: Array.isArray(roleRows[0]?.permissions) ? roleRows[0].permissions : [],
       joinedAt: updated.createdAt,
     };
   }

@@ -63,6 +63,7 @@ model Workspace {
   webhookEvents   WebhookEvent[]
   forecasts       Forecast[]
   plans           Plan[]
+  roleDefinitions WorkspaceRoleDefinition[]
 }
 
 model User {
@@ -122,13 +123,34 @@ model WorkspaceMember {
   workspaceId String
   userId      String
   role        WorkspaceRole
+  roleDefinitionId String?
   createdAt   DateTime      @default(now())
   workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleDefinition WorkspaceRoleDefinition? @relation(fields: [roleDefinitionId], references: [id], onDelete: SetNull)
 
   @@unique([workspaceId, userId])
   @@index([workspaceId])
   @@index([userId])
+  @@index([roleDefinitionId])
+}
+
+model WorkspaceRoleDefinition {
+  id          String            @id @default(uuid())
+  workspaceId String
+  name        String
+  description String?
+  permissions Json
+  isSystem    Boolean           @default(false)
+  legacyRole  WorkspaceRole?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members     WorkspaceMember[]
+
+  @@unique([workspaceId, name])
+  @@unique([workspaceId, legacyRole])
+  @@index([workspaceId])
 }
 
 model AiConversation {

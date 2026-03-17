@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { settingsApi } from '@/lib/api/endpoints/settings'
+import { useWorkspaceRoles } from '@/lib/hooks/useSettings'
 import { useOnboardingStore } from '@/lib/store/onboardingStore'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 import { cn } from '@/lib/utils/cn'
@@ -14,6 +15,7 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 interface InviteRow {
   id: string
   value: string
+  roleDefinitionId: string
 }
 
 function normalizeEmail(value: string): string {
@@ -50,11 +52,23 @@ export default function OnboardingInvitePage() {
   const workspace = useWorkspaceStore((state) => state.workspace)
   const markInviteStepCompleted = useOnboardingStore((state) => state.markInviteStepCompleted)
 
-  const [rows, setRows] = useState<InviteRow[]>([{ id: crypto.randomUUID(), value: '' }])
+  const [rows, setRows] = useState<InviteRow[]>([{ id: crypto.randomUUID(), value: '', roleDefinitionId: '' }])
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [roleDefinitionId, setRoleDefinitionId] = useState<string>('')
+
+  const { data: rolesData } = useWorkspaceRoles()
+  const roles = rolesData?.data?.items ?? []
+
+  const fallbackRoleDefinitionId = roleDefinitionId || roles.find((role) => role.legacyRole === 'VIEWER')?.id || ''
 
   const rowValidation = useMemo(() => getRowValidation(rows), [rows])
+  const filledInviteRows = rows
+    .map((row) => ({
+      normalized: normalizeEmail(row.value),
+      roleDefinitionId: row.roleDefinitionId || fallbackRoleDefinitionId,
+    }))
+    .filter((row) => row.normalized.length > 0)
 
   const filledRows = rowValidation.filter((row) => !row.isEmpty)
   const hasDuplicateEmails = filledRows.some((row) => row.isDuplicate)
@@ -68,6 +82,7 @@ export default function OnboardingInvitePage() {
         return {
           ...row,
           value,
+          roleDefinitionId: row.roleDefinitionId || fallbackRoleDefinitionId,
         }
       })
     )
@@ -76,7 +91,7 @@ export default function OnboardingInvitePage() {
   function addRow() {
     setRows((currentRows) => {
       if (currentRows.length >= MAX_EMAIL_ROWS) return currentRows
-      return [...currentRows, { id: crypto.randomUUID(), value: '' }]
+      return [...currentRows, { id: crypto.randomUUID(), value: '', roleDefinitionId: fallbackRoleDefinitionId }]
     })
   }
 
@@ -131,8 +146,8 @@ export default function OnboardingInvitePage() {
     setSubmitting(true)
 
     try {
-      for (const row of filledRows) {
-        await settingsApi.inviteMember({ email: row.normalized })
+      for (const row of filledInviteRows) {
+        await settingsApi.inviteMember({ email: row.normalized, roleDefinitionId: row.roleDefinitionId || undefined })
       }
 
       await completeStepAndContinue()
@@ -188,6 +203,26 @@ export default function OnboardingInvitePage() {
                     Remove
                   </button>
                 </div>
+                <select
+                  value={row.roleDefinitionId || fallbackRoleDefinitionId}
+                  onChange={(event) => {
+                    const nextRoleId = event.target.value
+                    setRows((currentRows) =>
+                      currentRows.map((currentRow) =>
+                        currentRow.id === row.id ? { ...currentRow, roleDefinitionId: nextRoleId } : currentRow
+                      )
+                    )
+                    setRoleDefinitionId(nextRoleId)
+                  }}
+                  className="glass-input"
+                  disabled={submitting}
+                >
+                  {roles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.name}
+                    </option>
+                  ))}
+                </select>
                 {showInvalidFormat && <p className="text-caption text-destructive">Enter a valid email address.</p>}
                 {!showInvalidFormat && showDuplicate && (
                   <p className="text-caption text-destructive">Duplicate email address.</p>
