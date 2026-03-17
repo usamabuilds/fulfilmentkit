@@ -198,7 +198,7 @@ export default function ForecastDetailPage() {
           </div>
           <div>
             <dt className="text-subhead text-text-secondary">Method</dt>
-            <dd className="text-body text-text-primary mt-0.5">{forecast.method}</dd>
+            <dd className="text-body text-text-primary mt-0.5">{forecast.method?.trim() ? forecast.method : 'Not specified'}</dd>
           </div>
           <div>
             <dt className="text-subhead text-text-secondary">Horizon</dt>
