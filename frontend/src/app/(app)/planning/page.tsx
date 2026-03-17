@@ -6,6 +6,7 @@ import { formatDate } from '@/lib/utils/formatDate'
 
 type JsonValue = string | number | boolean | null | JsonObject | JsonValue[]
 type JsonObject = { [key: string]: JsonValue }
+type RiskSeverity = 'low' | 'medium' | 'high'
 
 function toJsonObject(value: unknown): JsonObject | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -41,6 +42,35 @@ function getNestedJsonValue(source: JsonObject | null, path: readonly string[]):
 
 function toFiniteNumber(value: JsonValue | null): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function isRiskSeverity(value: JsonValue | null): value is RiskSeverity {
+  return value === 'low' || value === 'medium' || value === 'high'
+}
+
+function getHeadlineRiskLabel(result: Record<string, unknown> | null): string {
+  const resultObject = toJsonObject(result)
+  const topRisks = getNestedJsonValue(resultObject, ['topRisks'])
+
+  if (!Array.isArray(topRisks) || topRisks.length === 0) {
+    return 'Headline risk: None'
+  }
+
+  for (const risk of topRisks) {
+    const riskObject = toJsonObject(risk)
+    if (!riskObject) {
+      continue
+    }
+
+    const title = getNestedJsonValue(riskObject, ['title'])
+    const severity = getNestedJsonValue(riskObject, ['severity'])
+
+    if (typeof title === 'string' && title.trim().length > 0 && isRiskSeverity(severity)) {
+      return `Headline risk: ${title.trim()} (${severity})`
+    }
+  }
+
+  return 'Headline risk: None'
 }
 
 function getHorizonDays(result: Record<string, unknown> | null): number | null {
@@ -141,16 +171,22 @@ export default function PlanningPage() {
         <div className="flex flex-col gap-3">
           {plans.map((plan) => {
             const horizonDays = getHorizonDays(plan.result)
+            const headlineRiskLabel = getHeadlineRiskLabel(plan.result)
 
             return (
               <Link key={plan.id} href={`/planning/${plan.id}`}>
-                <div className="glass-card flex items-center justify-between p-5">
-                  <div>
-                    <p className="text-headline text-text-primary">{plan.title ?? 'Untitled plan'}</p>
-                    <p className="mt-0.5 text-footnote text-text-tertiary">{formatDate(plan.createdAt)}</p>
-                    <p className="mt-0.5 text-footnote text-text-secondary">{formatHorizonLabel(horizonDays)}</p>
+                <div className="glass-card p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-headline text-text-primary">{plan.title ?? 'Untitled plan'}</p>
+                      <p className="mt-0.5 text-footnote text-text-tertiary">{formatDate(plan.createdAt)}</p>
+                    </div>
+                    <span className="rounded-full bg-black/5 px-2.5 py-1 text-caption-2 text-text-secondary">{plan.status}</span>
                   </div>
-                  <span className="rounded-full bg-black/5 px-2.5 py-1 text-caption-2 text-text-secondary">{plan.status}</span>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <p className="text-footnote text-text-secondary">{formatHorizonLabel(horizonDays)}</p>
+                    <p className="text-footnote text-text-secondary">{headlineRiskLabel}</p>
+                  </div>
                 </div>
               </Link>
             )
