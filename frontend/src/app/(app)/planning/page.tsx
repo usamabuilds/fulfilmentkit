@@ -4,6 +4,107 @@ import Link from 'next/link'
 import { usePlans } from '@/lib/hooks/usePlanning'
 import { formatDate } from '@/lib/utils/formatDate'
 
+type JsonValue = string | number | boolean | null | JsonObject | JsonValue[]
+type JsonObject = { [key: string]: JsonValue }
+
+function toJsonObject(value: unknown): JsonObject | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  return value as JsonObject
+}
+
+function getNestedJsonValue(source: JsonObject | null, path: readonly string[]): JsonValue | null {
+  if (!source || path.length === 0) {
+    return null
+  }
+
+  let current: JsonValue = source
+
+  for (const segment of path) {
+    const currentObject = toJsonObject(current)
+    if (!currentObject) {
+      return null
+    }
+
+    const next = currentObject[segment]
+    if (next === undefined || next === null) {
+      return null
+    }
+
+    current = next
+  }
+
+  return current
+}
+
+function toFiniteNumber(value: JsonValue | null): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function getHorizonDays(result: Record<string, unknown> | null): number | null {
+  const resultObject = toJsonObject(result)
+
+  const explicitHorizonPaths: ReadonlyArray<readonly string[]> = [
+    ['horizonDays'],
+    ['horizon_days'],
+    ['summary', 'horizonDays'],
+    ['summary', 'horizon_days'],
+    ['metadata', 'horizonDays'],
+  ]
+
+  for (const path of explicitHorizonPaths) {
+    const horizon = toFiniteNumber(getNestedJsonValue(resultObject, path))
+    if (horizon !== null) {
+      return horizon
+    }
+  }
+
+  const stockoutEvidencePaths: ReadonlyArray<readonly string[]> = [
+    ['stockoutEvidence', 'horizonDays'],
+    ['stockoutEvidence', 'daysUntilStockout'],
+    ['stockoutEvidence', 'timeToStockoutDays'],
+    ['evidence', 'stockout', 'horizonDays'],
+    ['evidence', 'stockout', 'daysUntilStockout'],
+  ]
+
+  for (const path of stockoutEvidencePaths) {
+    const horizon = toFiniteNumber(getNestedJsonValue(resultObject, path))
+    if (horizon !== null) {
+      return horizon
+    }
+  }
+
+  const topRisks = getNestedJsonValue(resultObject, ['topRisks'])
+  if (Array.isArray(topRisks)) {
+    for (const risk of topRisks) {
+      const riskObject = toJsonObject(risk)
+      if (!riskObject) {
+        continue
+      }
+
+      const title = getNestedJsonValue(riskObject, ['title'])
+      const isStockoutRisk = typeof title === 'string' && title.toLowerCase().includes('stockout')
+      if (!isStockoutRisk) {
+        continue
+      }
+
+      const timeToBreakDays = toFiniteNumber(getNestedJsonValue(riskObject, ['timeToBreak', 'days']))
+      if (timeToBreakDays !== null) {
+        return timeToBreakDays
+      }
+    }
+  }
+
+  // TODO(backend): expose stable `horizonDays` in `/plans` list responses to avoid result-shape parsing variance.
+  return null
+}
+
+function formatHorizonLabel(days: number | null): string {
+  return days === null ? 'Horizon: N/A' : `Horizon: ${days} days`
+}
+
 export default function PlanningPage() {
   const { data, isLoading } = usePlans()
   const plans = data?.data?.items ?? []
@@ -38,17 +139,22 @@ export default function PlanningPage() {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {plans.map((plan) => (
-            <Link key={plan.id} href={`/planning/${plan.id}`}>
-              <div className="glass-card flex items-center justify-between p-5">
-                <div>
-                  <p className="text-headline text-text-primary">{plan.title ?? 'Untitled plan'}</p>
-                  <p className="mt-0.5 text-footnote text-text-tertiary">{formatDate(plan.createdAt)}</p>
+          {plans.map((plan) => {
+            const horizonDays = getHorizonDays(plan.result)
+
+            return (
+              <Link key={plan.id} href={`/planning/${plan.id}`}>
+                <div className="glass-card flex items-center justify-between p-5">
+                  <div>
+                    <p className="text-headline text-text-primary">{plan.title ?? 'Untitled plan'}</p>
+                    <p className="mt-0.5 text-footnote text-text-tertiary">{formatDate(plan.createdAt)}</p>
+                    <p className="mt-0.5 text-footnote text-text-secondary">{formatHorizonLabel(horizonDays)}</p>
+                  </div>
+                  <span className="rounded-full bg-black/5 px-2.5 py-1 text-caption-2 text-text-secondary">{plan.status}</span>
                 </div>
-                <span className="rounded-full bg-black/5 px-2.5 py-1 text-caption-2 text-text-secondary">{plan.status}</span>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            )
+          })}
         </div>
       )}
     </div>
