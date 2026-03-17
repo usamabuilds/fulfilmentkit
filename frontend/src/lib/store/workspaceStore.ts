@@ -4,6 +4,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 interface Workspace {
   id: string
   name: string
+  role?: string | null
 }
 
 interface WorkspaceState {
