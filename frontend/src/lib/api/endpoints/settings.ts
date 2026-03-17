@@ -9,6 +9,28 @@ export interface WorkspaceSettings {
 
 export type LegacyWorkspaceRole = 'OWNER' | 'ADMIN' | 'VIEWER'
 
+export interface UserPreferences {
+  timezone: string | null
+  locale: string | null
+  defaultCurrency: string | null
+  planningCadence: string | null
+}
+
+export interface UserPreferencesResponse {
+  preferences: UserPreferences | null
+}
+
+export interface UpdateUserPreferencesDto {
+  timezone?: string
+  locale?: string
+  defaultCurrency?: string
+  planningCadence?: string
+}
+
+export interface UpdateUserPreferencesResponse {
+  updated: boolean
+  preferences: UserPreferences | null
+}
 
 export type PlanningCadence = 'weekly' | 'biweekly' | 'monthly'
 
@@ -145,6 +167,11 @@ export const settingsApi = {
 
   updateWorkspaceOnboardingSettings: (dto: WorkspaceOnboardingSettingsDto) =>
     apiPatch<WorkspaceSettings>('/settings', dto),
+
+  getMyPreferences: () => apiGet<UserPreferencesResponse>('/me/preferences'),
+
+  updateMyPreferences: (dto: UpdateUserPreferencesDto) =>
+    apiPatch<UpdateUserPreferencesResponse>('/me/preferences', dto),
 
   listMembers: async (): Promise<ApiListResponse<WorkspaceMember>> => {
     const response = await apiGetList<unknown>('/settings/members')

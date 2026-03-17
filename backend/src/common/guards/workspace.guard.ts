@@ -36,8 +36,70 @@ export class WorkspaceGuard implements CanActivate {
         path === '/auth/resend-code' ||
         path === '/auth/resend-verification') &&
       method === 'POST';
+    const isAccountRoute =
+      (path === '/me' && method === 'GET') ||
+      (path === '/onboarding/complete' && method === 'POST') ||
+      (path === '/me/preferences' && (method === 'GET' || method === 'PATCH'));
 
-    if (isWorkspaceBootstrapRoute || isAuthPublicRoute) {
+    if (isWorkspaceBootstrapRoute || isAuthPublicRoute || isAccountRoute) {
+      const auth: AuthShape | undefined = request.auth;
+      const externalUserId: string | undefined = auth?.externalUserId;
+      const provider: string | undefined = auth?.provider;
+      const email: string | undefined = auth?.email;
+
+      if (!externalUserId || !provider) {
+        return true;
+      }
+
+      const existingUser = await this.prisma.user.findUnique({
+        where: {
+          authProvider_authProviderUserId: {
+            authProvider: provider,
+            authProviderUserId: externalUserId,
+          },
+        },
+        select: {
+          id: true,
+          authProvider: true,
+          authProviderUserId: true,
+          email: true,
+        },
+      });
+
+      const user = existingUser
+        ? await this.prisma.user.update({
+            where: { id: existingUser.id },
+            data: {
+              email: email ?? undefined,
+            },
+            select: {
+              id: true,
+              authProvider: true,
+              authProviderUserId: true,
+              email: true,
+            },
+          })
+        : await this.prisma.user.create({
+            data: {
+              authProvider: provider,
+              authProviderUserId: externalUserId,
+              email: email ?? null,
+            },
+            select: {
+              id: true,
+              authProvider: true,
+              authProviderUserId: true,
+              email: true,
+            },
+          });
+
+      request.user = {
+        id: user.id,
+        email: user.email,
+        authProvider: user.authProvider,
+        authProviderUserId: user.authProviderUserId,
+      };
+
       return true;
     }
 
