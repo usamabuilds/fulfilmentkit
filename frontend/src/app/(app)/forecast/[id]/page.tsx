@@ -7,12 +7,100 @@ import type { ForecastPointDto } from '@/lib/api/endpoints/forecast'
 import { formatDateTime } from '@/lib/utils/formatDate'
 
 type ForecastMetric = 'revenue' | 'orders' | 'units'
+type JsonValue = string | number | boolean | null | JsonObject | JsonValue[]
+type JsonObject = { [key: string]: JsonValue }
+
+type AssumptionHighlights = {
+  dateRange: JsonValue | null
+  dataScope: JsonValue | null
+  compareRangeLogic: JsonValue | null
+  explicitExclusions: JsonValue | null
+}
 
 const metricOptions: Array<{ label: string; value: ForecastMetric }> = [
   { label: 'Revenue', value: 'revenue' },
   { label: 'Orders', value: 'orders' },
   { label: 'Units', value: 'units' },
 ]
+
+function toJsonObject(value: unknown): JsonObject | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  return value as JsonObject
+}
+
+function getFirstDefinedField(source: JsonObject, keys: string[]): JsonValue | null {
+  for (const key of keys) {
+    const value = source[key]
+    if (value !== undefined && value !== null) {
+      return value
+    }
+  }
+
+  return null
+}
+
+function getAssumptionHighlights(assumptions: JsonObject): AssumptionHighlights {
+  return {
+    dateRange: getFirstDefinedField(assumptions, ['dateRange', 'date_range', 'range']),
+    dataScope: getFirstDefinedField(assumptions, ['dataScope', 'data_scope', 'scope']),
+    compareRangeLogic: getFirstDefinedField(assumptions, ['compareRangeLogic', 'compare_range_logic', 'comparisonLogic']),
+    explicitExclusions: getFirstDefinedField(assumptions, ['explicitExclusions', 'exclusions', 'excludedItems']),
+  }
+}
+
+function formatBlockLabel(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^./, (char) => char.toUpperCase())
+}
+
+function renderJsonValue(value: JsonValue): JSX.Element {
+  if (value === null) {
+    return <p className="text-body text-text-secondary">No data provided.</p>
+  }
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return <p className="text-body text-text-primary">{String(value)}</p>
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return <p className="text-body text-text-secondary">No entries.</p>
+    }
+
+    return (
+      <ul className="list-disc space-y-2 pl-5">
+        {value.map((item, index) => (
+          <li key={`${index}-${JSON.stringify(item)}`} className="text-body text-text-primary">
+            {renderJsonValue(item)}
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  const entries = Object.entries(value)
+  if (entries.length === 0) {
+    return <p className="text-body text-text-secondary">No fields provided.</p>
+  }
+
+  return (
+    <dl className="space-y-3">
+      {entries.map(([entryKey, entryValue]) => (
+        <div key={entryKey}>
+          <dt className="text-subhead text-text-secondary">{formatBlockLabel(entryKey)}</dt>
+          <dd className="mt-1">{renderJsonValue(entryValue)}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
 
 function formatAxisValue(value: number): string {
   if (value >= 1000000) {
@@ -174,6 +262,8 @@ export default function ForecastDetailPage() {
     .filter((metric) => dailyForecastPoints.some((point) => typeof point[metric] === 'number' && Number.isFinite(point[metric])))
   const activeMetric = availableMetrics.includes(selectedMetric) ? selectedMetric : availableMetrics[0] ?? 'revenue'
   const hasDailyPoints = dailyForecastPoints.length > 0
+  const assumptions = toJsonObject(forecast.assumptions)
+  const assumptionHighlights = assumptions ? getAssumptionHighlights(assumptions) : null
 
   return (
     <div className="flex flex-col gap-6">
@@ -224,6 +314,49 @@ export default function ForecastDetailPage() {
           </div>
         </dl>
       </div>
+
+      <section className="space-y-4">
+        <h2 className="text-title-3 text-text-primary">Assumptions</h2>
+        <div className="glass-panel p-6">
+          {assumptions ? (
+            <details className="group rounded-2xl border border-white/10 bg-white/5 p-4">
+              <summary className="cursor-pointer list-none text-subhead text-text-primary">
+                View assumptions and data framing details
+              </summary>
+              <div className="mt-4 space-y-4">
+                <div className="space-y-3">
+                  <h3 className="text-subhead text-text-secondary">Key assumptions</h3>
+                  <dl className="space-y-3">
+                    <div>
+                      <dt className="text-caption-1 uppercase tracking-wide text-text-tertiary">Date range</dt>
+                      <dd className="mt-1">{assumptionHighlights && assumptionHighlights.dateRange !== null ? renderJsonValue(assumptionHighlights.dateRange) : <p className="text-body text-text-secondary">Not specified.</p>}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-caption-1 uppercase tracking-wide text-text-tertiary">Data scope</dt>
+                      <dd className="mt-1">{assumptionHighlights && assumptionHighlights.dataScope !== null ? renderJsonValue(assumptionHighlights.dataScope) : <p className="text-body text-text-secondary">Not specified.</p>}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-caption-1 uppercase tracking-wide text-text-tertiary">Compare range logic</dt>
+                      <dd className="mt-1">{assumptionHighlights && assumptionHighlights.compareRangeLogic !== null ? renderJsonValue(assumptionHighlights.compareRangeLogic) : <p className="text-body text-text-secondary">Not specified.</p>}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-caption-1 uppercase tracking-wide text-text-tertiary">Explicit exclusions</dt>
+                      <dd className="mt-1">{assumptionHighlights && assumptionHighlights.explicitExclusions !== null ? renderJsonValue(assumptionHighlights.explicitExclusions) : <p className="text-body text-text-secondary">Not specified.</p>}</dd>
+                    </div>
+                  </dl>
+                </div>
+
+                <div className="border-t border-white/10 pt-4">
+                  <h3 className="text-subhead text-text-secondary">All assumption fields</h3>
+                  <div className="mt-2">{renderJsonValue(assumptions)}</div>
+                </div>
+              </div>
+            </details>
+          ) : (
+            <p className="text-body text-text-secondary">No assumptions were provided for this forecast.</p>
+          )}
+        </div>
+      </section>
 
       <div className="glass-panel p-6 flex flex-col gap-4">
         <div className="flex flex-col gap-1">
