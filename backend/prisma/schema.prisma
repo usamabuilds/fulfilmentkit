@@ -72,6 +72,10 @@ model User {
   authProviderUserId    String
   email                 String?
   passwordHash          String?
+  timezone              String?
+  locale                String?
+  defaultCurrency       String?
+  planningCadence       String?
   emailVerified         Boolean                 @default(false)
   emailVerifiedAt       DateTime?
   onboardingCompleted   Boolean                 @default(false)
