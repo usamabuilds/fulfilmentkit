@@ -3,8 +3,10 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
+import { apiPost } from '@/lib/api/client'
 import { settingsApi } from '@/lib/api/endpoints/settings'
 import { useWorkspaceRoles } from '@/lib/hooks/useSettings'
+import { useAuthStore } from '@/lib/store/authStore'
 import { useOnboardingStore } from '@/lib/store/onboardingStore'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 import { cn } from '@/lib/utils/cn'
@@ -16,6 +18,17 @@ interface InviteRow {
   id: string
   value: string
   roleDefinitionId: string
+}
+
+interface CompleteOnboardingResponse {
+  updated: boolean
+  user?: {
+    id: string
+    email: string | null
+    emailVerified: boolean
+    onboardingCompleted: boolean
+    nextOnboardingStep: 'verify-email' | 'complete-onboarding' | null
+  }
 }
 
 function normalizeEmail(value: string): string {
@@ -50,6 +63,9 @@ function getRowValidation(rows: InviteRow[]) {
 export default function OnboardingInvitePage() {
   const router = useRouter()
   const workspace = useWorkspaceStore((state) => state.workspace)
+  const user = useAuthStore((state) => state.user)
+  const jwt = useAuthStore((state) => state.jwt)
+  const setAuth = useAuthStore((state) => state.setAuth)
   const markInviteStepCompleted = useOnboardingStore((state) => state.markInviteStepCompleted)
 
   const [rows, setRows] = useState<InviteRow[]>([{ id: crypto.randomUUID(), value: '', roleDefinitionId: '' }])
@@ -111,7 +127,30 @@ export default function OnboardingInvitePage() {
     }
 
     markInviteStepCompleted(workspace.id)
-    router.push('/dashboard')
+
+    try {
+      const completion = await apiPost<CompleteOnboardingResponse>('/onboarding/complete', {})
+
+      if (completion.data.user && jwt) {
+        setAuth(
+          {
+            id: completion.data.user.id,
+            email: completion.data.user.email ?? user?.email ?? '',
+            emailVerified: completion.data.user.emailVerified,
+            onboardingCompleted: completion.data.user.onboardingCompleted,
+            nextOnboardingStep: completion.data.user.nextOnboardingStep,
+          },
+          jwt
+        )
+      }
+
+      router.push('/dashboard')
+    } catch (completionError) {
+      if (completionError instanceof Error && completionError.message) {
+        throw new Error(`Failed to complete onboarding: ${completionError.message}`)
+      }
+      throw new Error('Failed to complete onboarding. Please try again.')
+    }
   }
 
   async function handleSkip() {
@@ -120,6 +159,12 @@ export default function OnboardingInvitePage() {
 
     try {
       await completeStepAndContinue()
+    } catch (skipError) {
+      if (skipError instanceof Error) {
+        setError(skipError.message)
+      } else {
+        setError('Failed to complete onboarding. Please try again.')
+      }
     } finally {
       setSubmitting(false)
     }
