@@ -4,9 +4,9 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
-  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -28,77 +28,21 @@ export class WorkspaceGuard implements CanActivate {
 
     const method = request?.method;
     const path = (request?.originalUrl || request?.url || '').split('?')[0];
-    const isWorkspaceBootstrapRoute = path === '/workspaces' && method === 'POST';
-    const isAuthPublicRoute =
-      (path === '/auth/register' ||
-        path === '/auth/login' ||
-        path === '/auth/verify-email' ||
-        path === '/auth/resend-code' ||
-        path === '/auth/resend-verification') &&
-      method === 'POST';
+
+    const isAuthPublicRoute = path.startsWith('/auth/');
     const isAccountRoute =
       (path === '/me' && method === 'GET') ||
       (path === '/onboarding/complete' && method === 'POST') ||
       (path === '/me/preferences' && (method === 'GET' || method === 'PATCH'));
+    const isWorkspaceSelfServiceRoute =
+      (path === '/workspaces' && (method === 'GET' || method === 'POST')) ||
+      (method === 'GET' && /^\/workspaces\/[^/]+$/.test(path));
 
-    if (isWorkspaceBootstrapRoute || isAuthPublicRoute || isAccountRoute) {
-      const auth: AuthShape | undefined = request.auth;
-      const externalUserId: string | undefined = auth?.externalUserId;
-      const provider: string | undefined = auth?.provider;
-      const email: string | undefined = auth?.email;
-
-      if (!externalUserId || !provider) {
-        return true;
-      }
-
-      const existingUser = await this.prisma.user.findUnique({
-        where: {
-          authProvider_authProviderUserId: {
-            authProvider: provider,
-            authProviderUserId: externalUserId,
-          },
-        },
-        select: {
-          id: true,
-          authProvider: true,
-          authProviderUserId: true,
-          email: true,
-        },
+    if (isAuthPublicRoute || isAccountRoute || isWorkspaceSelfServiceRoute) {
+      await this.resolveOrCreateUserFromAuth(request, {
+        allowRequestUserFallback: false,
+        requireIdentity: false,
       });
-
-      const user = existingUser
-        ? await this.prisma.user.update({
-            where: { id: existingUser.id },
-            data: {
-              email: email ?? undefined,
-            },
-            select: {
-              id: true,
-              authProvider: true,
-              authProviderUserId: true,
-              email: true,
-            },
-          })
-        : await this.prisma.user.create({
-            data: {
-              authProvider: provider,
-              authProviderUserId: externalUserId,
-              email: email ?? null,
-            },
-            select: {
-              id: true,
-              authProvider: true,
-              authProviderUserId: true,
-              email: true,
-            },
-          });
-
-      request.user = {
-        id: user.id,
-        email: user.email,
-        authProvider: user.authProvider,
-        authProviderUserId: user.authProviderUserId,
-      };
 
       return true;
     }
@@ -120,25 +64,80 @@ export class WorkspaceGuard implements CanActivate {
 
     request.workspaceId = workspaceId;
 
-    const auth: AuthShape | undefined = request.auth;
+    const user = await this.resolveOrCreateUserFromAuth(request, {
+      allowRequestUserFallback: true,
+      requireIdentity: true,
+    });
 
-    const externalUserId: string | undefined = auth?.externalUserId || request?.user?.id;
+    this.logger.log('[WorkspaceGuard] enforcing membership', {
+      path: request?.originalUrl || request?.url,
+      workspaceId,
+      userId: user.id,
+    });
+
+    const membership = await this.prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId,
+          userId: user.id,
+        },
+      },
+      select: { id: true, role: true },
+    });
+
+    if (!membership) {
+      throw new ForbiddenException('Not a member of this workspace');
+    }
+
+    request.workspaceMember = membership;
+    request.workspaceRole = membership.role;
+
+    this.logger.log('[WorkspaceGuard] role attached', {
+      path: request?.originalUrl || request?.url,
+      workspaceId,
+      role: membership.role,
+    });
+
+    return true;
+  }
+
+  private async resolveOrCreateUserFromAuth(
+    request: any,
+    options: { allowRequestUserFallback: boolean; requireIdentity: boolean },
+  ): Promise<
+    | {
+        id: string;
+        email: string | null;
+        authProvider: string;
+        authProviderUserId: string;
+      }
+    | null
+  > {
+    const auth: AuthShape | undefined = request.auth;
+    const externalUserId: string | undefined =
+      auth?.externalUserId || (options.allowRequestUserFallback ? request?.user?.id : undefined);
+    const provider: string | undefined = auth?.provider;
 
     if (!externalUserId) {
+      if (!options.requireIdentity) {
+        return null;
+      }
+
       this.logger.warn('[WorkspaceGuard] no auth detected', {
         path: request?.originalUrl || request?.url,
-        method,
+        method: request?.method,
         hasAuth: !!auth,
         hasUser: !!request?.user,
-        isWorkspaceBootstrapRoute,
       });
 
       throw new UnauthorizedException('Authentication required');
     }
 
-    const provider: string | undefined = auth?.provider;
-
     if (!provider) {
+      if (!options.requireIdentity) {
+        return null;
+      }
+
       throw new UnauthorizedException('Authentication provider missing');
     }
 
@@ -155,6 +154,7 @@ export class WorkspaceGuard implements CanActivate {
         id: true,
         authProvider: true,
         authProviderUserId: true,
+        email: true,
       },
     });
 
@@ -192,35 +192,6 @@ export class WorkspaceGuard implements CanActivate {
       authProviderUserId: user.authProviderUserId,
     };
 
-    this.logger.log('[WorkspaceGuard] enforcing membership', {
-      path: request?.originalUrl || request?.url,
-      workspaceId,
-      userId: user.id,
-    });
-
-    const membership = await this.prisma.workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: {
-          workspaceId,
-          userId: user.id,
-        },
-      },
-      select: { id: true, role: true },
-    });
-
-    if (!membership) {
-      throw new ForbiddenException('Not a member of this workspace');
-    }
-
-    request.workspaceMember = membership;
-    request.workspaceRole = membership.role;
-
-    this.logger.log('[WorkspaceGuard] role attached', {
-      path: request?.originalUrl || request?.url,
-      workspaceId,
-      role: membership.role,
-    });
-
-    return true;
+    return user;
   }
 }
