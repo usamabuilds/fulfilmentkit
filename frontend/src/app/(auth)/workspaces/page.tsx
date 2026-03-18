@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/authStore'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 import { workspacesApi, type Workspace } from '@/lib/api/endpoints/workspaces'
@@ -12,6 +12,8 @@ import { useOnboardingStore } from '@/lib/store/onboardingStore'
 interface HttpError extends Error {
   statusCode?: number
 }
+
+const WORKSPACE_BOOTSTRAP_HEADER_MESSAGE = 'X-Workspace-Id header is required'
 
 interface CompleteOnboardingResponse {
   updated: boolean
@@ -43,8 +45,13 @@ function getPostWorkspaceRoute(workspaceId: string, isInviteComplete: (workspace
   return isInviteComplete(workspaceId) ? '/dashboard' : '/onboarding/invite'
 }
 
+function isWorkspaceBootstrapHeaderError(error: HttpError): boolean {
+  return error.statusCode === 400 && error.message.includes(WORKSPACE_BOOTSTRAP_HEADER_MESSAGE)
+}
+
 export default function WorkspacesPage() {
   const router = useRouter()
+  const pathname = usePathname()
   const user = useAuthStore((s) => s.user)
   const jwt = useAuthStore((s) => s.jwt)
   const setAuth = useAuthStore((s) => s.setAuth)
@@ -123,6 +130,20 @@ export default function WorkspacesPage() {
           return
         }
 
+        if (isWorkspaceBootstrapHeaderError(typedError)) {
+          setShowCreateForm(true)
+          setError('Workspace bootstrap is misconfigured; select/create workspace cannot proceed.')
+
+          if (process.env.NODE_ENV !== 'production') {
+            console.error('[workspaces.loadWorkspaces] bootstrap header issue', {
+              statusCode: typedError.statusCode,
+              message: typedError.message,
+              route: pathname,
+            })
+          }
+          return
+        }
+
         setError(getErrorMessage(err, 'Failed to load workspaces'))
       } finally {
         if (active) setLoading(false)
@@ -139,7 +160,7 @@ export default function WorkspacesPage() {
     return () => {
       active = false
     }
-  }, [isInviteStepCompleted, router, setWorkspace, user])
+  }, [isInviteStepCompleted, pathname, router, setWorkspace, user])
 
   async function handleContinue() {
     if (!selectedWorkspace) return
