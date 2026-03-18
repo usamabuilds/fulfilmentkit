@@ -17,6 +17,13 @@ type AuthShape = {
   tokenClaims?: any;
 };
 
+type ResolvedUser = {
+  id: string;
+  email: string | null;
+  authProvider: string;
+  authProviderUserId: string;
+};
+
 @Injectable()
 export class WorkspaceGuard implements CanActivate {
   private readonly logger = new Logger(WorkspaceGuard.name);
@@ -103,16 +110,16 @@ export class WorkspaceGuard implements CanActivate {
 
   private async resolveOrCreateUserFromAuth(
     request: any,
+    options: { allowRequestUserFallback: boolean; requireIdentity: true },
+  ): Promise<ResolvedUser>;
+  private async resolveOrCreateUserFromAuth(
+    request: any,
+    options: { allowRequestUserFallback: boolean; requireIdentity: false },
+  ): Promise<ResolvedUser | null>;
+  private async resolveOrCreateUserFromAuth(
+    request: any,
     options: { allowRequestUserFallback: boolean; requireIdentity: boolean },
-  ): Promise<
-    | {
-        id: string;
-        email: string | null;
-        authProvider: string;
-        authProviderUserId: string;
-      }
-    | null
-  > {
+  ): Promise<ResolvedUser | null> {
     const auth: AuthShape | undefined = request.auth;
     const externalUserId: string | undefined =
       auth?.externalUserId || (options.allowRequestUserFallback ? request?.user?.id : undefined);
