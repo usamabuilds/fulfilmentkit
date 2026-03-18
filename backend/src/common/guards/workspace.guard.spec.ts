@@ -245,3 +245,63 @@ test('workspace guard allows same external UUID across different providers', asy
   });
   assert.equal(request.user?.id, 'internal-supabase-shared');
 });
+
+test('workspace guard requires identity and enforces membership using resolved DB user id', async () => {
+  const request: RequestShape = {
+    method: 'GET',
+    originalUrl: '/orders',
+    url: '/orders',
+    headers: { 'x-workspace-id': 'ws-1' },
+    auth: {
+      provider: 'supabase',
+      externalUserId: 'external-user-1',
+      email: 'member@example.com',
+    },
+  };
+
+  let membershipLookupArg: unknown;
+
+  const prisma = makePrisma({
+    user: {
+      findUnique: async () => ({
+        id: 'db-user-42',
+        authProvider: 'supabase',
+        authProviderUserId: 'external-user-1',
+      }),
+      update: async () => ({
+        id: 'db-user-42',
+        authProvider: 'supabase',
+        authProviderUserId: 'external-user-1',
+        email: 'member@example.com',
+      }),
+      create: async () => {
+        throw new Error('create should not be called when identity resolves to an existing user');
+      },
+    },
+    workspaceMember: {
+      findUnique: async (args) => {
+        membershipLookupArg = args;
+        return { id: 'wm-42', role: 'MANAGER' };
+      },
+    },
+  });
+
+  const guard = new WorkspaceGuard(prisma as never);
+
+  const result = await guard.canActivate(makeContext(request));
+
+  assert.equal(result, true);
+  assert.ok(request.user?.id, 'identity-required flow should always resolve a non-null user id');
+  assert.equal(request.user?.id, 'db-user-42');
+  assert.deepEqual(membershipLookupArg, {
+    where: {
+      workspaceId_userId: {
+        workspaceId: 'ws-1',
+        userId: 'db-user-42',
+      },
+    },
+    select: { id: true, role: true },
+  });
+  assert.deepEqual(request.workspaceMember, { id: 'wm-42', role: 'MANAGER' });
+  assert.equal(request.workspaceRole, 'MANAGER');
+});
