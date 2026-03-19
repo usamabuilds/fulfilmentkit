@@ -35,6 +35,11 @@ function normalizeEmail(value: string): string {
   return value.trim().toLowerCase()
 }
 
+function devLog(event: string, details: Record<string, unknown>) {
+  if (process.env.NODE_ENV === 'production') return
+  console.info(`[onboarding.invite] ${event}`, details)
+}
+
 function getRowValidation(rows: InviteRow[]) {
   const counts = new Map<string, number>()
 
@@ -122,6 +127,7 @@ export default function OnboardingInvitePage() {
 
   async function completeStepAndContinue() {
     if (!workspace?.id) {
+      devLog('final navigation target', { target: '/workspaces', reason: 'missing-workspace' })
       router.replace('/workspaces')
       return
     }
@@ -130,6 +136,10 @@ export default function OnboardingInvitePage() {
 
     try {
       const completion = await apiPost<CompleteOnboardingResponse>('/onboarding/complete', {})
+      devLog('onboarding complete success', {
+        updated: completion.data.updated,
+        userId: completion.data.user?.id ?? null,
+      })
 
       if (completion.data.user && jwt) {
         setAuth(
@@ -144,8 +154,12 @@ export default function OnboardingInvitePage() {
         )
       }
 
+      devLog('final navigation target', { target: '/dashboard', reason: 'onboarding-complete-success' })
       router.push('/dashboard')
     } catch (completionError) {
+      devLog('onboarding complete failure', {
+        message: completionError instanceof Error ? completionError.message : 'unknown',
+      })
       if (completionError instanceof Error && completionError.message) {
         throw new Error(`Failed to complete onboarding: ${completionError.message}`)
       }
@@ -174,6 +188,7 @@ export default function OnboardingInvitePage() {
     setError(null)
 
     if (!workspace?.id) {
+      devLog('final navigation target', { target: '/workspaces', reason: 'missing-workspace' })
       router.replace('/workspaces')
       return
     }
@@ -191,12 +206,27 @@ export default function OnboardingInvitePage() {
     setSubmitting(true)
 
     try {
+      devLog('invite batch start', {
+        workspaceId: workspace.id,
+        inviteCount: filledInviteRows.length,
+      })
       for (const row of filledInviteRows) {
         await settingsApi.inviteMember({ email: row.normalized, roleDefinitionId: row.roleDefinitionId || undefined })
       }
+      devLog('invite batch end', {
+        workspaceId: workspace.id,
+        inviteCount: filledInviteRows.length,
+        outcome: 'success',
+      })
 
       await completeStepAndContinue()
     } catch (submitError) {
+      devLog('invite batch end', {
+        workspaceId: workspace.id,
+        inviteCount: filledInviteRows.length,
+        outcome: 'failure',
+        message: submitError instanceof Error ? submitError.message : 'unknown',
+      })
       if (submitError instanceof Error) {
         setError(submitError.message)
       } else {

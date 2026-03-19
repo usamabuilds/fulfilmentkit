@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Logger,
   Param,
   Patch,
   Post,
@@ -29,6 +30,8 @@ const UpdateMemberRoleBodySchema = z.object({
 
 @Controller('settings/members')
 export class SettingsMembersController {
+  private readonly logger = new Logger(SettingsMembersController.name);
+
   constructor(private readonly settingsService: SettingsService) {}
 
   @Get()
@@ -42,16 +45,28 @@ export class SettingsMembersController {
   @Post('invite')
   async inviteMember(@Req() req: any, @Body() body: any) {
     const workspaceId = req.workspaceId as string;
+    const actingUser = req.user as { id?: string } | undefined;
     const parsed = InviteMemberBodySchema.parse(body);
 
-    const result = await this.settingsService.inviteMember({
-      workspaceId,
-      email: parsed.email,
-      role: parsed.role,
-      roleDefinitionId: parsed.roleDefinitionId,
-    });
+    try {
+      const result = await this.settingsService.inviteMember({
+        workspaceId,
+        email: parsed.email,
+        role: parsed.role,
+        roleDefinitionId: parsed.roleDefinitionId,
+      });
 
-    return apiResponse(result);
+      this.logger.log(
+        `inviteMember success workspaceId=${workspaceId} email=${parsed.email} actingUserId=${actingUser?.id ?? 'unknown'}`,
+      );
+
+      return apiResponse(result);
+    } catch (error) {
+      this.logger.warn(
+        `inviteMember failed workspaceId=${workspaceId} email=${parsed.email} actingUserId=${actingUser?.id ?? 'unknown'}`,
+      );
+      throw error;
+    }
   }
 
   @Roles('OWNER')

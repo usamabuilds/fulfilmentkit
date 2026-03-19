@@ -78,6 +78,11 @@ function isWorkspaceBootstrapHeaderError(error: HttpError): boolean {
   return error.statusCode === 400 && error.message.includes(WORKSPACE_BOOTSTRAP_HEADER_MESSAGE)
 }
 
+function devLog(event: string, details: Record<string, unknown>) {
+  if (process.env.NODE_ENV === 'production') return
+  console.info(`[workspaces.route] ${event}`, details)
+}
+
 export default function WorkspacesPage() {
   const router = useRouter()
   const pathname = usePathname()
@@ -101,6 +106,15 @@ export default function WorkspacesPage() {
 
   async function resolvePostWorkspaceRoute() {
     const meResponse = await apiGet<MeResponse>('/me')
+    const postWorkspaceRoute = getPostWorkspaceRoute(meResponse.data)
+
+    devLog('route decision from backend state', {
+      target: postWorkspaceRoute,
+      workspaceId: meResponse.data.workspaceId,
+      hasUser: Boolean(meResponse.data.user),
+      nextOnboardingStep: meResponse.data.user?.nextOnboardingStep ?? null,
+      onboardingCompleted: meResponse.data.user?.onboardingCompleted ?? null,
+    })
 
     if (meResponse.data.user && jwt) {
       setAuth(
@@ -115,7 +129,7 @@ export default function WorkspacesPage() {
       )
     }
 
-    return getPostWorkspaceRoute(meResponse.data)
+    return postWorkspaceRoute
   }
 
   useEffect(() => {
@@ -135,6 +149,10 @@ export default function WorkspacesPage() {
         if (items.length === 1) {
           const workspace = items[0]
           setWorkspace({ id: workspace.id, name: workspace.name })
+          devLog('local store auto-selected workspace', {
+            workspaceId: workspace.id,
+            reason: 'single-workspace',
+          })
           const postWorkspaceRoute = await resolvePostWorkspaceRoute()
           router.replace(postWorkspaceRoute)
           return
@@ -142,10 +160,17 @@ export default function WorkspacesPage() {
 
         if (items.length > 1) {
           setSelectedWorkspaceId(items[0].id)
+          devLog('local store route deferred', {
+            selectedWorkspaceId: items[0].id,
+            reason: 'multiple-workspaces-awaiting-user-selection',
+          })
           setShowCreateForm(false)
           return
         }
 
+        devLog('local store route deferred', {
+          reason: 'no-workspaces-show-create-form',
+        })
         setShowCreateForm(true)
       } catch (err) {
         if (!active) return
@@ -178,6 +203,10 @@ export default function WorkspacesPage() {
     }
 
     if (!user) {
+      devLog('route decision from local store', {
+        target: '/login',
+        reason: 'missing-auth-user',
+      })
       router.replace('/login')
       return
     }
