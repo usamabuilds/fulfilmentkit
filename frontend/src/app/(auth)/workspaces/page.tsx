@@ -5,9 +5,8 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/authStore'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 import { workspacesApi, type Workspace } from '@/lib/api/endpoints/workspaces'
-import { apiPost } from '@/lib/api/client'
+import { apiGet } from '@/lib/api/client'
 import { cn } from '@/lib/utils/cn'
-import { useOnboardingStore } from '@/lib/store/onboardingStore'
 
 interface HttpError extends Error {
   statusCode?: number
@@ -15,15 +14,18 @@ interface HttpError extends Error {
 
 const WORKSPACE_BOOTSTRAP_HEADER_MESSAGE = 'X-Workspace-Id header is required'
 
-interface CompleteOnboardingResponse {
-  updated: boolean
+type NextOnboardingStep = 'verify-email' | 'complete-onboarding' | 'workspace' | 'invite' | null
+type AuthStoreNextOnboardingStep = 'verify-email' | 'complete-onboarding' | null
+
+interface MeResponse {
   user?: {
     id: string
     email: string | null
     emailVerified: boolean
     onboardingCompleted: boolean
-    nextOnboardingStep: 'verify-email' | 'complete-onboarding' | null
+    nextOnboardingStep: NextOnboardingStep
   }
+  workspaceId: string | null
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -41,8 +43,35 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return error.message || fallback
 }
 
-function getPostWorkspaceRoute(workspaceId: string, isInviteComplete: (workspaceId: string) => boolean) {
-  return isInviteComplete(workspaceId) ? '/dashboard' : '/onboarding/invite'
+function getPostWorkspaceRoute(meData: MeResponse): string {
+  if (!meData.user) return '/login'
+  if (meData.user.onboardingCompleted) return '/dashboard'
+
+  if (meData.user.nextOnboardingStep === 'verify-email') {
+    return '/verify-email'
+  }
+
+  if (meData.user.nextOnboardingStep === 'workspace') {
+    return '/onboarding/workspace'
+  }
+
+  if (meData.user.nextOnboardingStep === 'invite') {
+    return '/onboarding/invite'
+  }
+
+  if (meData.user.nextOnboardingStep === 'complete-onboarding') {
+    return meData.workspaceId ? '/onboarding/invite' : '/onboarding/workspace'
+  }
+
+  return meData.workspaceId ? '/onboarding/invite' : '/onboarding/workspace'
+}
+
+function toAuthStoreStep(step: NextOnboardingStep): AuthStoreNextOnboardingStep {
+  if (step === 'verify-email' || step === 'complete-onboarding') {
+    return step
+  }
+
+  return null
 }
 
 function isWorkspaceBootstrapHeaderError(error: HttpError): boolean {
@@ -56,7 +85,6 @@ export default function WorkspacesPage() {
   const jwt = useAuthStore((s) => s.jwt)
   const setAuth = useAuthStore((s) => s.setAuth)
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace)
-  const isInviteStepCompleted = useOnboardingStore((s) => s.isInviteStepCompleted)
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('')
@@ -71,24 +99,23 @@ export default function WorkspacesPage() {
     [selectedWorkspaceId, workspaces]
   )
 
-  async function completeOnboardingIfEligible(workspaceId: string) {
-    if (!user || !jwt || user.onboardingCompleted) return
-    if (!isInviteStepCompleted(workspaceId)) return
+  async function resolvePostWorkspaceRoute() {
+    const meResponse = await apiGet<MeResponse>('/me')
 
-    const completion = await apiPost<CompleteOnboardingResponse>('/onboarding/complete', {})
+    if (meResponse.data.user && jwt) {
+      setAuth(
+        {
+          id: meResponse.data.user.id,
+          email: meResponse.data.user.email ?? user?.email ?? '',
+          emailVerified: meResponse.data.user.emailVerified,
+          onboardingCompleted: meResponse.data.user.onboardingCompleted,
+          nextOnboardingStep: toAuthStoreStep(meResponse.data.user.nextOnboardingStep),
+        },
+        jwt
+      )
+    }
 
-    if (!completion.data.user) return
-
-    setAuth(
-      {
-        id: completion.data.user.id,
-        email: completion.data.user.email ?? user.email,
-        emailVerified: completion.data.user.emailVerified,
-        onboardingCompleted: completion.data.user.onboardingCompleted,
-        nextOnboardingStep: completion.data.user.nextOnboardingStep,
-      },
-      jwt
-    )
+    return getPostWorkspaceRoute(meResponse.data)
   }
 
   useEffect(() => {
@@ -108,8 +135,8 @@ export default function WorkspacesPage() {
         if (items.length === 1) {
           const workspace = items[0]
           setWorkspace({ id: workspace.id, name: workspace.name })
-          await completeOnboardingIfEligible(workspace.id)
-          router.replace(getPostWorkspaceRoute(workspace.id, isInviteStepCompleted))
+          const postWorkspaceRoute = await resolvePostWorkspaceRoute()
+          router.replace(postWorkspaceRoute)
           return
         }
 
@@ -160,7 +187,7 @@ export default function WorkspacesPage() {
     return () => {
       active = false
     }
-  }, [isInviteStepCompleted, pathname, router, setWorkspace, user])
+  }, [jwt, pathname, router, setAuth, setWorkspace, user])
 
   async function handleContinue() {
     if (!selectedWorkspace) return
@@ -169,8 +196,8 @@ export default function WorkspacesPage() {
 
     try {
       setWorkspace({ id: selectedWorkspace.id, name: selectedWorkspace.name })
-      await completeOnboardingIfEligible(selectedWorkspace.id)
-      router.push(getPostWorkspaceRoute(selectedWorkspace.id, isInviteStepCompleted))
+      const postWorkspaceRoute = await resolvePostWorkspaceRoute()
+      router.push(postWorkspaceRoute)
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to select workspace'))
     } finally {
@@ -186,8 +213,8 @@ export default function WorkspacesPage() {
     try {
       const res = await workspacesApi.create({ name: name.trim() })
       setWorkspace({ id: res.data.id, name: res.data.name })
-      await completeOnboardingIfEligible(res.data.id)
-      router.push(getPostWorkspaceRoute(res.data.id, isInviteStepCompleted))
+      const postWorkspaceRoute = await resolvePostWorkspaceRoute()
+      router.push(postWorkspaceRoute)
     } catch (err) {
       const typedError = err as HttpError
       if (typedError.statusCode === 401) {
