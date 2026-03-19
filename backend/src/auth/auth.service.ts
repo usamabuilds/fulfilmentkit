@@ -98,41 +98,71 @@ export class AuthService {
       throw new BadRequestException('User already exists');
     }
 
+    const invitedUser = await (this.prisma as any).user.findFirst({
+      where: {
+        email,
+        authProvider: 'invited',
+      },
+      select: { id: true },
+    });
+
     const salt = generateSalt();
     const hash = hashPassword(params.password, salt);
     const passwordHash = `${salt}:${hash}`;
 
     const selectedPlan = toSelectedPlan(params.plan);
 
-    const user = await (this.prisma as any).user.create({
-      data: {
-        email,
-        authProvider: 'local',
-        authProviderUserId: email,
-      },
-      select: {
-        id: true,
-      },
-    });
+    const updatedUser = invitedUser
+      ? await (this.prisma as any).user.update({
+          where: { id: invitedUser.id },
+          data: {
+            authProvider: 'local',
+            authProviderUserId: invitedUser.id,
+            passwordHash,
+            selectedPlan,
+          },
+          select: {
+            id: true,
+            email: true,
+            timezone: true,
+            locale: true,
+            defaultCurrency: true,
+            planningCadence: true,
+            emailVerified: true,
+            onboardingCompleted: true,
+          },
+        })
+      : await (async () => {
+          const user = await (this.prisma as any).user.create({
+            data: {
+              email,
+              authProvider: 'local',
+              authProviderUserId: email,
+            },
+            select: {
+              id: true,
+            },
+          });
 
-    const updatedUser = await (this.prisma as any).user.update({
-      where: { id: user.id },
-      data: {
-        authProviderUserId: user.id,
-        passwordHash,
-        selectedPlan,
-      },
-      select: {
-        id: true,
-        email: true,
-        timezone: true,
-        locale: true,
-        defaultCurrency: true,
-        planningCadence: true,
-        emailVerified: true,
-        onboardingCompleted: true,
-      },
-    });
+          return (this.prisma as any).user.update({
+            where: { id: user.id },
+            data: {
+              authProviderUserId: user.id,
+              passwordHash,
+              selectedPlan,
+            },
+            select: {
+              id: true,
+              email: true,
+              timezone: true,
+              locale: true,
+              defaultCurrency: true,
+              planningCadence: true,
+              emailVerified: true,
+              onboardingCompleted: true,
+            },
+          });
+        })();
 
     const code = generateVerificationCode();
     await this.storeVerificationCode({ userId: updatedUser.id, code });
