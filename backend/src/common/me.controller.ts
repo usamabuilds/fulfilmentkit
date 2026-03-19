@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Patch, Post, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { PrismaService } from './prisma/prisma.service';
 import { apiResponse } from './utils/api-response';
@@ -65,6 +65,8 @@ function getNextOnboardingStep(
 
 @Controller()
 export class MeController {
+  private readonly logger = new Logger(MeController.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   @Get('me')
@@ -114,6 +116,7 @@ export class MeController {
     const authUserId = req.user?.id;
 
     if (!authUserId) {
+      this.logger.log('completeOnboarding skipped updated=false userId=unknown');
       return apiResponse({ updated: false });
     }
 
@@ -138,6 +141,8 @@ export class MeController {
         onboardingCompleted: true,
       },
     });
+
+    this.logger.log(`completeOnboarding updated=true userId=${authUserId}`);
 
     return apiResponse({
       updated: true,
