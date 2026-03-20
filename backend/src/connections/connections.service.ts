@@ -36,6 +36,17 @@ const AUTH_TYPE_MAP: Record<StartPlatform, ConnectionAuthType> = {
   quickbooks: 'oauth2',
 } as const;
 
+const PLATFORM_DISPLAY_NAME_MAP: Record<ConnectionPlatform, string> = {
+  SHOPIFY: 'Shopify',
+  WOOCOMMERCE: 'WooCommerce',
+  AMAZON: 'Amazon',
+  ZOHO: 'Zoho',
+  XERO: 'Xero',
+  SAGE: 'Sage',
+  ODOO: 'Odoo',
+  QUICKBOOKS: 'QuickBooks',
+};
+
 type StartConnectionFlowArgs = {
   workspaceId: string;
   platform: StartPlatform;
@@ -111,37 +122,7 @@ export class ConnectionsService {
   async startConnectionFlow(args: StartConnectionFlowArgs): Promise<{ success: true; data: StartConnectionResponseDto }> {
     const { workspaceId, platform } = args;
     const platformEnum = this.getPlatformEnum(platform);
-
-    // Workspace scoped fetch
-    const connection = await this.prisma.connection.findFirst({
-      where: {
-        workspaceId,
-        platform: platformEnum,
-      },
-      select: {
-        id: true,
-        platform: true,
-        status: true,
-      },
-    });
-
-    if (!connection) {
-      // We do NOT create records here, because start is about returning auth instructions/URL.
-      // You can decide later whether "start" creates a placeholder connection or not.
-      return {
-        success: true,
-        data: {
-          type: 'instructions',
-          title: 'Connection setup required',
-          message: `A ${platform} connection was not found for this workspace yet.`,
-          steps: [
-            'Create the connection record for this platform in the current workspace.',
-            'Retry the connect flow to continue setup.',
-            'If this persists, verify the platform connector is configured in backend.',
-          ],
-        },
-      };
-    }
+    const connection = await this.ensureConnection(workspaceId, platformEnum);
 
     // For now this is a stub "start" response.
     // It must not expose tokens, so we return either:
@@ -258,6 +239,30 @@ export class ConnectionsService {
 
   private getPlatformEnum(platform: StartPlatform) {
     return PLATFORM_MAP[platform];
+  }
+
+  private async ensureConnection(workspaceId: string, platform: ConnectionPlatform) {
+    return this.prisma.connection.upsert({
+      where: {
+        workspaceId_platform: {
+          workspaceId,
+          platform,
+        },
+      },
+      create: {
+        workspaceId,
+        platform,
+        status: 'DISCONNECTED',
+        displayName: PLATFORM_DISPLAY_NAME_MAP[platform],
+        lastError: null,
+      },
+      update: {},
+      select: {
+        id: true,
+        platform: true,
+        status: true,
+      },
+    });
   }
 
   private getAuthType(platform: StartPlatform) {
