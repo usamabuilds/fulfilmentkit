@@ -34,6 +34,7 @@ export default function MembersPage() {
   const members = data?.data?.items ?? []
   const roles = rolesData?.data?.items ?? []
   const isOwner = currentWorkspaceRole === 'OWNER'
+  const canInvite = currentWorkspaceRole === 'OWNER' || currentWorkspaceRole === 'ADMIN'
 
   const defaultRoleId = useMemo(() => {
     return roles.find((role) => role.legacyRole === 'VIEWER')?.id ?? roles[0]?.id ?? ''
@@ -116,13 +117,13 @@ export default function MembersPage() {
             className="glass-input"
             placeholder="teammate@company.com"
             required
-            disabled={!isOwner}
+            disabled={!canInvite}
           />
           <select
             value={inviteRoleId}
             onChange={(event) => setInviteRoleId(event.target.value)}
             className="glass-input"
-            disabled={!isOwner}
+            disabled={!canInvite}
           >
             {roles.map((role) => (
               <option key={role.id} value={role.id}>
@@ -132,13 +133,16 @@ export default function MembersPage() {
           </select>
           <button
             type="submit"
-            disabled={isInviting || !inviteEmail.trim() || !isOwner}
+            disabled={isInviting || !inviteEmail.trim() || !canInvite}
             className="px-4 py-2 rounded-[8px] text-callout text-white bg-accent hover:bg-accent-hover disabled:opacity-60"
           >
             {isInviting ? 'Inviting…' : 'Invite'}
           </button>
         </div>
-        {!isOwner && <p className="text-footnote text-text-secondary">Only owners can invite, update, or remove members.</p>}
+        {!canInvite && <p className="text-footnote text-text-secondary">Only owners or admins can invite members.</p>}
+        {canInvite && !isOwner && (
+          <p className="text-footnote text-text-secondary">Only owners can update roles or remove members.</p>
+        )}
       </form>
 
       {(error || success) && (
