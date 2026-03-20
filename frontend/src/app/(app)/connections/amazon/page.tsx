@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
 
 export default function AmazonPage() {
-  redirect('/connections?platform=AMAZON')
+  redirect('/connections?platform=amazon')
 }

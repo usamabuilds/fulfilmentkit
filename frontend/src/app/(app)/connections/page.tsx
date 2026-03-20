@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ConnectionCard } from '@/components/modules/connections/ConnectionCard'
 import {
   connectionPlatforms,
@@ -16,6 +17,7 @@ interface ConnectPlatformCardProps {
   platform: ConnectionPlatform
   statusLabel?: string
   helperText?: string
+  isHighlighted?: boolean
   onStartSuccess: (platform: ConnectionPlatform, result: StartConnectionResult) => void
 }
 
@@ -32,13 +34,24 @@ function isConnectedStatus(status: string): boolean {
   return normalizedStatus === 'active' || normalizedStatus === 'syncing' || normalizedStatus === 'error'
 }
 
-function ConnectPlatformCard({ platform, statusLabel, helperText, onStartSuccess }: ConnectPlatformCardProps) {
+function ConnectPlatformCard({
+  platform,
+  statusLabel,
+  helperText,
+  isHighlighted = false,
+  onStartSuccess,
+}: ConnectPlatformCardProps) {
   const { mutate, isPending, isError, error } = useStartConnection(platform)
 
   const label = toPlatformLabel(platform)
 
   return (
-    <div className="glass-panel flex items-center justify-between gap-4 p-5">
+    <div
+      className={cn(
+        'glass-panel flex items-center justify-between gap-4 p-5',
+        isHighlighted ? 'ring-2 ring-accent/60' : ''
+      )}
+    >
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
           <span className="text-headline text-text-primary">{label}</span>
@@ -80,12 +93,30 @@ function ConnectionItem({ connection }: { connection: Connection }) {
   return <ConnectionCard connection={connection} onSync={() => mutate()} syncing={isPending} />
 }
 
+function toValidPlatform(input: string | null): ConnectionPlatform | null {
+  if (!input) return null
+
+  const normalized = input.trim().toLowerCase()
+
+  if (!normalized) return null
+
+  return connectionPlatforms.find((platform) => platform === normalized) ?? null
+}
+
 export default function ConnectionsPage() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { data, isLoading } = useConnections()
   const [instructionResult, setInstructionResult] = useState<{
     platform: ConnectionPlatform
     instructions: StartConnectionInstructionsResult
   } | null>(null)
+  const requestedPlatform = searchParams.get('platform')
+  const selectedPlatform = toValidPlatform(requestedPlatform)
+  const { mutate: startSelectedPlatform, isPending: isStartingSelectedPlatform } = useStartConnection(
+    selectedPlatform ?? 'shopify'
+  )
 
   const connections = data?.data?.items ?? []
 
@@ -113,6 +144,21 @@ export default function ConnectionsPage() {
       instructions: result,
     })
   }
+
+  const clearPlatformQuery = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('platform')
+    const nextQuery = params.toString()
+    const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname
+
+    router.replace(nextUrl)
+  }, [pathname, router, searchParams])
+
+  useEffect(() => {
+    if (requestedPlatform && !selectedPlatform) {
+      clearPlatformQuery()
+    }
+  }, [clearPlatformQuery, requestedPlatform, selectedPlatform])
 
   return (
     <div className="flex flex-col gap-6">
@@ -146,6 +192,37 @@ export default function ConnectionsPage() {
         </div>
       ) : null}
 
+      {selectedPlatform ? (
+        <div className="glass-panel flex items-center justify-between gap-3 p-4">
+          <div>
+            <h2 className="text-subhead text-text-primary">
+              Ready to connect {toPlatformLabel(selectedPlatform)}?
+            </h2>
+            <p className="text-footnote text-text-tertiary">
+              Continue to start the {toPlatformLabel(selectedPlatform)} connection flow.
+            </p>
+          </div>
+
+          <button
+            onClick={() =>
+              startSelectedPlatform(undefined, {
+                onSuccess: (response) => handleStartSuccess(selectedPlatform, response.data),
+                onSettled: () => clearPlatformQuery(),
+              })
+            }
+            disabled={isStartingSelectedPlatform}
+            className={cn(
+              'rounded-[8px] px-4 py-2 text-subhead transition-all duration-200',
+              isStartingSelectedPlatform
+                ? 'cursor-not-allowed bg-accent/40 text-white'
+                : 'bg-accent text-white hover:bg-accent-hover active:scale-[0.98]'
+            )}
+          >
+            {isStartingSelectedPlatform ? 'Connecting…' : `Connect ${toPlatformLabel(selectedPlatform)}`}
+          </button>
+        </div>
+      ) : null}
+
       {isLoading ? (
         <div className="flex flex-col gap-3">
           {Array.from({ length: 3 }).map((_, index) => (
@@ -167,7 +244,13 @@ export default function ConnectionsPage() {
               platform={connection.platform}
               statusLabel={connection.status}
               helperText="This connection is disconnected. Reconnect to resume syncing."
-              onStartSuccess={handleStartSuccess}
+              isHighlighted={connection.platform === selectedPlatform}
+              onStartSuccess={(platform, result) => {
+                handleStartSuccess(platform, result)
+                if (platform === selectedPlatform) {
+                  clearPlatformQuery()
+                }
+              }}
             />
           ))}
 
@@ -176,7 +259,17 @@ export default function ConnectionsPage() {
           ))}
 
           {missingPlatforms.map((platform) => (
-            <ConnectPlatformCard key={platform} platform={platform} onStartSuccess={handleStartSuccess} />
+            <ConnectPlatformCard
+              key={platform}
+              platform={platform}
+              isHighlighted={platform === selectedPlatform}
+              onStartSuccess={(startedPlatform, result) => {
+                handleStartSuccess(startedPlatform, result)
+                if (startedPlatform === selectedPlatform) {
+                  clearPlatformQuery()
+                }
+              }}
+            />
           ))}
         </div>
       )}
