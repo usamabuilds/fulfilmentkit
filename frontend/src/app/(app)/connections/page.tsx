@@ -28,10 +28,8 @@ function toPlatformLabel(platform: ConnectionPlatform): string {
   return platform.charAt(0).toUpperCase() + platform.slice(1)
 }
 
-function isConnectedStatus(status: string): boolean {
-  const normalizedStatus = status.toLowerCase()
-
-  return normalizedStatus === 'active' || normalizedStatus === 'syncing' || normalizedStatus === 'error'
+function isConnectedStatus(status: Connection['status']): boolean {
+  return status === 'active' || status === 'error'
 }
 
 function ConnectPlatformCard({

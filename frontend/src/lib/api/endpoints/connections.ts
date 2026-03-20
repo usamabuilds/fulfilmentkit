@@ -13,10 +13,12 @@ export const connectionPlatforms = [
 
 export type ConnectionPlatform = (typeof connectionPlatforms)[number]
 
+export type ConnectionStatus = 'active' | 'disconnected' | 'error'
+
 export interface Connection {
   id: string
   platform: ConnectionPlatform
-  status: string
+  status: ConnectionStatus
   lastSyncAt: string | null
   createdAt: string
 }

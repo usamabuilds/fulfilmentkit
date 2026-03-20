@@ -4,7 +4,7 @@ import * as crypto from 'crypto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { toListResponse } from '../common/utils/list-response';
-import { ConnectionPlatform } from '../generated/prisma';
+import { ConnectionPlatform, ConnectionStatus } from '../generated/prisma';
 
 type StartPlatform = 'shopify' | 'woocommerce' | 'amazon' | 'zoho' | 'xero' | 'sage' | 'odoo' | 'quickbooks';
 type ConnectionAuthType =
@@ -56,6 +56,21 @@ type ListSyncRunsArgs = {
   connectionId: string;
 };
 
+
+/**
+ * Canonical API status values for connection list responses.
+ *
+ * We expose lowercase values to the frontend regardless of Prisma enum casing.
+ * "syncing" can be introduced later when we represent in-progress sync state.
+ */
+type ConnectionListStatus = 'active' | 'disconnected' | 'error';
+
+const CONNECTION_LIST_STATUS_MAP: Record<ConnectionStatus, ConnectionListStatus> = {
+  ACTIVE: 'active',
+  DISCONNECTED: 'disconnected',
+  ERROR: 'error',
+};
+
 @Injectable()
 export class ConnectionsService {
   constructor(
@@ -82,12 +97,7 @@ export class ConnectionsService {
         id: r.id,
         platform: r.platform,
         displayName: r.displayName,
-        status:
-          r.status === 'ACTIVE'
-            ? 'connected'
-            : r.status === 'ERROR'
-              ? 'error'
-              : 'disconnected',
+        status: CONNECTION_LIST_STATUS_MAP[r.status],
         lastSyncAt: r.lastSyncAt ? r.lastSyncAt.toISOString() : null,
         lastError: r.lastError ?? null,
       })),
