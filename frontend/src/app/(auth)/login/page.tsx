@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/authStore'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
+import { workspacesApi } from '@/lib/api/endpoints/workspaces'
 import { apiPost } from '@/lib/api/client'
 import type { ApiClientError } from '@/lib/api/client'
 import { cn } from '@/lib/utils/cn'
@@ -22,7 +23,7 @@ interface LoginResponse {
 export default function LoginPage() {
   const router = useRouter()
   const setAuth = useAuthStore((s) => s.setAuth)
-  const clearWorkspace = useWorkspaceStore((s) => s.clearWorkspace)
+  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -45,10 +46,18 @@ export default function LoginPage() {
         res.data.token
       )
 
-      clearWorkspace()
-
       if (res.data.user.onboardingCompleted) {
-        router.push('/dashboard')
+        const workspacesRes = await workspacesApi.list()
+        const workspaces = workspacesRes.data.items
+
+        if (workspaces.length === 1) {
+          const workspace = workspaces[0]
+          setWorkspace({ id: workspace.id, name: workspace.name, role: null })
+          router.push('/dashboard')
+          return
+        }
+
+        router.push('/workspaces')
         return
       }
 
