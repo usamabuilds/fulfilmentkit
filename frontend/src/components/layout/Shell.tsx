@@ -68,7 +68,7 @@ export function Shell({ children }: ShellProps) {
         const validatedWorkspaceId = res.data.workspaceId
         const validatedWorkspaceRole = res.data.workspaceRole
 
-        if (!validatedUser || !validatedWorkspaceId || !validatedWorkspaceRole) {
+        if (!validatedUser || !validatedWorkspaceId) {
           if (!cancelled) {
             setAuthValidationState('invalid')
             router.replace('/login')
@@ -76,7 +76,16 @@ export function Shell({ children }: ShellProps) {
           return
         }
 
-        if (workspace && workspace.id === validatedWorkspaceId && workspace.role !== validatedWorkspaceRole) {
+        if (validatedWorkspaceRole === null && process.env.NODE_ENV !== 'production') {
+          console.info('[Shell] /me returned null workspaceRole; retaining current workspace role')
+        }
+
+        if (
+          workspace &&
+          workspace.id === validatedWorkspaceId &&
+          validatedWorkspaceRole !== null &&
+          workspace.role !== validatedWorkspaceRole
+        ) {
           setWorkspace({ ...workspace, role: validatedWorkspaceRole })
         }
 
