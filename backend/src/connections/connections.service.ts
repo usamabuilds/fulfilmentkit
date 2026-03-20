@@ -305,21 +305,7 @@ export class ConnectionsService {
     const { workspaceId, platform, payload } = args;
 
     const platformEnum = this.getPlatformEnum(platform);
-
-    // Ensure connection exists + workspace scoped
-    const connection = await this.prisma.connection.findFirst({
-      where: {
-        workspaceId,
-        platform: platformEnum,
-      },
-      select: { id: true },
-    });
-
-    if (!connection) {
-      throw new NotFoundException(
-        'No Connection record exists for this platform in this workspace.',
-      );
-    }
+    const connection = await this.ensureConnection(workspaceId, platformEnum);
 
     // Encrypt payload (server-side only)
     const { ciphertext, metadata } = this.encryptJson(payload);
