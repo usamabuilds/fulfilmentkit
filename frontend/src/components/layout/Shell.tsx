@@ -9,7 +9,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils/cn'
 import { useAuthStore } from '@/lib/store/authStore'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
-import { apiGet } from '@/lib/api/client'
+import { apiGet, type ApiClientError } from '@/lib/api/client'
 import { useMyPreferences } from '@/lib/hooks/useSettings'
 
 interface ShellProps {
@@ -26,8 +26,8 @@ interface MeResponse {
     onboardingCompleted: boolean
     nextOnboardingStep: 'verify-email' | 'complete-onboarding' | null
   } | null
+  // Backend contract: /me is account-scoped; workspace fields may be null for valid sessions.
   workspaceId: string | null
-  // Optional metadata from /me; may be null and must not block auth validation.
   workspaceRole: string | null
 }
 
@@ -69,7 +69,7 @@ export function Shell({ children }: ShellProps) {
         const validatedWorkspaceId = res.data.workspaceId
         const validatedWorkspaceRole = res.data.workspaceRole
 
-        if (!validatedUser || !validatedWorkspaceId) {
+        if (!validatedUser) {
           if (!cancelled) {
             setAuthValidationState('invalid')
             router.replace('/login')
@@ -77,12 +77,9 @@ export function Shell({ children }: ShellProps) {
           return
         }
 
-        if (validatedWorkspaceRole === null && process.env.NODE_ENV !== 'production') {
-          console.info('[Shell] /me returned null workspaceRole; retaining current workspace role')
-        }
-
         if (
           workspace &&
+          validatedWorkspaceId !== null &&
           workspace.id === validatedWorkspaceId &&
           validatedWorkspaceRole !== null &&
           workspace.role !== validatedWorkspaceRole
@@ -112,9 +109,15 @@ export function Shell({ children }: ShellProps) {
         if (!cancelled) {
           setAuthValidationState('valid')
         }
-      } catch {
+      } catch (error) {
+        const statusCode = (error as ApiClientError).statusCode
+
         if (!cancelled) {
           setAuthValidationState('invalid')
+
+          if (statusCode === 401) {
+            router.replace('/login')
+          }
         }
       }
     }
