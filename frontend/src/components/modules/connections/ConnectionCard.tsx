@@ -8,15 +8,14 @@ interface ConnectionCardProps {
   syncing: boolean
 }
 
-const statusStyles: Record<string, string> = {
+const statusStyles: Record<Connection['status'], string> = {
   active: 'bg-success/10 text-success',
-  inactive: 'bg-black/5 text-text-secondary',
+  disconnected: 'bg-black/5 text-text-secondary',
   error: 'bg-destructive/10 text-destructive',
-  syncing: 'bg-accent/10 text-accent',
 }
 
 export function ConnectionCard({ connection, onSync, syncing }: ConnectionCardProps) {
-  const style = statusStyles[connection.status.toLowerCase()] ?? 'bg-black/5 text-text-secondary'
+  const style = statusStyles[connection.status]
 
   return (
     <div className="glass-panel flex items-center justify-between gap-4 p-5">
