@@ -27,6 +27,7 @@ interface MeResponse {
     nextOnboardingStep: 'verify-email' | 'complete-onboarding' | null
   } | null
   workspaceId: string | null
+  // Optional metadata from /me; may be null and must not block auth validation.
   workspaceRole: string | null
 }
 

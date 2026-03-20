@@ -305,3 +305,71 @@ test('workspace guard requires identity and enforces membership using resolved D
   assert.deepEqual(request.workspaceMember, { id: 'wm-42', role: 'MANAGER' });
   assert.equal(request.workspaceRole, 'MANAGER');
 });
+
+test('workspace guard allows GET /me without workspace header and does not resolve membership', async () => {
+  const request: RequestShape = {
+    method: 'GET',
+    originalUrl: '/me',
+    url: '/me',
+    headers: {},
+    auth: {
+      provider: 'local',
+      externalUserId: 'me-user-1',
+      email: 'me@example.com',
+    },
+  };
+
+  let membershipLookups = 0;
+
+  const prisma = makePrisma({
+    workspaceMember: {
+      findUnique: async () => {
+        membershipLookups += 1;
+        return { id: 'wm-unexpected', role: 'OWNER' };
+      },
+    },
+  });
+
+  const guard = new WorkspaceGuard(prisma as never);
+
+  const result = await guard.canActivate(makeContext(request));
+
+  assert.equal(result, true);
+  assert.equal(membershipLookups, 0);
+  assert.equal(request.workspaceId, undefined);
+  assert.equal(request.workspaceRole, undefined);
+});
+
+test('workspace guard ignores X-Workspace-Id for GET /me and keeps workspaceRole unset', async () => {
+  const request: RequestShape = {
+    method: 'GET',
+    originalUrl: '/me',
+    url: '/me',
+    headers: { 'x-workspace-id': 'ws-1' },
+    auth: {
+      provider: 'local',
+      externalUserId: 'me-user-2',
+      email: 'me2@example.com',
+    },
+  };
+
+  let membershipLookups = 0;
+
+  const prisma = makePrisma({
+    workspaceMember: {
+      findUnique: async () => {
+        membershipLookups += 1;
+        return { id: 'wm-unexpected', role: 'OWNER' };
+      },
+    },
+  });
+
+  const guard = new WorkspaceGuard(prisma as never);
+
+  const result = await guard.canActivate(makeContext(request));
+
+  assert.equal(result, true);
+  assert.equal(membershipLookups, 0);
+  assert.equal(request.workspaceId, undefined);
+  assert.equal(request.workspaceRole, undefined);
+});

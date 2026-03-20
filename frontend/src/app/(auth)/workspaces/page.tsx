@@ -26,6 +26,8 @@ interface MeResponse {
     nextOnboardingStep: NextOnboardingStep
   }
   workspaceId: string | null
+  // Optional metadata from /me for selected-workspace UX; do not require for routing/auth gate.
+  workspaceRole?: string | null
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
