@@ -110,17 +110,13 @@ export class ConnectionsService {
 
   async startConnectionFlow(args: StartConnectionFlowArgs): Promise<{ success: true; data: StartConnectionResponseDto }> {
     const { workspaceId, platform } = args;
+    const platformEnum = this.getPlatformEnum(platform);
 
     // Workspace scoped fetch
     const connection = await this.prisma.connection.findFirst({
       where: {
         workspaceId,
-        platform:
-          platform === 'shopify'
-            ? 'SHOPIFY'
-            : platform === 'woocommerce'
-              ? 'WOOCOMMERCE'
-              : 'AMAZON',
+        platform: platformEnum,
       },
       select: {
         id: true,
@@ -151,44 +147,113 @@ export class ConnectionsService {
     // It must not expose tokens, so we return either:
     // - a URL (placeholder)
     // - or setup instructions
-    if (platform === 'shopify') {
-      return {
-        success: true,
-        data: {
-          type: 'auth_url',
-          url: `https://example.com/oauth/shopify/start?connectionId=${connection.id}`,
-        },
-      };
+    switch (platform) {
+      case 'shopify':
+        return {
+          success: true,
+          data: {
+            type: 'auth_url',
+            url: `https://example.com/oauth/shopify/start?connectionId=${connection.id}`,
+          },
+        };
+      case 'woocommerce':
+        return {
+          success: true,
+          data: {
+            type: 'instructions',
+            title: 'Connect WooCommerce with API keys',
+            steps: [
+              'Generate a Consumer Key and Consumer Secret in WooCommerce REST API settings.',
+              'Keep the keys secure and submit them only to the backend completion endpoint when available.',
+            ],
+            message: 'WooCommerce uses API key credentials for this flow.',
+          },
+        };
+      case 'amazon':
+        return {
+          success: true,
+          data: {
+            type: 'instructions',
+            title: 'Connect Amazon SP-API',
+            steps: [
+              'Prepare your Amazon SP-API application credentials (LWA and AWS IAM configuration).',
+              'Submit credentials through the backend completion endpoint when available.',
+            ],
+            message: 'Amazon setup requires SP-API credentials managed server-side.',
+          },
+        };
+      case 'zoho':
+        return {
+          success: true,
+          data: {
+            type: 'instructions',
+            title: 'Connect Zoho via OAuth 2.0',
+            steps: [
+              'Initiate the Zoho OAuth 2.0 authorization flow from the connector settings.',
+              'Complete consent in Zoho and return to the callback endpoint when available.',
+            ],
+            message: 'Zoho integration uses OAuth 2.0 tokens stored server-side.',
+          },
+        };
+      case 'xero':
+        return {
+          success: true,
+          data: {
+            type: 'instructions',
+            title: 'Connect Xero via OAuth 2.0',
+            steps: [
+              'Start OAuth 2.0 authorization for your Xero organization.',
+              'Approve access and complete callback handling when the endpoint is available.',
+            ],
+            message: 'Xero setup is OAuth 2.0 based and does not expose secrets in responses.',
+          },
+        };
+      case 'sage':
+        return {
+          success: true,
+          data: {
+            type: 'instructions',
+            title: 'Connect Sage via OAuth 2.0',
+            steps: [
+              'Authorize the Sage connector using OAuth 2.0 credentials.',
+              'Finish consent and callback completion through the backend flow.',
+            ],
+            message: 'Sage integration currently returns setup instructions while OAuth completion is finalized.',
+          },
+        };
+      case 'odoo':
+        return {
+          success: true,
+          data: {
+            type: 'instructions',
+            title: 'Connect Odoo',
+            steps: [
+              'Prepare Odoo integration credentials and integration user permissions.',
+              'Submit credentials to the backend completion endpoint when available.',
+            ],
+            message: 'Odoo connector support is scaffolded with placeholder setup guidance.',
+          },
+        };
+      case 'quickbooks':
+        return {
+          success: true,
+          data: {
+            type: 'instructions',
+            title: 'Connect QuickBooks via OAuth 2.0',
+            steps: [
+              'Start the QuickBooks OAuth 2.0 authorization process.',
+              'Approve app access and complete callback handling when available.',
+            ],
+            message: 'QuickBooks integration is OAuth 2.0 based with server-side token storage.',
+          },
+        };
+      default: {
+        const unreachablePlatform: never = platform;
+        throw new NotFoundException(
+          `Unsupported platform: ${String(unreachablePlatform)}`,
+        );
+      }
     }
-
-    if (platform === 'woocommerce') {
-      return {
-        success: true,
-        data: {
-          type: 'instructions',
-          title: 'Connect WooCommerce with API keys',
-          steps: [
-            'Generate a Consumer Key and Consumer Secret in WooCommerce REST API settings.',
-            'Keep the keys secure and submit them only to the backend completion endpoint when available.',
-          ],
-          message: 'WooCommerce uses API key credentials for this flow.',
-        },
-      };
-    }
-
-    // amazon
-    return {
-      success: true,
-      data: {
-        type: 'instructions',
-        title: 'Connect Amazon SP-API',
-        steps: [
-          'Prepare your Amazon SP-API application credentials (LWA and AWS IAM configuration).',
-          'Submit credentials through the backend completion endpoint when available.',
-        ],
-        message: 'Amazon setup requires SP-API credentials managed server-side.',
-      },
-    };
   }
 
   private getPlatformEnum(platform: StartPlatform) {
