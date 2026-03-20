@@ -4,6 +4,10 @@ import type { ApiListResponse } from '@/lib/api/types'
 export interface WorkspaceSettings {
   id: string
   name: string
+  timezone?: string | null
+  locale?: string | null
+  defaultCurrency?: string | null
+  planningCadence?: PlanningCadence | null
   createdAt: string
 }
 
@@ -33,6 +37,14 @@ export interface UpdateUserPreferencesResponse {
 }
 
 export type PlanningCadence = 'weekly' | 'biweekly' | 'monthly'
+
+export interface UpdateWorkspaceSettingsDto {
+  name: string
+  timezone?: string
+  locale?: string
+  defaultCurrency?: string
+  planningCadence?: PlanningCadence
+}
 
 export interface WorkspaceOnboardingSettingsDto {
   name: string
@@ -144,6 +156,35 @@ function assertRemovedContract(payload: unknown): asserts payload is RemoveWorks
   }
 }
 
+export function normalizeWorkspaceSettings(payload: unknown): WorkspaceSettings {
+  if (typeof payload !== 'object' || payload === null) {
+    throw new Error('Invalid workspace settings payload: expected object')
+  }
+
+  const candidate = payload as Record<string, unknown>
+
+  if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string' || typeof candidate.createdAt !== 'string') {
+    throw new Error('Invalid workspace settings payload: id/name/createdAt are required')
+  }
+
+  const planningCadence =
+    candidate.planningCadence === 'weekly' ||
+    candidate.planningCadence === 'biweekly' ||
+    candidate.planningCadence === 'monthly'
+      ? candidate.planningCadence
+      : null
+
+  return {
+    id: candidate.id,
+    name: candidate.name,
+    createdAt: candidate.createdAt,
+    timezone: typeof candidate.timezone === 'string' ? candidate.timezone : null,
+    locale: typeof candidate.locale === 'string' ? candidate.locale : null,
+    defaultCurrency: typeof candidate.defaultCurrency === 'string' ? candidate.defaultCurrency : null,
+    planningCadence,
+  }
+}
+
 
 export function normalizeUserPreferences(preferences: unknown): UserPreferences | null {
   if (typeof preferences !== 'object' || preferences === null) {
@@ -198,12 +239,20 @@ function assertWorkspaceRoleContract(role: unknown): asserts role is WorkspaceRo
 }
 
 export const settingsApi = {
-  getWorkspace: () => apiGet<WorkspaceSettings>('/settings'),
+  getWorkspace: async () => {
+    const response = await apiGet<unknown>('/settings')
+    return { ...response, data: normalizeWorkspaceSettings(response.data) }
+  },
 
-  updateWorkspace: (dto: { name: string }) => apiPatch<WorkspaceSettings>('/settings', dto),
+  updateWorkspace: async (dto: UpdateWorkspaceSettingsDto) => {
+    const response = await apiPatch<unknown>('/settings', dto)
+    return { ...response, data: normalizeWorkspaceSettings(response.data) }
+  },
 
-  updateWorkspaceOnboardingSettings: (dto: WorkspaceOnboardingSettingsDto) =>
-    apiPatch<WorkspaceSettings>('/settings', dto),
+  updateWorkspaceOnboardingSettings: async (dto: WorkspaceOnboardingSettingsDto) => {
+    const response = await apiPatch<unknown>('/settings', dto)
+    return { ...response, data: normalizeWorkspaceSettings(response.data) }
+  },
 
   getMyPreferences: async (): Promise<{ data: UserPreferencesResponse }> => {
     const response = await apiGet<unknown>('/me/preferences')

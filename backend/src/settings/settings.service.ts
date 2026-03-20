@@ -28,6 +28,15 @@ type RemoveMemberArgs = {
   actingUserId?: string;
 };
 
+type UpdateWorkspaceSettingsArgs = {
+  name: string;
+  timezone?: string;
+  locale?: string;
+  defaultCurrency?: string;
+  planningCadence?: 'weekly' | 'biweekly' | 'monthly';
+  actingUserId?: string;
+};
+
 type RoleDefinitionRow = {
   id: string;
   name: string;
@@ -109,14 +118,50 @@ export class SettingsService {
     return workspace;
   }
 
-  async updateWorkspaceSettings(workspaceId: string, input: { name: string }) {
-    const workspace = await this.prisma.workspace.update({
-      where: { id: workspaceId },
-      data: { name: input.name },
-      select: { id: true, name: true, createdAt: true, updatedAt: true },
+  async updateWorkspaceSettings(workspaceId: string, input: UpdateWorkspaceSettingsArgs) {
+    const result = await this.prisma.$transaction(async (tx) => {
+      const txAny = tx as any;
+      const workspace = await tx.workspace.update({
+        where: { id: workspaceId },
+        data: { name: input.name },
+        select: { id: true, name: true, createdAt: true, updatedAt: true },
+      });
+
+      let userPreferences: {
+        timezone: string | null;
+        locale: string | null;
+        defaultCurrency: string | null;
+        planningCadence: string | null;
+      } | null = null;
+
+      if (input.actingUserId) {
+        userPreferences = await txAny.user.update({
+          where: { id: input.actingUserId },
+          data: {
+            timezone: input.timezone,
+            locale: input.locale,
+            defaultCurrency: input.defaultCurrency,
+            planningCadence: input.planningCadence,
+          },
+          select: {
+            timezone: true,
+            locale: true,
+            defaultCurrency: true,
+            planningCadence: true,
+          },
+        });
+      }
+
+      return {
+        ...workspace,
+        timezone: userPreferences?.timezone ?? null,
+        locale: userPreferences?.locale ?? null,
+        defaultCurrency: userPreferences?.defaultCurrency ?? null,
+        planningCadence: userPreferences?.planningCadence ?? null,
+      };
     });
 
-    return workspace;
+    return result;
   }
 
   async listWorkspaceMembers(workspaceId: string) {
