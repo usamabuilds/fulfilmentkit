@@ -1,6 +1,7 @@
 import type { Connection } from '@/lib/api/endpoints/connections'
 import { cn } from '@/lib/utils/cn'
 import { formatDateTime } from '@/lib/utils/formatDate'
+import { toPlatformLabel } from '@/lib/utils/platformLabel'
 
 interface ConnectionCardProps {
   connection: Connection
@@ -16,12 +17,13 @@ const statusStyles: Record<Connection['status'], string> = {
 
 export function ConnectionCard({ connection, onSync, syncing }: ConnectionCardProps) {
   const style = statusStyles[connection.status]
+  const label = toPlatformLabel(connection.platform, connection.displayName)
 
   return (
     <div className="glass-panel flex items-center justify-between gap-4 p-5">
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
-          <span className="text-headline capitalize text-text-primary">{connection.platform}</span>
+          <span className="text-headline text-text-primary">{label}</span>
           <span className={cn('rounded-full px-2.5 py-1 text-caption-2', style)}>{connection.status}</span>
         </div>
         <p className="text-footnote text-text-tertiary">

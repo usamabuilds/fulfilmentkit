@@ -17,7 +17,8 @@ export type ConnectionStatus = 'active' | 'disconnected' | 'error'
 
 export interface Connection {
   id: string
-  platform: ConnectionPlatform
+  platform: ConnectionPlatform | Uppercase<ConnectionPlatform>
+  displayName?: string | null
   status: ConnectionStatus
   lastSyncAt: string | null
   createdAt: string
