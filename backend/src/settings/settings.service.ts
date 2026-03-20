@@ -35,6 +35,16 @@ type RoleDefinitionRow = {
   legacyRole: WorkspaceRole | null;
 };
 
+type MemberRoleUpdateRow = {
+  userId: string;
+  email: string;
+  role: WorkspaceRole;
+  roleDefinitionId: string | null;
+  roleName: string | null;
+  permissions: unknown;
+  joinedAt: Date;
+};
+
 @Injectable()
 export class SettingsService {
   constructor(
@@ -246,51 +256,41 @@ export class SettingsService {
       throw new NotFoundException('Member not found in this workspace');
     }
 
-    const updated = await this.prisma.workspaceMember.update({
-      where: {
-        workspaceId_userId: {
-          workspaceId: args.workspaceId,
-          userId: args.userId,
-        },
-      },
-      data: { role: resolvedRole.role },
-      select: {
-        userId: true,
-        role: true,
-        createdAt: true,
-        user: {
-          select: {
-            email: true,
-          },
-        },
-      },
-    });
+    const updatedRows = await this.prisma.$queryRaw<MemberRoleUpdateRow[]>`
+      UPDATE "WorkspaceMember" wm
+      SET
+        "role" = ${resolvedRole.role}::"WorkspaceRole",
+        "roleDefinitionId" = ${resolvedRole.roleDefinitionId ?? null}
+      FROM "User" u
+      LEFT JOIN "WorkspaceRoleDefinition" rd ON rd."id" = ${resolvedRole.roleDefinitionId ?? null}
+      WHERE
+        wm."workspaceId" = ${args.workspaceId}
+        AND wm."userId" = ${args.userId}
+        AND u."id" = wm."userId"
+      RETURNING
+        wm."userId" AS "userId",
+        u."email" AS "email",
+        wm."role" AS "role",
+        wm."roleDefinitionId" AS "roleDefinitionId",
+        rd."name" AS "roleName",
+        rd."permissions" AS "permissions",
+        wm."createdAt" AS "joinedAt"
+    `;
 
-    if (resolvedRole.roleDefinitionId) {
-      await this.prisma.$executeRaw`
-        UPDATE "WorkspaceMember"
-        SET "roleDefinitionId" = ${resolvedRole.roleDefinitionId}
-        WHERE "workspaceId" = ${args.workspaceId} AND "userId" = ${args.userId}
-      `;
+    const updated = updatedRows[0];
+
+    if (!updated) {
+      throw new NotFoundException('Member not found in this workspace');
     }
-
-    const roleRows = resolvedRole.roleDefinitionId
-      ? await this.prisma.$queryRaw<RoleDefinitionRow[]>`
-          SELECT "id", "name", "permissions", "legacyRole"
-          FROM "WorkspaceRoleDefinition"
-          WHERE "id" = ${resolvedRole.roleDefinitionId}
-          LIMIT 1
-        `
-      : [];
 
     return {
       userId: updated.userId,
-      email: updated.user.email,
+      email: updated.email,
       role: updated.role,
-      roleDefinitionId: roleRows[0]?.id ?? null,
-      roleName: roleRows[0]?.name ?? updated.role,
-      permissions: Array.isArray(roleRows[0]?.permissions) ? roleRows[0].permissions : [],
-      joinedAt: updated.createdAt,
+      roleDefinitionId: updated.roleDefinitionId,
+      roleName: updated.roleName ?? updated.role,
+      permissions: Array.isArray(updated.permissions) ? updated.permissions : [],
+      joinedAt: updated.joinedAt,
     };
   }
 
