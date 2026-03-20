@@ -18,7 +18,16 @@ type RequestShape = {
     email?: string;
   };
   workspaceId?: string;
-  workspaceMember?: { id: string; role: string };
+  workspaceMember?: {
+    id: string;
+    role: string;
+    roleDefinitionId: string | null;
+    roleDefinition: {
+      id: string;
+      legacyRole: string | null;
+      permissions: unknown;
+    } | null;
+  };
   workspaceRole?: string;
 };
 
@@ -36,7 +45,7 @@ type PrismaMock = {
     ) => Promise<{ id: string; authProvider: string; authProviderUserId: string; email: string | null }>;
   };
   workspaceMember: {
-    findUnique: (args: unknown) => Promise<{ id: string; role: string } | null>;
+    findUnique: (args: unknown) => Promise<RequestShape['workspaceMember'] | null>;
   };
 };
 
@@ -73,7 +82,12 @@ function makePrisma(overrides: Partial<PrismaMock> = {}): PrismaMock {
       ...overrides.user,
     },
     workspaceMember: {
-      findUnique: async () => ({ id: 'wm-1', role: 'ADMIN' }),
+      findUnique: async () => ({
+        id: 'wm-1',
+        role: 'ADMIN',
+        roleDefinitionId: null,
+        roleDefinition: null,
+      }),
       ...overrides.workspaceMember,
     },
   };
@@ -132,6 +146,7 @@ test('workspace guard resolves local user by provider-scoped identity', async ()
       id: true,
       authProvider: true,
       authProviderUserId: true,
+      email: true,
     },
   });
   assert.equal(request.user?.id, 'internal-local-id');
@@ -241,6 +256,7 @@ test('workspace guard allows same external UUID across different providers', asy
       id: true,
       authProvider: true,
       authProviderUserId: true,
+      email: true,
     },
   });
   assert.equal(request.user?.id, 'internal-supabase-shared');
@@ -281,7 +297,16 @@ test('workspace guard requires identity and enforces membership using resolved D
     workspaceMember: {
       findUnique: async (args) => {
         membershipLookupArg = args;
-        return { id: 'wm-42', role: 'MANAGER' };
+        return {
+          id: 'wm-42',
+          role: 'ADMIN',
+          roleDefinitionId: 'rd-42',
+          roleDefinition: {
+            id: 'rd-42',
+            legacyRole: 'ADMIN',
+            permissions: ['orders.read', 'orders.write'],
+          },
+        };
       },
     },
   });
@@ -300,10 +325,30 @@ test('workspace guard requires identity and enforces membership using resolved D
         userId: 'db-user-42',
       },
     },
-    select: { id: true, role: true },
+    select: {
+      id: true,
+      role: true,
+      roleDefinitionId: true,
+      roleDefinition: {
+        select: {
+          id: true,
+          legacyRole: true,
+          permissions: true,
+        },
+      },
+    },
   });
-  assert.deepEqual(request.workspaceMember, { id: 'wm-42', role: 'MANAGER' });
-  assert.equal(request.workspaceRole, 'MANAGER');
+  assert.deepEqual(request.workspaceMember, {
+    id: 'wm-42',
+    role: 'ADMIN',
+    roleDefinitionId: 'rd-42',
+    roleDefinition: {
+      id: 'rd-42',
+      legacyRole: 'ADMIN',
+      permissions: ['orders.read', 'orders.write'],
+    },
+  });
+  assert.equal(request.workspaceRole, 'ADMIN');
 });
 
 test('workspace guard allows GET /me without workspace header and does not resolve membership', async () => {
@@ -325,7 +370,12 @@ test('workspace guard allows GET /me without workspace header and does not resol
     workspaceMember: {
       findUnique: async () => {
         membershipLookups += 1;
-        return { id: 'wm-unexpected', role: 'OWNER' };
+        return {
+          id: 'wm-unexpected',
+          role: 'OWNER',
+          roleDefinitionId: null,
+          roleDefinition: null,
+        };
       },
     },
   });
@@ -359,7 +409,12 @@ test('workspace guard ignores X-Workspace-Id for GET /me and keeps workspaceRole
     workspaceMember: {
       findUnique: async () => {
         membershipLookups += 1;
-        return { id: 'wm-unexpected', role: 'OWNER' };
+        return {
+          id: 'wm-unexpected',
+          role: 'OWNER',
+          roleDefinitionId: null,
+          roleDefinition: null,
+        };
       },
     },
   });

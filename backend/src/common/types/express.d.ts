@@ -5,6 +5,7 @@ declare namespace Express {
     workspaceMember?: {
       id: string;
       role: 'VIEWER' | 'ADMIN' | 'OWNER';
+      roleDefinitionId: string | null;
       roleDefinition?: {
         id: string;
         legacyRole: 'VIEWER' | 'ADMIN' | 'OWNER' | null;

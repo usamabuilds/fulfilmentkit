@@ -89,7 +89,18 @@ export class WorkspaceGuard implements CanActivate {
           userId: user.id,
         },
       },
-      select: { id: true, role: true },
+      select: {
+        id: true,
+        role: true,
+        roleDefinitionId: true,
+        roleDefinition: {
+          select: {
+            id: true,
+            legacyRole: true,
+            permissions: true,
+          },
+        },
+      } as any,
     });
 
     if (!membership) {
