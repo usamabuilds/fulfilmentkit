@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict'
-import { normalizeUpdatedUserPreferencesResponse, normalizeUserPreferencesResponse } from './endpoints/settings'
+import {
+  normalizeUpdatedUserPreferencesResponse,
+  normalizeUserPreferencesResponse,
+  normalizeWorkspaceSettings,
+} from './endpoints/settings'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { resolveUnauthorizedResolution } from './client'
 
@@ -82,6 +86,44 @@ function runIntegrationTests() {
   assert.deepEqual(normalizedMalformedUpdatedPreferences, {
     updated: false,
     preferences: null,
+  })
+
+  const normalizedWorkspaceSettings = normalizeWorkspaceSettings({
+    id: 'workspace-1',
+    name: 'Acme',
+    createdAt: '2026-03-20T00:00:00.000Z',
+    timezone: 'America/New_York',
+    locale: 'en-US',
+    defaultCurrency: 'USD',
+    planningCadence: 'monthly',
+  })
+  assert.deepEqual(normalizedWorkspaceSettings, {
+    id: 'workspace-1',
+    name: 'Acme',
+    createdAt: '2026-03-20T00:00:00.000Z',
+    timezone: 'America/New_York',
+    locale: 'en-US',
+    defaultCurrency: 'USD',
+    planningCadence: 'monthly',
+  })
+
+  const normalizedMalformedWorkspaceSettings = normalizeWorkspaceSettings({
+    id: 'workspace-1',
+    name: 'Acme',
+    createdAt: '2026-03-20T00:00:00.000Z',
+    timezone: true,
+    locale: 10,
+    defaultCurrency: {},
+    planningCadence: 'daily',
+  })
+  assert.deepEqual(normalizedMalformedWorkspaceSettings, {
+    id: 'workspace-1',
+    name: 'Acme',
+    createdAt: '2026-03-20T00:00:00.000Z',
+    timezone: null,
+    locale: null,
+    defaultCurrency: null,
+    planningCadence: null,
   })
 }
 
