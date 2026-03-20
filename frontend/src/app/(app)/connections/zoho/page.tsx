@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
 
 export default function ZohoPage() {
-  redirect('/connections?platform=ZOHO')
+  redirect('/connections?platform=zoho')
 }
