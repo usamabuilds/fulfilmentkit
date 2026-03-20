@@ -12,6 +12,7 @@ import {
 } from '@/lib/api/endpoints/connections'
 import { useConnections, useStartConnection, useStartSync } from '@/lib/hooks/useConnections'
 import { cn } from '@/lib/utils/cn'
+import { toPlatformLabel } from '@/lib/utils/platformLabel'
 
 interface ConnectPlatformCardProps {
   platform: ConnectionPlatform
@@ -19,13 +20,6 @@ interface ConnectPlatformCardProps {
   helperText?: string
   isHighlighted?: boolean
   onStartSuccess: (platform: ConnectionPlatform, result: StartConnectionResult) => void
-}
-
-function toPlatformLabel(platform: ConnectionPlatform): string {
-  if (platform === 'quickbooks') return 'QuickBooks'
-  if (platform === 'woocommerce') return 'WooCommerce'
-
-  return platform.charAt(0).toUpperCase() + platform.slice(1)
 }
 
 function isConnectedStatus(status: Connection['status']): boolean {
@@ -121,7 +115,11 @@ export default function ConnectionsPage() {
   const { connectedConnections, disconnectedConnections, missingPlatforms } = useMemo(() => {
     const connected = connections.filter((connection) => isConnectedStatus(connection.status))
     const disconnected = connections.filter((connection) => !isConnectedStatus(connection.status))
-    const connectedPlatformSet = new Set(connections.map((connection) => connection.platform))
+    const connectedPlatformSet = new Set(
+      connections
+        .map((connection) => toValidPlatform(connection.platform))
+        .filter((platform): platform is ConnectionPlatform => platform !== null)
+    )
     const missing = connectionPlatforms.filter((platform) => !connectedPlatformSet.has(platform))
 
     return {
@@ -240,19 +238,28 @@ export default function ConnectionsPage() {
           ) : null}
 
           {disconnectedConnections.map((connection) => (
-            <ConnectPlatformCard
-              key={connection.id}
-              platform={connection.platform}
-              statusLabel={connection.status}
-              helperText="This connection is disconnected. Reconnect to resume syncing."
-              isHighlighted={connection.platform === selectedPlatform}
-              onStartSuccess={(platform, result) => {
-                handleStartSuccess(platform, result)
-                if (platform === selectedPlatform) {
-                  clearPlatformQuery()
-                }
-              }}
-            />
+            (() => {
+              const normalizedPlatform = toValidPlatform(connection.platform)
+              if (!normalizedPlatform) {
+                return null
+              }
+
+              return (
+                <ConnectPlatformCard
+                  key={connection.id}
+                  platform={normalizedPlatform}
+                  statusLabel={connection.status}
+                  helperText="This connection is disconnected. Reconnect to resume syncing."
+                  isHighlighted={normalizedPlatform === selectedPlatform}
+                  onStartSuccess={(platform, result) => {
+                    handleStartSuccess(platform, result)
+                    if (platform === selectedPlatform) {
+                      clearPlatformQuery()
+                    }
+                  }}
+                />
+              )
+            })()
           ))}
 
           {connectedConnections.map((connection) => (
