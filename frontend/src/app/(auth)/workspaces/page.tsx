@@ -45,27 +45,33 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return error.message || fallback
 }
 
-function getPostWorkspaceRoute(meData: MeResponse): string {
-  if (!meData.user) return '/login'
-  if (meData.user.onboardingCompleted) return '/dashboard'
+function getPostWorkspaceRoute(params: {
+  user: MeResponse['user']
+  localSelectedWorkspaceId: string | null
+}): string {
+  const { user, localSelectedWorkspaceId } = params
+  if (!user) return '/login'
+  if (user.onboardingCompleted) {
+    return localSelectedWorkspaceId ? '/dashboard' : '/onboarding/workspace'
+  }
 
-  if (meData.user.nextOnboardingStep === 'verify-email') {
+  if (user.nextOnboardingStep === 'verify-email') {
     return '/verify-email'
   }
 
-  if (meData.user.nextOnboardingStep === 'workspace') {
+  if (user.nextOnboardingStep === 'workspace') {
     return '/onboarding/workspace'
   }
 
-  if (meData.user.nextOnboardingStep === 'invite') {
-    return '/onboarding/invite'
+  if (user.nextOnboardingStep === 'invite') {
+    return localSelectedWorkspaceId ? '/onboarding/invite' : '/onboarding/workspace'
   }
 
-  if (meData.user.nextOnboardingStep === 'complete-onboarding') {
-    return meData.workspaceId ? '/onboarding/invite' : '/onboarding/workspace'
+  if (user.nextOnboardingStep === 'complete-onboarding') {
+    return localSelectedWorkspaceId ? '/onboarding/invite' : '/onboarding/workspace'
   }
 
-  return meData.workspaceId ? '/onboarding/invite' : '/onboarding/workspace'
+  return localSelectedWorkspaceId ? '/onboarding/invite' : '/onboarding/workspace'
 }
 
 function toAuthStoreStep(step: NextOnboardingStep): AuthStoreNextOnboardingStep {
@@ -106,13 +112,17 @@ export default function WorkspacesPage() {
     [selectedWorkspaceId, workspaces]
   )
 
-  async function resolvePostWorkspaceRoute() {
+  async function resolvePostWorkspaceRoute(localSelectedWorkspaceId: string | null) {
     const meResponse = await apiGet<MeResponse>('/me')
-    const postWorkspaceRoute = getPostWorkspaceRoute(meResponse.data)
+    const postWorkspaceRoute = getPostWorkspaceRoute({
+      user: meResponse.data.user,
+      localSelectedWorkspaceId,
+    })
 
     devLog('route decision from backend state', {
       target: postWorkspaceRoute,
-      workspaceId: meResponse.data.workspaceId,
+      localSelectedWorkspaceId,
+      backendWorkspaceId: meResponse.data.workspaceId,
       hasUser: Boolean(meResponse.data.user),
       nextOnboardingStep: meResponse.data.user?.nextOnboardingStep ?? null,
       onboardingCompleted: meResponse.data.user?.onboardingCompleted ?? null,
@@ -155,7 +165,7 @@ export default function WorkspacesPage() {
             workspaceId: workspace.id,
             reason: 'single-workspace',
           })
-          const postWorkspaceRoute = await resolvePostWorkspaceRoute()
+          const postWorkspaceRoute = await resolvePostWorkspaceRoute(workspace.id)
           router.replace(postWorkspaceRoute)
           return
         }
@@ -227,7 +237,7 @@ export default function WorkspacesPage() {
 
     try {
       setWorkspace({ id: selectedWorkspace.id, name: selectedWorkspace.name })
-      const postWorkspaceRoute = await resolvePostWorkspaceRoute()
+      const postWorkspaceRoute = await resolvePostWorkspaceRoute(selectedWorkspace.id)
       router.push(postWorkspaceRoute)
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to select workspace'))
@@ -244,7 +254,7 @@ export default function WorkspacesPage() {
     try {
       const res = await workspacesApi.create({ name: name.trim() })
       setWorkspace({ id: res.data.id, name: res.data.name })
-      const postWorkspaceRoute = await resolvePostWorkspaceRoute()
+      const postWorkspaceRoute = await resolvePostWorkspaceRoute(res.data.id)
       router.push(postWorkspaceRoute)
     } catch (err) {
       const typedError = err as HttpError
