@@ -5,6 +5,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { toListResponse } from '../common/utils/list-response';
 import { ConnectionPlatform, ConnectionStatus } from '../generated/prisma';
+import { StartConnectionResponseDto } from './dto/start-connection-response.dto';
 
 type StartPlatform = 'shopify' | 'woocommerce' | 'amazon' | 'zoho' | 'xero' | 'sage' | 'odoo' | 'quickbooks';
 type ConnectionAuthType =
@@ -107,7 +108,7 @@ export class ConnectionsService {
     });
   }
 
-  async startConnectionFlow(args: StartConnectionFlowArgs) {
+  async startConnectionFlow(args: StartConnectionFlowArgs): Promise<{ success: true; data: StartConnectionResponseDto }> {
     const { workspaceId, platform } = args;
 
     // Workspace scoped fetch
@@ -134,12 +135,13 @@ export class ConnectionsService {
       return {
         success: true,
         data: {
-          platform,
           type: 'instructions',
-          instructions: [
-            'No Connection record exists for this platform yet in this workspace.',
-            'Create the Connection row first (or decide that POST /connections/:platform/start should create it).',
-            'Then implement the real OAuth / API-key flow under src/connections/connectors/<platform>.',
+          title: 'Connection setup required',
+          message: `A ${platform} connection was not found for this workspace yet.`,
+          steps: [
+            'Create the connection record for this platform in the current workspace.',
+            'Retry the connect flow to continue setup.',
+            'If this persists, verify the platform connector is configured in backend.',
           ],
         },
       };
@@ -147,17 +149,14 @@ export class ConnectionsService {
 
     // For now this is a stub "start" response.
     // It must not expose tokens, so we return either:
-    // - an authUrl (placeholder)
-    // - or instructions for manual setup
+    // - a URL (placeholder)
+    // - or setup instructions
     if (platform === 'shopify') {
       return {
         success: true,
         data: {
-          connectionId: connection.id,
-          platform,
           type: 'auth_url',
-          authUrl: `https://example.com/oauth/shopify/start?connectionId=${connection.id}`,
-          note: 'Placeholder URL for v1. Real Shopify OAuth will be wired later.',
+          url: `https://example.com/oauth/shopify/start?connectionId=${connection.id}`,
         },
       };
     }
@@ -166,13 +165,13 @@ export class ConnectionsService {
       return {
         success: true,
         data: {
-          connectionId: connection.id,
-          platform,
           type: 'instructions',
-          instructions: [
-            'WooCommerce v1 will use API keys (Consumer Key + Consumer Secret) stored server-side.',
-            'Next step: build POST /connections/woocommerce/complete to submit keys securely (never return them).',
+          title: 'Connect WooCommerce with API keys',
+          steps: [
+            'Generate a Consumer Key and Consumer Secret in WooCommerce REST API settings.',
+            'Keep the keys secure and submit them only to the backend completion endpoint when available.',
           ],
+          message: 'WooCommerce uses API key credentials for this flow.',
         },
       };
     }
@@ -181,13 +180,13 @@ export class ConnectionsService {
     return {
       success: true,
       data: {
-        connectionId: connection.id,
-        platform,
         type: 'instructions',
-        instructions: [
-          'Amazon v1 will use SP-API auth (LWA + AWS keys) stored server-side.',
-          'Next step: build POST /connections/amazon/complete to submit credentials securely (never return them).',
+        title: 'Connect Amazon SP-API',
+        steps: [
+          'Prepare your Amazon SP-API application credentials (LWA and AWS IAM configuration).',
+          'Submit credentials through the backend completion endpoint when available.',
         ],
+        message: 'Amazon setup requires SP-API credentials managed server-side.',
       },
     };
   }

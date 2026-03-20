@@ -139,7 +139,10 @@ export default function ConnectionsPage() {
 
     setInstructionResult({
       platform,
-      instructions: result,
+      instructions: {
+        ...result,
+        steps: Array.isArray(result.steps) ? result.steps : [],
+      },
     })
   }
 
