@@ -112,6 +112,10 @@ function getRequiredFieldError(input: string, label: string): string | null {
   return input.trim() ? null : `${label} is required.`
 }
 
+function requiresCredentialModal(platform: ConnectionPlatform): boolean {
+  return platform === 'shopify' || platform === 'woocommerce'
+}
+
 function ShopifyStoreModal({
   open,
   isSubmitting,
@@ -480,6 +484,8 @@ export default function ConnectionsPage() {
     isError: isSelectedWooCommerceError,
     error: selectedWooCommerceError,
   } = useCompleteConnection('woocommerce')
+  const isSelectedPlatformConnecting =
+    isStartingSelectedPlatform || isCompletingSelectedWooCommerceConnection
 
   const connections = data?.data?.items ?? []
 
@@ -529,12 +535,12 @@ export default function ConnectionsPage() {
       return
     }
 
-    if (selectedPlatform === 'shopify') {
-      setIsSelectedShopifyModalOpen(true)
-      return
-    }
-    if (selectedPlatform === 'woocommerce') {
-      setIsSelectedWooCommerceModalOpen(true)
+    if (requiresCredentialModal(selectedPlatform)) {
+      if (selectedPlatform === 'shopify') {
+        setIsSelectedShopifyModalOpen(true)
+      } else {
+        setIsSelectedWooCommerceModalOpen(true)
+      }
       return
     }
 
@@ -629,15 +635,15 @@ export default function ConnectionsPage() {
 
           <button
             onClick={handleSelectedPlatformStart}
-            disabled={isStartingSelectedPlatform}
+            disabled={isSelectedPlatformConnecting}
             className={cn(
               'rounded-[8px] px-4 py-2 text-subhead transition-all duration-200',
-              isStartingSelectedPlatform
+              isSelectedPlatformConnecting
                 ? 'cursor-not-allowed bg-accent/40 text-white'
                 : 'bg-accent text-white hover:bg-accent-hover active:scale-[0.98]'
             )}
           >
-            {isStartingSelectedPlatform ? 'Connecting…' : `Connect ${toPlatformLabel(selectedPlatform)}`}
+            {isSelectedPlatformConnecting ? 'Connecting…' : `Connect ${toPlatformLabel(selectedPlatform)}`}
           </button>
         </div>
       ) : null}
