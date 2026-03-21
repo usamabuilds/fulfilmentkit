@@ -492,6 +492,120 @@ export class ConnectionsService {
     };
   }
 
+  private getShopifyCredentials() {
+    const clientId = process.env.SHOPIFY_CLIENT_ID;
+    const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      throw new Error('SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET must be set');
+    }
+
+    return { clientId, clientSecret };
+  }
+
+  private toConnectionErrorMessage(error: unknown): string {
+    const fallback = 'Callback handling failed';
+    const message = error instanceof Error ? error.message : fallback;
+    return message.slice(0, 1000);
+  }
+
+  private async markConnectionAsError(connectionId: string, error: unknown) {
+    await this.prisma.connection.update({
+      where: { id: connectionId },
+      data: {
+        status: 'ERROR',
+        lastError: this.toConnectionErrorMessage(error),
+      },
+      select: { id: true },
+    });
+  }
+
+  private async exchangeShopifyAccessToken(args: {
+    shop: string;
+    code: string;
+  }): Promise<{
+    accessToken: string;
+    scopes: string[];
+    associatedUserScopes: string[];
+    tokenType: string | null;
+    rawResponseKeys: string[];
+  }> {
+    const { clientId, clientSecret } = this.getShopifyCredentials();
+
+    const response = await fetch(`https://${args.shop}/admin/oauth/access_token`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code: args.code,
+      }),
+    });
+
+    let data: unknown = null;
+    try {
+      data = await response.json();
+    } catch {
+      if (!response.ok) {
+        throw new BadRequestException(
+          `Shopify token exchange failed with status ${response.status}`,
+        );
+      }
+      throw new BadRequestException('Invalid Shopify token response payload');
+    }
+
+    if (!response.ok) {
+      const details =
+        typeof data === 'object' && data !== null
+          ? [
+              typeof (data as { error?: unknown }).error === 'string'
+                ? (data as { error: string }).error
+                : null,
+              typeof (data as { error_description?: unknown }).error_description === 'string'
+                ? (data as { error_description: string }).error_description
+                : null,
+            ]
+              .filter(Boolean)
+              .join(': ')
+          : '';
+
+      throw new BadRequestException(
+        details
+          ? `Shopify token exchange failed with status ${response.status}: ${details}`
+          : `Shopify token exchange failed with status ${response.status}`,
+      );
+    }
+
+    if (typeof data !== 'object' || data === null) {
+      throw new BadRequestException('Invalid Shopify token response payload');
+    }
+
+    const accessToken = (data as { access_token?: unknown }).access_token;
+    if (typeof accessToken !== 'string' || !accessToken.trim()) {
+      throw new BadRequestException('Shopify token response missing access_token');
+    }
+
+    const scope = (data as { scope?: unknown }).scope;
+    const associatedUserScope = (data as { associated_user_scope?: unknown }).associated_user_scope;
+    const tokenType = (data as { token_type?: unknown }).token_type;
+
+    return {
+      accessToken,
+      scopes:
+        typeof scope === 'string'
+          ? scope.split(',').map((value) => value.trim()).filter(Boolean)
+          : [],
+      associatedUserScopes:
+        typeof associatedUserScope === 'string'
+          ? associatedUserScope.split(',').map((value) => value.trim()).filter(Boolean)
+          : [],
+      tokenType: typeof tokenType === 'string' ? tokenType : null,
+      rawResponseKeys: Object.keys(data),
+    };
+  }
+
   async handleCallback(args: CallbackArgs) {
     const { platform, payload } = args;
 
@@ -528,50 +642,88 @@ export class ConnectionsService {
       throw new NotFoundException('Connection not found for verified Shopify OAuth state.');
     }
 
-    // Encrypt payload (server-side only)
-    const { ciphertext, metadata } = this.encryptJson(payload);
+    try {
+      let secretPayload: any = payload;
+      let providerMetadata: Record<string, unknown> = {
+        payloadKeys:
+          payload && typeof payload === 'object' ? Object.keys(payload) : [],
+      };
 
-    // Store secret (upsert by connectionId, never return it)
-    await this.prisma.connectionSecret.upsert({
-      where: { connectionId: connection.id },
-      create: {
-        connectionId: connection.id,
-        workspaceId,
-        platform: platformEnum,
-        authType: this.getAuthType(platform),
-        secretCiphertext: ciphertext,
-        secretMetadata: {
-          ...metadata,
-          receivedAt: new Date().toISOString(),
-          payloadKeys:
-            payload && typeof payload === 'object' ? Object.keys(payload) : [],
-        },
-        lastValidatedAt: new Date(),
-      },
-      update: {
-        workspaceId,
-        platform: platformEnum,
-        authType: this.getAuthType(platform),
-        secretCiphertext: ciphertext,
-        secretMetadata: {
-          ...metadata,
-          receivedAt: new Date().toISOString(),
-          payloadKeys:
-            payload && typeof payload === 'object' ? Object.keys(payload) : [],
-        },
-        lastValidatedAt: new Date(),
-      },
-    });
+      if (platform === 'shopify') {
+        if (typeof payload?.code !== 'string' || !payload.code.trim()) {
+          throw new BadRequestException('Missing Shopify OAuth code');
+        }
 
-    // Update connection status
-    await this.prisma.connection.update({
-      where: { id: connection.id },
-      data: {
-        status: 'ACTIVE',
-        lastError: null,
-      },
-      select: { id: true },
-    });
+        const shop = this.normalizeAndValidateShopifyShop(
+          typeof payload?.shop === 'string' ? payload.shop : undefined,
+        );
+
+        const tokenResponse = await this.exchangeShopifyAccessToken({
+          shop,
+          code: payload.code,
+        });
+        const nowIso = new Date().toISOString();
+
+        secretPayload = {
+          accessToken: tokenResponse.accessToken,
+        };
+        providerMetadata = {
+          shop,
+          scopes: tokenResponse.scopes,
+          associatedUserScopes: tokenResponse.associatedUserScopes,
+          tokenType: tokenResponse.tokenType,
+          tokenReceivedAt: nowIso,
+          oauthCompletedAt: nowIso,
+          shopifyResponseKeys: tokenResponse.rawResponseKeys,
+        };
+      }
+
+      // Encrypt payload (server-side only)
+      const { ciphertext, metadata } = this.encryptJson(secretPayload);
+
+      // Store secret (upsert by connectionId, never return it)
+      await this.prisma.connectionSecret.upsert({
+        where: { connectionId: connection.id },
+        create: {
+          connectionId: connection.id,
+          workspaceId,
+          platform: platformEnum,
+          authType: this.getAuthType(platform),
+          secretCiphertext: ciphertext,
+          secretMetadata: {
+            ...metadata,
+            ...providerMetadata,
+            receivedAt: new Date().toISOString(),
+          },
+          lastValidatedAt: new Date(),
+        },
+        update: {
+          workspaceId,
+          platform: platformEnum,
+          authType: this.getAuthType(platform),
+          secretCiphertext: ciphertext,
+          secretMetadata: {
+            ...metadata,
+            ...providerMetadata,
+            receivedAt: new Date().toISOString(),
+          },
+          lastValidatedAt: new Date(),
+        },
+      });
+
+      // Update connection status
+      await this.prisma.connection.update({
+        where: { id: connection.id },
+        data: {
+          status: 'ACTIVE',
+          lastError: null,
+        },
+        select: { id: true },
+      });
+    } catch (error) {
+      await this.markConnectionAsError(connection.id, error);
+      throw error;
+    }
 
     // Never return secrets
     return {
