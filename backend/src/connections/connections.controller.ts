@@ -1,5 +1,6 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Query, Req, Res } from '@nestjs/common';
 import * as crypto from 'crypto';
+import type { Response } from 'express';
 import { z } from 'zod';
 import { ConnectionsService } from './connections.service';
 import { Roles } from '../common/auth/roles.decorator';
@@ -19,6 +20,17 @@ const shopifyCallbackQuerySchema = z.object({
 @Controller('connections')
 export class ConnectionsController {
   constructor(private readonly connectionsService: ConnectionsService) {}
+
+  private getFrontendConnectionsUrl(): URL {
+    // Explicitly source frontend redirect base from configuration:
+    // prefer FRONTEND_BASE_URL (dedicated frontend origin), then fall back to API_BASE_URL.
+    const configuredBaseUrl = process.env.FRONTEND_BASE_URL ?? process.env.API_BASE_URL;
+    if (!configuredBaseUrl) {
+      throw new Error('Either FRONTEND_BASE_URL or API_BASE_URL must be configured');
+    }
+
+    return new URL('/connections', configuredBaseUrl);
+  }
 
   private verifyAndDecodeShopifyState(rawState: string): {
     workspaceId: string;
@@ -115,20 +127,30 @@ export class ConnectionsController {
   }
 
   @Get('shopify/callback')
-  async shopifyCallback(@Query() query: Record<string, unknown>) {
-    const parsedQuery = shopifyCallbackQuerySchema.parse(query);
-    const state = this.verifyAndDecodeShopifyState(parsedQuery.state);
+  async shopifyCallback(@Query() query: Record<string, unknown>, @Res() res: Response): Promise<void> {
+    const redirectUrl = this.getFrontendConnectionsUrl();
 
-    const result = await this.connectionsService.handleCallback({
-      workspaceId: state.workspaceId,
-      platform: 'shopify',
-      payload: {
-        ...parsedQuery,
-        connectionId: state.connectionId,
-      },
-    });
+    try {
+      const parsedQuery = shopifyCallbackQuerySchema.parse(query);
+      const state = this.verifyAndDecodeShopifyState(parsedQuery.state);
 
-    return apiResponse(result.data);
+      await this.connectionsService.handleCallback({
+        workspaceId: state.workspaceId,
+        platform: 'shopify',
+        payload: {
+          ...parsedQuery,
+          connectionId: state.connectionId,
+        },
+      });
+
+      res.redirect(redirectUrl.toString());
+      return;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Shopify callback failed';
+      redirectUrl.searchParams.set('shopify_error', errorMessage);
+      res.redirect(redirectUrl.toString());
+      return;
+    }
   }
 
   @Post(':id/sync')
