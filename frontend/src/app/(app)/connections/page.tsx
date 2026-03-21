@@ -29,6 +29,7 @@ interface ShopifyStoreModalProps {
   open: boolean
   isSubmitting: boolean
   platformLabel: string
+  startError?: string
   onClose: () => void
   onSubmit: (shop: string) => void
 }
@@ -64,6 +65,7 @@ function ShopifyStoreModal({
   open,
   isSubmitting,
   platformLabel,
+  startError,
   onClose,
   onSubmit,
 }: ShopifyStoreModalProps) {
@@ -79,6 +81,7 @@ function ShopifyStoreModal({
 
   const validationError = getShopDomainError(shopInput)
   const shouldShowError = isTouched && validationError !== null
+  const panelErrorMessage = shouldShowError ? validationError : startError
 
   const handleContinue = () => {
     setIsTouched(true)
@@ -108,6 +111,11 @@ function ShopifyStoreModal({
           error={shouldShowError ? validationError ?? undefined : undefined}
           disabled={isSubmitting}
         />
+        {panelErrorMessage ? (
+          <div className="rounded-[8px] border border-destructive/30 bg-destructive/10 px-3 py-2 text-footnote text-destructive">
+            {panelErrorMessage}
+          </div>
+        ) : null}
 
         <div className="flex items-center justify-end gap-2">
           <Button variant="ghost" type="button" onClick={onClose} disabled={isSubmitting}>
@@ -202,6 +210,13 @@ function ConnectPlatformCard({
         open={shopifyModalOpen}
         isSubmitting={isPending}
         platformLabel={label}
+        startError={
+          shopifyModalOpen && isError
+            ? error instanceof Error
+              ? error.message
+              : 'Unable to start connection.'
+            : undefined
+        }
         onClose={() => setShopifyModalOpen(false)}
         onSubmit={handleShopifySubmit}
       />
@@ -237,9 +252,12 @@ export default function ConnectionsPage() {
   const [isSelectedShopifyModalOpen, setIsSelectedShopifyModalOpen] = useState(false)
   const requestedPlatform = searchParams.get('platform')
   const selectedPlatform = toValidPlatform(requestedPlatform)
-  const { mutate: startSelectedPlatform, isPending: isStartingSelectedPlatform } = useStartConnection(
-    selectedPlatform ?? 'shopify'
-  )
+  const {
+    mutate: startSelectedPlatform,
+    isPending: isStartingSelectedPlatform,
+    isError: isSelectedStartError,
+    error: selectedStartError,
+  } = useStartConnection(selectedPlatform ?? 'shopify')
 
   const connections = data?.data?.items ?? []
 
@@ -385,6 +403,13 @@ export default function ConnectionsPage() {
         open={isSelectedShopifyModalOpen}
         isSubmitting={isStartingSelectedPlatform}
         platformLabel={toPlatformLabel('shopify')}
+        startError={
+          isSelectedShopifyModalOpen && isSelectedStartError
+            ? selectedStartError instanceof Error
+              ? selectedStartError.message
+              : 'Unable to start connection.'
+            : undefined
+        }
         onClose={() => setIsSelectedShopifyModalOpen(false)}
         onSubmit={handleSelectedShopifySubmit}
       />

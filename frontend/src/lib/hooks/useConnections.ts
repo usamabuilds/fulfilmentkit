@@ -21,7 +21,10 @@ export function useStartConnection(platform: ConnectionPlatform) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (payload?: StartConnectionPayload) => connectionsApi.start(platform, payload),
+    mutationFn: (payload?: StartConnectionPayload<ConnectionPlatform>) =>
+      platform === 'shopify'
+        ? connectionsApi.start('shopify', payload as StartConnectionPayload<'shopify'>)
+        : connectionsApi.start(platform, payload as StartConnectionPayload<typeof platform>),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['connections', workspaceId] })
     },
