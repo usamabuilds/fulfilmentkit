@@ -205,6 +205,37 @@ test('startConnectionFlow rejects malformed Shopify shop domains', async () => {
   );
 });
 
+test('startConnectionFlow for WooCommerce keeps start non-OAuth and only returns callback completion instructions', async () => {
+  const { service, connectionUpsertCalls } = createService();
+
+  const result = await service.startConnectionFlow({
+    workspaceId: 'ws-woo',
+    platform: 'woocommerce',
+  });
+
+  assert.equal(connectionUpsertCalls.length, 1);
+  const upsertCall = connectionUpsertCalls[0] as ConnectionUpsertCall;
+  assert.deepEqual(upsertCall.where.workspaceId_platform, {
+    workspaceId: 'ws-woo',
+    platform: 'WOOCOMMERCE',
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.data.type, 'instructions');
+  if (result.data.type !== 'instructions') {
+    assert.fail('Expected instructions response');
+  }
+
+  assert.equal(result.data.title, 'Connect WooCommerce with API keys');
+  assert.ok(
+    result.data.steps.some((step) => step.includes('POST /connections/woocommerce/callback')),
+  );
+  assert.equal(
+    result.data.message,
+    'WooCommerce uses API key credentials for this flow; start only initializes the connection record.',
+  );
+});
+
 test('Shopify OAuth state signing verifies and expiration is enforced', async () => {
   process.env.CONNECTION_SECRET_KEY = '12345678901234567890123456789012';
   process.env.CONNECTION_OAUTH_STATE_KEY = 'state-secret-12345678901234567890';

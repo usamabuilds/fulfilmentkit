@@ -165,9 +165,9 @@ export class ConnectionsService {
             title: 'Connect WooCommerce with API keys',
             steps: [
               'Generate a Consumer Key and Consumer Secret in WooCommerce REST API settings.',
-              'Keep the keys secure and submit them only to the backend completion endpoint when available.',
+              'Submit credentials to POST /connections/woocommerce/callback to complete storage and activation.',
             ],
-            message: 'WooCommerce uses API key credentials for this flow.',
+            message: 'WooCommerce uses API key credentials for this flow; start only initializes the connection record.',
           },
         };
       case 'amazon':
