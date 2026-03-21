@@ -44,8 +44,10 @@ export class WorkspaceGuard implements CanActivate {
     const isWorkspaceSelfServiceRoute =
       (path === '/workspaces' && (method === 'GET' || method === 'POST')) ||
       (method === 'GET' && /^\/workspaces\/[^/]+$/.test(path));
+    const isShopifyOAuthCallbackRoute =
+      path === '/connections/shopify/callback' && method === 'GET';
 
-    if (isAuthPublicRoute || isAccountRoute || isWorkspaceSelfServiceRoute) {
+    if (isAuthPublicRoute || isAccountRoute || isWorkspaceSelfServiceRoute || isShopifyOAuthCallbackRoute) {
       await this.resolveOrCreateUserFromAuth(request, {
         allowRequestUserFallback: false,
         requireIdentity: false,
