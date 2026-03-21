@@ -10,6 +10,10 @@ const baseEnv = {
   CONNECTION_SECRET_KEY: '12345678901234567890123456789012',
   AI_PROVIDER: 'openai',
   AI_MODEL: 'gpt-4o-mini',
+  SHOPIFY_CLIENT_ID: 'shopify-client-id',
+  SHOPIFY_CLIENT_SECRET: 'shopify-client-secret',
+  SHOPIFY_SCOPES: 'read_products,write_products',
+  SHOPIFY_REDIRECT_URI: 'https://app.example.com/auth/shopify/callback',
   NODE_ENV: 'development',
 } as const;
 
@@ -117,6 +121,50 @@ expectInvalid(
   },
   'SUPABASE_JWT_ISSUER',
   'SUPABASE_JWT_ISSUER is required when AUTH_MODE=hybrid',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    SHOPIFY_CLIENT_ID: undefined,
+  },
+  'SHOPIFY_CLIENT_ID',
+  'Invalid input: expected string, received undefined',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    SHOPIFY_CLIENT_SECRET: undefined,
+  },
+  'SHOPIFY_CLIENT_SECRET',
+  'Invalid input: expected string, received undefined',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    SHOPIFY_SCOPES: undefined,
+  },
+  'SHOPIFY_SCOPES',
+  'Invalid input: expected string, received undefined',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    SHOPIFY_REDIRECT_URI: 'not-a-url',
+  },
+  'SHOPIFY_REDIRECT_URI',
+  'Invalid URL',
 );
 
 console.log('env.validation.spec.ts passed');

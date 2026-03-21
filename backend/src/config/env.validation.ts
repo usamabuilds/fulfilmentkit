@@ -29,6 +29,12 @@ export const envSchema = z
     OPENAI_API_KEY: z.string().optional(),
     AI_MODEL: z.string().min(1),
 
+    // Shopify
+    SHOPIFY_CLIENT_ID: z.string().min(1),
+    SHOPIFY_CLIENT_SECRET: z.string().min(1),
+    SHOPIFY_SCOPES: z.string().min(1),
+    SHOPIFY_REDIRECT_URI: z.string().url(),
+
     // Node environment
     NODE_ENV: z.enum(['development', 'production']).default('development'),
   })
