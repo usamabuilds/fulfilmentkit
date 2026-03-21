@@ -53,6 +53,24 @@ type StartConnectionPayloadArg<TPlatform extends ConnectionPlatform> = TPlatform
   ? [payload: StartConnectionPayload<'shopify'>]
   : [payload?: StartConnectionPayload<TPlatform>]
 
+interface CompleteConnectionPayloadByPlatform {
+  woocommerce: {
+    storeUrl: string
+    consumerKey: string
+    consumerSecret: string
+  }
+}
+
+export type CompleteConnectionPayload<TPlatform extends ConnectionPlatform = ConnectionPlatform> =
+  TPlatform extends keyof CompleteConnectionPayloadByPlatform
+    ? CompleteConnectionPayloadByPlatform[TPlatform]
+    : Record<string, never>
+
+type CompleteConnectionPayloadArg<TPlatform extends ConnectionPlatform> =
+  TPlatform extends 'woocommerce'
+    ? [payload: CompleteConnectionPayload<'woocommerce'>]
+    : [payload?: CompleteConnectionPayload<TPlatform>]
+
 function startConnection<TPlatform extends ConnectionPlatform>(
   platform: TPlatform,
   ...args: StartConnectionPayloadArg<TPlatform>
@@ -62,12 +80,22 @@ function startConnection<TPlatform extends ConnectionPlatform>(
   return apiPost<StartConnectionResult>(`/connections/${platform}/start`, payload ?? {})
 }
 
+function completeConnection<TPlatform extends ConnectionPlatform>(
+  platform: TPlatform,
+  ...args: CompleteConnectionPayloadArg<TPlatform>
+) {
+  const [payload] = args
+
+  return apiPost<void>(`/connections/${platform}/callback`, payload ?? {})
+}
+
 export const connectionsApi = {
   list: () => apiGetList<Connection>('/connections'),
 
   getOne: (connectionId: string) => apiGet<Connection>(`/connections/${connectionId}`),
 
   start: startConnection,
+  complete: completeConnection,
 
   startSync: (connectionId: string) => apiPost<void>(`/connections/${connectionId}/sync`, {}),
 }
