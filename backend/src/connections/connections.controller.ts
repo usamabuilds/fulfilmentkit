@@ -5,6 +5,9 @@ import { Roles } from '../common/auth/roles.decorator';
 import { apiResponse } from '../common/utils/api-response';
 
 const platformSchema = z.enum(['shopify', 'woocommerce', 'amazon', 'zoho', 'xero', 'sage', 'odoo', 'quickbooks']);
+const shopifyStartPayloadSchema = z.object({
+  shop: z.string().trim().min(1),
+});
 
 @Controller('connections')
 export class ConnectionsController {
@@ -20,14 +23,22 @@ export class ConnectionsController {
 
   @Post(':platform/start')
   @Roles('ADMIN', 'OWNER')
-  async start(@Req() req: any, @Param('platform') platformRaw: string) {
+  async start(
+    @Req() req: any,
+    @Param('platform') platformRaw: string,
+    @Body() body: any,
+  ) {
     const workspaceId = req.workspaceId as string;
 
     const platform = platformSchema.parse(platformRaw.toLowerCase());
+    const payload = platform === 'shopify'
+      ? shopifyStartPayloadSchema.parse(body)
+      : undefined;
 
     const result = await this.connectionsService.startConnectionFlow({
       workspaceId,
       platform,
+      payload,
     });
 
     return apiResponse(result.data);

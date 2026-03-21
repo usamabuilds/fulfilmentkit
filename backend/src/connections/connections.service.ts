@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import * as crypto from 'crypto';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -50,6 +50,9 @@ const PLATFORM_DISPLAY_NAME_MAP: Record<ConnectionPlatform, string> = {
 type StartConnectionFlowArgs = {
   workspaceId: string;
   platform: StartPlatform;
+  payload?: {
+    shop: string;
+  };
 };
 
 type CallbackArgs = {
@@ -120,7 +123,7 @@ export class ConnectionsService {
   }
 
   async startConnectionFlow(args: StartConnectionFlowArgs): Promise<{ success: true; data: StartConnectionResponseDto }> {
-    const { workspaceId, platform } = args;
+    const { workspaceId, platform, payload } = args;
     const platformEnum = this.getPlatformEnum(platform);
     const connection = await this.ensureConnection(workspaceId, platformEnum);
 
@@ -129,14 +132,22 @@ export class ConnectionsService {
     // - a URL (placeholder)
     // - or setup instructions
     switch (platform) {
-      case 'shopify':
+      case 'shopify': {
+        const shop = this.normalizeAndValidateShopifyShop(payload?.shop);
+        const url = this.buildShopifyOAuthUrl({
+          workspaceId,
+          connectionId: connection.id,
+          shop,
+        });
+
         return {
           success: true,
           data: {
             type: 'auth_url',
-            url: `https://example.com/oauth/shopify/start?connectionId=${connection.id}`,
+            url,
           },
         };
+      }
       case 'woocommerce':
         return {
           success: true,
@@ -239,6 +250,86 @@ export class ConnectionsService {
 
   private getPlatformEnum(platform: StartPlatform) {
     return PLATFORM_MAP[platform];
+  }
+
+  private normalizeAndValidateShopifyShop(rawShop: string | undefined): string {
+    const normalized = (rawShop ?? '').trim().toLowerCase();
+    if (!normalized) {
+      throw new BadRequestException('shop is required for Shopify connection start');
+    }
+
+    if (
+      normalized.includes('://') ||
+      normalized.includes('/') ||
+      normalized.includes('?') ||
+      normalized.includes('#')
+    ) {
+      throw new BadRequestException('shop must be a plain myshopify domain (e.g. mystore.myshopify.com)');
+    }
+
+    const myShopifyDomainPattern = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
+    if (!myShopifyDomainPattern.test(normalized)) {
+      throw new BadRequestException('shop must match *.myshopify.com');
+    }
+
+    return normalized;
+  }
+
+  private buildShopifyOAuthUrl(args: {
+    workspaceId: string;
+    connectionId: string;
+    shop: string;
+  }): string {
+    const clientId = process.env.SHOPIFY_CLIENT_ID;
+    const scopes = process.env.SHOPIFY_SCOPES;
+    const redirectUri = process.env.SHOPIFY_REDIRECT_URI;
+    if (!clientId || !scopes || !redirectUri) {
+      throw new Error(
+        'SHOPIFY_CLIENT_ID, SHOPIFY_SCOPES, and SHOPIFY_REDIRECT_URI must be set',
+      );
+    }
+
+    const state = this.signState({
+      workspaceId: args.workspaceId,
+      connectionId: args.connectionId,
+      platform: 'shopify',
+    });
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      scope: scopes,
+      redirect_uri: redirectUri,
+      state,
+    });
+
+    return `https://${args.shop}/admin/oauth/authorize?${params.toString()}`;
+  }
+
+  private signState(payload: {
+    workspaceId: string;
+    connectionId: string;
+    platform: 'shopify';
+  }): string {
+    const stateSecret = process.env.CONNECTION_SECRET_KEY;
+    if (!stateSecret) {
+      throw new Error('CONNECTION_SECRET_KEY must be set for Shopify state signing');
+    }
+
+    const encodedPayload = Buffer.from(
+      JSON.stringify({
+        ...payload,
+        ts: Date.now(),
+        nonce: crypto.randomBytes(12).toString('hex'),
+      }),
+      'utf8',
+    ).toString('base64url');
+
+    const signature = crypto
+      .createHmac('sha256', stateSecret)
+      .update(encodedPayload)
+      .digest('base64url');
+
+    return `${encodedPayload}.${signature}`;
   }
 
   private async ensureConnection(workspaceId: string, platform: ConnectionPlatform) {
