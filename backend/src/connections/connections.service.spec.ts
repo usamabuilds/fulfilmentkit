@@ -468,3 +468,210 @@ test('handleCallback token exchange failure marks connection as error and stores
 
   global.fetch = originalFetch;
 });
+
+test('handleCallback WooCommerce success stores encrypted secret metadata and activates connection', async () => {
+  process.env.CONNECTION_SECRET_KEY = '12345678901234567890123456789012';
+
+  const originalFetch = global.fetch;
+  global.fetch = (async () =>
+    ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        environment: { home_url: 'https://demo-store.example' },
+        database: { wc_database_version: '10.2.3' },
+        active_plugins: ['woocommerce/woocommerce.php'],
+        version: '10.2.3',
+      }),
+    }) as Response) as typeof fetch;
+
+  const { service, connectionSecretUpsertCalls, connectionUpdateCalls } = createService();
+
+  const result = await service.handleCallback({
+    workspaceId: 'ws-woo',
+    platform: 'woocommerce',
+    payload: {
+      storeUrl: 'demo-store.example/',
+      consumerKey: 'ck_test_123',
+      consumerSecret: 'cs_test_123',
+    },
+  });
+
+  assert.equal(connectionSecretUpsertCalls.length, 1);
+  const secretUpsertCall = connectionSecretUpsertCalls[0] as ConnectionSecretUpsertCall;
+  assert.equal(secretUpsertCall.where.connectionId, 'conn-1');
+  assert.equal(secretUpsertCall.create.workspaceId, 'ws-woo');
+  assert.equal(secretUpsertCall.create.platform, 'WOOCOMMERCE');
+  assert.equal(secretUpsertCall.create.authType, 'api_keys_callback');
+  assert.ok(Buffer.isBuffer(secretUpsertCall.create.secretCiphertext));
+  assert.notEqual(secretUpsertCall.create.secretCiphertext.toString('utf8'), 'ck_test_123');
+  assert.notEqual(secretUpsertCall.create.secretCiphertext.toString('utf8'), 'cs_test_123');
+
+  const metadata = secretUpsertCall.create.secretMetadata;
+  assert.equal(metadata.alg, 'aes-256-gcm');
+  assert.equal(metadata.v, 1);
+  assert.equal(metadata.storeUrl, 'https://demo-store.example');
+  assert.equal(
+    metadata.validatedEndpoint,
+    'https://demo-store.example/wp-json/wc/v3/system_status',
+  );
+  assert.equal(metadata.apiVersion, '10.2.3');
+  assert.ok(typeof metadata.validatedAt === 'string');
+  assert.ok(typeof metadata.receivedAt === 'string');
+  assert.equal('consumerKey' in metadata, false);
+  assert.equal('consumerSecret' in metadata, false);
+
+  assert.equal(connectionUpdateCalls.length, 1);
+  const updateCall = connectionUpdateCalls[0] as ConnectionUpdateCall;
+  assert.deepEqual(updateCall.data, {
+    status: 'ACTIVE',
+    lastError: null,
+  });
+
+  assert.deepEqual(result, {
+    success: true,
+    data: {
+      connectionId: 'conn-1',
+      platform: 'woocommerce',
+      stored: true,
+      status: 'connected',
+    },
+  });
+
+  global.fetch = originalFetch;
+});
+
+test('handleCallback WooCommerce invalid credentials marks connection as error', async () => {
+  process.env.CONNECTION_SECRET_KEY = '12345678901234567890123456789012';
+
+  const originalFetch = global.fetch;
+  global.fetch = (async () =>
+    ({
+      ok: false,
+      status: 401,
+      json: async () => ({ message: 'Unauthorized' }),
+    }) as Response) as typeof fetch;
+
+  const { service, connectionSecretUpsertCalls, connectionUpdateCalls } = createService();
+
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-woo',
+        platform: 'woocommerce',
+        payload: {
+          storeUrl: 'demo-store.example',
+          consumerKey: 'ck_bad',
+          consumerSecret: 'cs_bad',
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      const badRequestError = error as BadRequestException;
+      assert.equal(
+        badRequestError.message,
+        'Invalid WooCommerce credentials or store URL (status 401)',
+      );
+      return true;
+    },
+  );
+
+  global.fetch = (async () =>
+    ({
+      ok: false,
+      status: 403,
+      json: async () => ({ message: 'Forbidden' }),
+    }) as Response) as typeof fetch;
+
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-woo',
+        platform: 'woocommerce',
+        payload: {
+          storeUrl: 'demo-store.example',
+          consumerKey: 'ck_forbidden',
+          consumerSecret: 'cs_forbidden',
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      const badRequestError = error as BadRequestException;
+      assert.equal(
+        badRequestError.message,
+        'Invalid WooCommerce credentials or store URL (status 403)',
+      );
+      return true;
+    },
+  );
+
+  assert.equal(connectionSecretUpsertCalls.length, 0);
+  assert.equal(connectionUpdateCalls.length, 2);
+  const lastUpdate = connectionUpdateCalls[1] as ConnectionUpdateCall;
+  assert.equal(lastUpdate.where.id, 'conn-1');
+  assert.equal(lastUpdate.data.status, 'ERROR');
+  assert.equal(lastUpdate.data.lastError, 'Invalid WooCommerce credentials or store URL (status 403)');
+
+  global.fetch = originalFetch;
+});
+
+test('handleCallback WooCommerce invalid URL or malformed validation response marks connection as error', async () => {
+  process.env.CONNECTION_SECRET_KEY = '12345678901234567890123456789012';
+
+  const originalFetch = global.fetch;
+  const { service, connectionSecretUpsertCalls, connectionUpdateCalls } = createService();
+
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-woo',
+        platform: 'woocommerce',
+        payload: {
+          storeUrl: 'https://',
+          consumerKey: 'ck_test',
+          consumerSecret: 'cs_test',
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      const badRequestError = error as BadRequestException;
+      assert.equal(badRequestError.message, 'Invalid WooCommerce credentials or store URL');
+      return true;
+    },
+  );
+
+  global.fetch = (async () =>
+    ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        unexpected: 'shape',
+      }),
+    }) as Response) as typeof fetch;
+
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-woo',
+        platform: 'woocommerce',
+        payload: {
+          storeUrl: 'demo-store.example',
+          consumerKey: 'ck_test',
+          consumerSecret: 'cs_test',
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      const badRequestError = error as BadRequestException;
+      assert.equal(badRequestError.message, 'Invalid WooCommerce credentials or store URL');
+      return true;
+    },
+  );
+
+  assert.equal(connectionSecretUpsertCalls.length, 0);
+  assert.equal(connectionUpdateCalls.length, 2);
+  assert.equal((connectionUpdateCalls[0] as ConnectionUpdateCall).data.status, 'ERROR');
+  assert.equal((connectionUpdateCalls[1] as ConnectionUpdateCall).data.status, 'ERROR');
+
+  global.fetch = originalFetch;
+});
