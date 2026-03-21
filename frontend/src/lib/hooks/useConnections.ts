@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  type CompleteConnectionPayload,
   connectionsApi,
   type ConnectionPlatform,
   type StartConnectionPayload,
@@ -37,6 +38,27 @@ export function useStartSync(connectionId: string) {
 
   return useMutation({
     mutationFn: () => connectionsApi.startSync(connectionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['connections', workspaceId] })
+    },
+  })
+}
+
+export function useCompleteConnection(platform: ConnectionPlatform) {
+  const workspaceId = useWorkspaceStore((state) => state.workspace?.id)
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload?: CompleteConnectionPayload<ConnectionPlatform>) =>
+      platform === 'woocommerce'
+        ? connectionsApi.complete(
+            'woocommerce',
+            payload as CompleteConnectionPayload<'woocommerce'>
+          )
+        : connectionsApi.complete(
+            platform,
+            payload as CompleteConnectionPayload<typeof platform>
+          ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['connections', workspaceId] })
     },
