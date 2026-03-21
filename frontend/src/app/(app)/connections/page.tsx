@@ -56,7 +56,9 @@ interface WooCommerceCredentialsModalProps {
 const SHOPIFY_STORE_REGEX = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.myshopify\.com$/i
 
 function isConnectedStatus(status: Connection['status']): boolean {
-  return status === 'active' || status === 'error'
+  const normalizedStatus = status.toLowerCase()
+
+  return normalizedStatus === 'active' || normalizedStatus === 'error'
 }
 
 function normalizeShopDomain(input: string): string {
