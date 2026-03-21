@@ -37,8 +37,29 @@ export interface StartConnectionInstructionsResult {
 }
 
 export type StartConnectionResult = StartConnectionAuthUrlResult | StartConnectionInstructionsResult
-export interface StartConnectionPayload {
-  shop?: string
+
+interface StartConnectionPayloadByPlatform {
+  shopify: {
+    shop: string
+  }
+}
+
+export type StartConnectionPayload<TPlatform extends ConnectionPlatform = ConnectionPlatform> =
+  TPlatform extends keyof StartConnectionPayloadByPlatform
+    ? StartConnectionPayloadByPlatform[TPlatform]
+    : Record<string, never>
+
+type StartConnectionPayloadArg<TPlatform extends ConnectionPlatform> = TPlatform extends 'shopify'
+  ? [payload: StartConnectionPayload<'shopify'>]
+  : [payload?: StartConnectionPayload<TPlatform>]
+
+function startConnection<TPlatform extends ConnectionPlatform>(
+  platform: TPlatform,
+  ...args: StartConnectionPayloadArg<TPlatform>
+) {
+  const [payload] = args
+
+  return apiPost<StartConnectionResult>(`/connections/${platform}/start`, payload ?? {})
 }
 
 export const connectionsApi = {
@@ -46,8 +67,7 @@ export const connectionsApi = {
 
   getOne: (connectionId: string) => apiGet<Connection>(`/connections/${connectionId}`),
 
-  start: (platform: ConnectionPlatform, payload: StartConnectionPayload = {}) =>
-    apiPost<StartConnectionResult>(`/connections/${platform}/start`, payload),
+  start: startConnection,
 
   startSync: (connectionId: string) => apiPost<void>(`/connections/${connectionId}/sync`, {}),
 }
