@@ -17,6 +17,12 @@ const shopifyCallbackQuerySchema = z.object({
   hmac: z.string().trim().min(1).optional(),
 });
 
+const woocommerceCallbackBodySchema = z.object({
+  storeUrl: z.string().trim().min(1),
+  consumerKey: z.string().trim().min(1),
+  consumerSecret: z.string().trim().min(1),
+});
+
 @Controller('connections')
 export class ConnectionsController {
   constructor(private readonly connectionsService: ConnectionsService) {}
@@ -117,10 +123,14 @@ export class ConnectionsController {
 
     const platform = platformSchema.parse(platformRaw.toLowerCase());
 
+    const payload = platform === 'woocommerce'
+      ? woocommerceCallbackBodySchema.parse(body)
+      : body;
+
     const result = await this.connectionsService.handleCallback({
       workspaceId,
       platform,
-      payload: body,
+      payload,
     });
 
     return apiResponse(result.data);
