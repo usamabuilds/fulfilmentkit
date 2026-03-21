@@ -1,5 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { connectionsApi, type ConnectionPlatform } from '@/lib/api/endpoints/connections'
+import {
+  connectionsApi,
+  type ConnectionPlatform,
+  type StartConnectionPayload,
+} from '@/lib/api/endpoints/connections'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 
 export function useConnections() {
@@ -17,7 +21,7 @@ export function useStartConnection(platform: ConnectionPlatform) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: () => connectionsApi.start(platform),
+    mutationFn: (payload?: StartConnectionPayload) => connectionsApi.start(platform, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['connections', workspaceId] })
     },

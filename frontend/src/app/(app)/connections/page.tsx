@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ConnectionCard } from '@/components/modules/connections/ConnectionCard'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Modal } from '@/components/ui/Modal'
 import {
   connectionPlatforms,
   type Connection,
@@ -22,8 +25,101 @@ interface ConnectPlatformCardProps {
   onStartSuccess: (platform: ConnectionPlatform, result: StartConnectionResult) => void
 }
 
+interface ShopifyStoreModalProps {
+  open: boolean
+  isSubmitting: boolean
+  platformLabel: string
+  onClose: () => void
+  onSubmit: (shop: string) => void
+}
+
+const SHOPIFY_STORE_REGEX = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.myshopify\.com$/i
+
 function isConnectedStatus(status: Connection['status']): boolean {
   return status === 'active' || status === 'error'
+}
+
+function normalizeShopDomain(input: string): string {
+  const trimmed = input.trim().toLowerCase()
+  const withoutProtocol = trimmed.replace(/^https?:\/\//, '')
+
+  return withoutProtocol.replace(/\/$/, '')
+}
+
+function getShopDomainError(input: string): string | null {
+  const normalized = normalizeShopDomain(input)
+
+  if (!normalized) {
+    return 'Store URL is required.'
+  }
+
+  if (!SHOPIFY_STORE_REGEX.test(normalized)) {
+    return 'Enter a valid Shopify store URL, like mystore.myshopify.com.'
+  }
+
+  return null
+}
+
+function ShopifyStoreModal({
+  open,
+  isSubmitting,
+  platformLabel,
+  onClose,
+  onSubmit,
+}: ShopifyStoreModalProps) {
+  const [shopInput, setShopInput] = useState('')
+  const [isTouched, setIsTouched] = useState(false)
+
+  useEffect(() => {
+    if (!open) {
+      setShopInput('')
+      setIsTouched(false)
+    }
+  }, [open])
+
+  const validationError = getShopDomainError(shopInput)
+  const shouldShowError = isTouched && validationError !== null
+
+  const handleContinue = () => {
+    setIsTouched(true)
+    if (validationError) {
+      return
+    }
+
+    onSubmit(normalizeShopDomain(shopInput))
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Connect ${platformLabel}`}
+      description="Enter your Shopify store URL to continue the connection flow."
+    >
+      <div className="flex flex-col gap-4">
+        <Input
+          value={shopInput}
+          onChange={(event) => setShopInput(event.target.value)}
+          onBlur={() => setIsTouched(true)}
+          placeholder="mystore.myshopify.com"
+          label="Store URL"
+          autoComplete="off"
+          spellCheck={false}
+          error={shouldShowError ? validationError ?? undefined : undefined}
+          disabled={isSubmitting}
+        />
+
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="ghost" type="button" onClick={onClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={handleContinue} loading={isSubmitting}>
+            Continue
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
 }
 
 function ConnectPlatformCard({
@@ -34,48 +130,82 @@ function ConnectPlatformCard({
   onStartSuccess,
 }: ConnectPlatformCardProps) {
   const { mutate, isPending, isError, error } = useStartConnection(platform)
+  const [shopifyModalOpen, setShopifyModalOpen] = useState(false)
 
   const label = toPlatformLabel(platform)
 
-  return (
-    <div
-      className={cn(
-        'glass-panel flex items-center justify-between gap-4 p-5',
-        isHighlighted ? 'ring-2 ring-accent/60' : ''
-      )}
-    >
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2">
-          <span className="text-headline text-text-primary">{label}</span>
-          {statusLabel ? (
-            <span className="rounded-full bg-black/5 px-2.5 py-1 text-caption-2 text-text-secondary">
-              {statusLabel}
-            </span>
-          ) : null}
-        </div>
-        <p className="text-footnote text-text-tertiary">
-          {helperText ?? 'Connect this platform to start syncing data.'}
-        </p>
-        {isError ? (
-          <p className="text-footnote text-destructive">
-            {error instanceof Error ? error.message : 'Unable to start connection.'}
-          </p>
-        ) : null}
-      </div>
+  const handleStart = () => {
+    if (platform === 'shopify') {
+      setShopifyModalOpen(true)
+      return
+    }
 
-      <button
-        onClick={() => mutate(undefined, { onSuccess: (response) => onStartSuccess(platform, response.data) })}
-        disabled={isPending}
+    mutate(undefined, {
+      onSuccess: (response) => onStartSuccess(platform, response.data),
+    })
+  }
+
+  const handleShopifySubmit = (shop: string) => {
+    mutate(
+      { shop },
+      {
+        onSuccess: (response) => {
+          setShopifyModalOpen(false)
+          onStartSuccess(platform, response.data)
+        },
+      }
+    )
+  }
+
+  return (
+    <>
+      <div
         className={cn(
-          'rounded-[8px] px-4 py-2 text-subhead transition-all duration-200',
-          isPending
-            ? 'cursor-not-allowed bg-accent/40 text-white'
-            : 'bg-accent text-white hover:bg-accent-hover active:scale-[0.98]'
+          'glass-panel flex items-center justify-between gap-4 p-5',
+          isHighlighted ? 'ring-2 ring-accent/60' : ''
         )}
       >
-        {isPending ? 'Connecting…' : 'Connect'}
-      </button>
-    </div>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span className="text-headline text-text-primary">{label}</span>
+            {statusLabel ? (
+              <span className="rounded-full bg-black/5 px-2.5 py-1 text-caption-2 text-text-secondary">
+                {statusLabel}
+              </span>
+            ) : null}
+          </div>
+          <p className="text-footnote text-text-tertiary">
+            {helperText ?? 'Connect this platform to start syncing data.'}
+          </p>
+          {isError ? (
+            <p className="text-footnote text-destructive">
+              {error instanceof Error ? error.message : 'Unable to start connection.'}
+            </p>
+          ) : null}
+        </div>
+
+        <button
+          onClick={handleStart}
+          disabled={isPending}
+          className={cn(
+            'rounded-[8px] px-4 py-2 text-subhead transition-all duration-200',
+            isPending
+              ? 'cursor-not-allowed bg-accent/40 text-white'
+              : 'bg-accent text-white hover:bg-accent-hover active:scale-[0.98]'
+          )}
+        >
+          {isPending ? 'Connecting…' : 'Connect'}
+        </button>
+      </div>
+
+      <ShopifyStoreModal
+        open={shopifyModalOpen}
+        isSubmitting={isPending}
+        platformLabel={label}
+        onClose={() => setShopifyModalOpen(false)}
+        onSubmit={handleShopifySubmit}
+      />
+    </>
   )
 }
 
@@ -104,6 +234,7 @@ export default function ConnectionsPage() {
     platform: ConnectionPlatform
     instructions: StartConnectionInstructionsResult
   } | null>(null)
+  const [isSelectedShopifyModalOpen, setIsSelectedShopifyModalOpen] = useState(false)
   const requestedPlatform = searchParams.get('platform')
   const selectedPlatform = toValidPlatform(requestedPlatform)
   const { mutate: startSelectedPlatform, isPending: isStartingSelectedPlatform } = useStartConnection(
@@ -152,6 +283,39 @@ export default function ConnectionsPage() {
 
     router.replace(nextUrl)
   }, [pathname, router, searchParams])
+
+  const handleSelectedPlatformStart = () => {
+    if (!selectedPlatform) {
+      return
+    }
+
+    if (selectedPlatform === 'shopify') {
+      setIsSelectedShopifyModalOpen(true)
+      return
+    }
+
+    startSelectedPlatform(undefined, {
+      onSuccess: (response) => handleStartSuccess(selectedPlatform, response.data),
+      onSettled: () => clearPlatformQuery(),
+    })
+  }
+
+  const handleSelectedShopifySubmit = (shop: string) => {
+    if (selectedPlatform !== 'shopify') {
+      return
+    }
+
+    startSelectedPlatform(
+      { shop },
+      {
+        onSuccess: (response) => {
+          setIsSelectedShopifyModalOpen(false)
+          handleStartSuccess(selectedPlatform, response.data)
+        },
+        onSettled: () => clearPlatformQuery(),
+      }
+    )
+  }
 
   useEffect(() => {
     if (requestedPlatform && !selectedPlatform) {
@@ -203,12 +367,7 @@ export default function ConnectionsPage() {
           </div>
 
           <button
-            onClick={() =>
-              startSelectedPlatform(undefined, {
-                onSuccess: (response) => handleStartSuccess(selectedPlatform, response.data),
-                onSettled: () => clearPlatformQuery(),
-              })
-            }
+            onClick={handleSelectedPlatformStart}
             disabled={isStartingSelectedPlatform}
             className={cn(
               'rounded-[8px] px-4 py-2 text-subhead transition-all duration-200',
@@ -221,6 +380,14 @@ export default function ConnectionsPage() {
           </button>
         </div>
       ) : null}
+
+      <ShopifyStoreModal
+        open={isSelectedShopifyModalOpen}
+        isSubmitting={isStartingSelectedPlatform}
+        platformLabel={toPlatformLabel('shopify')}
+        onClose={() => setIsSelectedShopifyModalOpen(false)}
+        onSubmit={handleSelectedShopifySubmit}
+      />
 
       {isLoading ? (
         <div className="flex flex-col gap-3">

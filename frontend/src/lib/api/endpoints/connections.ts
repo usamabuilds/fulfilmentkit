@@ -37,13 +37,17 @@ export interface StartConnectionInstructionsResult {
 }
 
 export type StartConnectionResult = StartConnectionAuthUrlResult | StartConnectionInstructionsResult
+export interface StartConnectionPayload {
+  shop?: string
+}
 
 export const connectionsApi = {
   list: () => apiGetList<Connection>('/connections'),
 
   getOne: (connectionId: string) => apiGet<Connection>(`/connections/${connectionId}`),
 
-  start: (platform: ConnectionPlatform) => apiPost<StartConnectionResult>(`/connections/${platform}/start`, {}),
+  start: (platform: ConnectionPlatform, payload: StartConnectionPayload = {}) =>
+    apiPost<StartConnectionResult>(`/connections/${platform}/start`, payload),
 
   startSync: (connectionId: string) => apiPost<void>(`/connections/${connectionId}/sync`, {}),
 }
