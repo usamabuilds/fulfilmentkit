@@ -678,6 +678,100 @@ export class ConnectionsService {
         };
       }
 
+      if (platform === 'woocommerce') {
+        if (typeof payload?.storeUrl !== 'string' || !payload.storeUrl.trim()) {
+          throw new BadRequestException('Missing WooCommerce store URL');
+        }
+        if (typeof payload?.consumerKey !== 'string' || !payload.consumerKey.trim()) {
+          throw new BadRequestException('Missing WooCommerce consumer key');
+        }
+        if (typeof payload?.consumerSecret !== 'string' || !payload.consumerSecret.trim()) {
+          throw new BadRequestException('Missing WooCommerce consumer secret');
+        }
+
+        const normalizedStoreUrl = this.normalizeWooCommerceStoreUrl(payload.storeUrl);
+        const consumerKey = payload.consumerKey.trim();
+        const consumerSecret = payload.consumerSecret.trim();
+
+        const validatedEndpointUrl = new URL(`${normalizedStoreUrl}/wp-json/wc/v3/system_status`);
+        validatedEndpointUrl.searchParams.set('consumer_key', consumerKey);
+        validatedEndpointUrl.searchParams.set('consumer_secret', consumerSecret);
+
+        const abortController = new AbortController();
+        const timeoutMs = 10000;
+        const timeout = setTimeout(() => abortController.abort(), timeoutMs);
+
+        try {
+          const response = await fetch(validatedEndpointUrl.toString(), {
+            method: 'GET',
+            headers: {
+              Accept: 'application/json',
+            },
+            signal: abortController.signal,
+          });
+
+          if (!response.ok) {
+            const statusMessage = Number.isInteger(response.status)
+              ? ` (status ${response.status})`
+              : '';
+            throw new BadRequestException(
+              `Invalid WooCommerce credentials or store URL${statusMessage}`,
+            );
+          }
+
+          let systemStatusPayload: unknown = null;
+          try {
+            systemStatusPayload = await response.json();
+          } catch {
+            throw new BadRequestException('Invalid WooCommerce credentials or store URL');
+          }
+
+          if (
+            typeof systemStatusPayload !== 'object'
+            || systemStatusPayload === null
+            || Array.isArray(systemStatusPayload)
+          ) {
+            throw new BadRequestException('Invalid WooCommerce credentials or store URL');
+          }
+
+          const payloadRecord = systemStatusPayload as Record<string, unknown>;
+          const hasExpectedKeys =
+            'environment' in payloadRecord
+            && 'database' in payloadRecord
+            && 'active_plugins' in payloadRecord;
+          if (!hasExpectedKeys) {
+            throw new BadRequestException('Invalid WooCommerce credentials or store URL');
+          }
+
+          const apiVersion = typeof payloadRecord.version === 'string'
+            ? payloadRecord.version
+            : null;
+
+          const nowIso = new Date().toISOString();
+          secretPayload = {
+            storeUrl: normalizedStoreUrl,
+            consumerKey,
+            consumerSecret,
+          };
+          providerMetadata = {
+            storeUrl: normalizedStoreUrl,
+            validatedEndpoint: validatedEndpointUrl.origin + validatedEndpointUrl.pathname,
+            validatedAt: nowIso,
+            ...(apiVersion ? { apiVersion } : {}),
+          };
+        } catch (error) {
+          if (error instanceof BadRequestException) {
+            throw error;
+          }
+          if (error instanceof Error && error.name === 'AbortError') {
+            throw new BadRequestException('Invalid WooCommerce credentials or store URL');
+          }
+          throw error;
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+
       // Encrypt payload (server-side only)
       const { ciphertext, metadata } = this.encryptJson(secretPayload);
 
@@ -735,6 +829,26 @@ export class ConnectionsService {
         status: 'connected',
       },
     };
+  }
+
+  private normalizeWooCommerceStoreUrl(storeUrl: string): string {
+    const trimmedStoreUrl = storeUrl.trim();
+    const storeUrlWithProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmedStoreUrl)
+      ? trimmedStoreUrl
+      : `https://${trimmedStoreUrl}`;
+
+    let parsedStoreUrl: URL;
+    try {
+      parsedStoreUrl = new URL(storeUrlWithProtocol);
+    } catch {
+      throw new BadRequestException('Invalid WooCommerce credentials or store URL');
+    }
+
+    parsedStoreUrl.pathname = parsedStoreUrl.pathname.replace(/\/+$/, '');
+    parsedStoreUrl.search = '';
+    parsedStoreUrl.hash = '';
+
+    return parsedStoreUrl.toString().replace(/\/$/, '');
   }
 
   async triggerManualSync(args: TriggerManualSyncArgs) {
