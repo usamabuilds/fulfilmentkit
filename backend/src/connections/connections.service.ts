@@ -61,6 +61,15 @@ type CallbackArgs = {
   payload: any;
 };
 
+type ShopifyOAuthState = {
+  workspaceId: string;
+  connectionId: string;
+  shop: string;
+  iat: number;
+  exp: number;
+  nonce: string;
+};
+
 type TriggerManualSyncArgs = {
   workspaceId: string;
   connectionId: string;
@@ -289,10 +298,10 @@ export class ConnectionsService {
       );
     }
 
-    const state = this.signState({
+    const state = this.generateAndSignShopifyOAuthState({
       workspaceId: args.workspaceId,
       connectionId: args.connectionId,
-      platform: 'shopify',
+      shop: args.shop,
     });
 
     const params = new URLSearchParams({
@@ -305,31 +314,122 @@ export class ConnectionsService {
     return `https://${args.shop}/admin/oauth/authorize?${params.toString()}`;
   }
 
-  private signState(payload: {
-    workspaceId: string;
-    connectionId: string;
-    platform: 'shopify';
-  }): string {
-    const stateSecret = process.env.CONNECTION_SECRET_KEY;
+  private getOAuthStateSecret(): string {
+    const stateSecret = process.env.CONNECTION_OAUTH_STATE_KEY ?? process.env.CONNECTION_SECRET_KEY;
     if (!stateSecret) {
-      throw new Error('CONNECTION_SECRET_KEY must be set for Shopify state signing');
+      throw new Error(
+        'CONNECTION_OAUTH_STATE_KEY (or CONNECTION_SECRET_KEY fallback) must be set for Shopify state signing',
+      );
     }
 
-    const encodedPayload = Buffer.from(
-      JSON.stringify({
-        ...payload,
-        ts: Date.now(),
-        nonce: crypto.randomBytes(12).toString('hex'),
-      }),
-      'utf8',
-    ).toString('base64url');
+    return stateSecret;
+  }
 
+  private generateAndSignShopifyOAuthState(args: {
+    workspaceId: string;
+    connectionId: string;
+    shop: string;
+  }): string {
+    const nowInSeconds = Math.floor(Date.now() / 1000);
+    const payload: ShopifyOAuthState = {
+      workspaceId: args.workspaceId,
+      connectionId: args.connectionId,
+      shop: args.shop,
+      iat: nowInSeconds,
+      exp: nowInSeconds + 10 * 60,
+      nonce: crypto.randomBytes(12).toString('hex'),
+    };
+
+    const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
     const signature = crypto
-      .createHmac('sha256', stateSecret)
+      .createHmac('sha256', this.getOAuthStateSecret())
       .update(encodedPayload)
       .digest('base64url');
 
     return `${encodedPayload}.${signature}`;
+  }
+
+  private verifyShopifyOAuthState(args: {
+    state: unknown;
+    shop: unknown;
+  }): ShopifyOAuthState {
+    if (typeof args.state !== 'string' || !args.state.trim()) {
+      throw new BadRequestException('Missing Shopify OAuth state');
+    }
+
+    if (typeof args.shop !== 'string' || !args.shop.trim()) {
+      throw new BadRequestException('Missing Shopify OAuth shop');
+    }
+
+    const [encodedPayload, signature] = args.state.split('.');
+    if (!encodedPayload || !signature) {
+      throw new BadRequestException('Invalid Shopify OAuth state');
+    }
+
+    const expectedSignature = crypto
+      .createHmac('sha256', this.getOAuthStateSecret())
+      .update(encodedPayload)
+      .digest('base64url');
+
+    if (expectedSignature.length !== signature.length) {
+      throw new BadRequestException('Invalid Shopify OAuth state signature');
+    }
+
+    if (!crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature))) {
+      throw new BadRequestException('Invalid Shopify OAuth state signature');
+    }
+
+    let decodedPayload: unknown;
+    try {
+      decodedPayload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
+    } catch {
+      throw new BadRequestException('Invalid Shopify OAuth state payload');
+    }
+
+    if (typeof decodedPayload !== 'object' || decodedPayload === null) {
+      throw new BadRequestException('Invalid Shopify OAuth state payload');
+    }
+
+    const payload = decodedPayload as Partial<ShopifyOAuthState>;
+    if (
+      typeof payload.workspaceId !== 'string' ||
+      !payload.workspaceId.trim() ||
+      typeof payload.connectionId !== 'string' ||
+      !payload.connectionId.trim() ||
+      typeof payload.shop !== 'string' ||
+      !payload.shop.trim() ||
+      typeof payload.iat !== 'number' ||
+      !Number.isFinite(payload.iat) ||
+      typeof payload.exp !== 'number' ||
+      !Number.isFinite(payload.exp) ||
+      typeof payload.nonce !== 'string' ||
+      !payload.nonce.trim()
+    ) {
+      throw new BadRequestException('Invalid Shopify OAuth state payload');
+    }
+
+    const nowInSeconds = Math.floor(Date.now() / 1000);
+    if (payload.exp <= nowInSeconds) {
+      throw new BadRequestException('Shopify OAuth state expired');
+    }
+
+    if (payload.iat > nowInSeconds + 60) {
+      throw new BadRequestException('Invalid Shopify OAuth state issued-at time');
+    }
+
+    const callbackShop = this.normalizeAndValidateShopifyShop(args.shop);
+    if (callbackShop !== payload.shop) {
+      throw new BadRequestException('Shopify callback shop does not match OAuth state');
+    }
+
+    return {
+      workspaceId: payload.workspaceId,
+      connectionId: payload.connectionId,
+      shop: payload.shop,
+      iat: payload.iat,
+      exp: payload.exp,
+      nonce: payload.nonce,
+    };
   }
 
   private async ensureConnection(workspaceId: string, platform: ConnectionPlatform) {
@@ -393,10 +493,40 @@ export class ConnectionsService {
   }
 
   async handleCallback(args: CallbackArgs) {
-    const { workspaceId, platform, payload } = args;
+    const { platform, payload } = args;
 
     const platformEnum = this.getPlatformEnum(platform);
-    const connection = await this.ensureConnection(workspaceId, platformEnum);
+
+    let workspaceId = args.workspaceId;
+    let connectionIdFromState: string | null = null;
+
+    if (platform === 'shopify') {
+      const verifiedState = this.verifyShopifyOAuthState({
+        state: payload?.state,
+        shop: payload?.shop,
+      });
+      workspaceId = verifiedState.workspaceId;
+      connectionIdFromState = verifiedState.connectionId;
+    }
+
+    const connection = connectionIdFromState
+      ? await this.prisma.connection.findFirst({
+          where: {
+            id: connectionIdFromState,
+            workspaceId,
+            platform: platformEnum,
+          },
+          select: {
+            id: true,
+            platform: true,
+            status: true,
+          },
+        })
+      : await this.ensureConnection(workspaceId, platformEnum);
+
+    if (!connection) {
+      throw new NotFoundException('Connection not found for verified Shopify OAuth state.');
+    }
 
     // Encrypt payload (server-side only)
     const { ciphertext, metadata } = this.encryptJson(payload);
