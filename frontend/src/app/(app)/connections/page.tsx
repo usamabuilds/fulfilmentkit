@@ -13,7 +13,12 @@ import {
   type StartConnectionResult,
   type StartConnectionInstructionsResult,
 } from '@/lib/api/endpoints/connections'
-import { useConnections, useStartConnection, useStartSync } from '@/lib/hooks/useConnections'
+import {
+  useCompleteConnection,
+  useConnections,
+  useStartConnection,
+  useStartSync,
+} from '@/lib/hooks/useConnections'
 import { cn } from '@/lib/utils/cn'
 import { toPlatformLabel } from '@/lib/utils/platformLabel'
 
@@ -23,6 +28,7 @@ interface ConnectPlatformCardProps {
   helperText?: string
   isHighlighted?: boolean
   onStartSuccess: (platform: ConnectionPlatform, result: StartConnectionResult) => void
+  onConnectionCompleted?: (platform: ConnectionPlatform) => void
 }
 
 interface ShopifyStoreModalProps {
@@ -32,6 +38,19 @@ interface ShopifyStoreModalProps {
   startError?: string
   onClose: () => void
   onSubmit: (shop: string) => void
+}
+
+interface WooCommerceCredentialsModalProps {
+  open: boolean
+  isSubmitting: boolean
+  platformLabel: string
+  submitError?: string
+  onClose: () => void
+  onSubmit: (payload: {
+    storeUrl: string
+    consumerKey: string
+    consumerSecret: string
+  }) => void
 }
 
 const SHOPIFY_STORE_REGEX = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.myshopify\.com$/i
@@ -59,6 +78,38 @@ function getShopDomainError(input: string): string | null {
   }
 
   return null
+}
+
+function normalizeWooCommerceStoreUrl(input: string): string {
+  const trimmedStoreUrl = input.trim()
+  const storeUrlWithProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmedStoreUrl)
+    ? trimmedStoreUrl
+    : `https://${trimmedStoreUrl}`
+  const parsedStoreUrl = new URL(storeUrlWithProtocol)
+
+  parsedStoreUrl.pathname = parsedStoreUrl.pathname.replace(/\/+$/, '')
+  parsedStoreUrl.search = ''
+  parsedStoreUrl.hash = ''
+
+  return parsedStoreUrl.toString().replace(/\/$/, '')
+}
+
+function getWooCommerceStoreUrlError(input: string): string | null {
+  if (!input.trim()) {
+    return 'Store URL is required.'
+  }
+
+  try {
+    normalizeWooCommerceStoreUrl(input)
+  } catch {
+    return 'Enter a valid store URL.'
+  }
+
+  return null
+}
+
+function getRequiredFieldError(input: string, label: string): string | null {
+  return input.trim() ? null : `${label} is required.`
 }
 
 function ShopifyStoreModal({
@@ -130,21 +181,155 @@ function ShopifyStoreModal({
   )
 }
 
+function WooCommerceCredentialsModal({
+  open,
+  isSubmitting,
+  platformLabel,
+  submitError,
+  onClose,
+  onSubmit,
+}: WooCommerceCredentialsModalProps) {
+  const [storeUrl, setStoreUrl] = useState('')
+  const [consumerKey, setConsumerKey] = useState('')
+  const [consumerSecret, setConsumerSecret] = useState('')
+  const [touchedFields, setTouchedFields] = useState<{
+    storeUrl: boolean
+    consumerKey: boolean
+    consumerSecret: boolean
+  }>({
+    storeUrl: false,
+    consumerKey: false,
+    consumerSecret: false,
+  })
+
+  useEffect(() => {
+    if (!open) {
+      setStoreUrl('')
+      setConsumerKey('')
+      setConsumerSecret('')
+      setTouchedFields({
+        storeUrl: false,
+        consumerKey: false,
+        consumerSecret: false,
+      })
+    }
+  }, [open])
+
+  const storeUrlError = getWooCommerceStoreUrlError(storeUrl)
+  const consumerKeyError = getRequiredFieldError(consumerKey, 'Consumer Key')
+  const consumerSecretError = getRequiredFieldError(consumerSecret, 'Consumer Secret')
+  const hasValidationError = !!storeUrlError || !!consumerKeyError || !!consumerSecretError
+  const shouldShowValidationPanelError =
+    (touchedFields.storeUrl && !!storeUrlError) ||
+    (touchedFields.consumerKey && !!consumerKeyError) ||
+    (touchedFields.consumerSecret && !!consumerSecretError)
+  const panelErrorMessage = shouldShowValidationPanelError
+    ? storeUrlError ?? consumerKeyError ?? consumerSecretError
+    : submitError
+
+  const handleContinue = () => {
+    setTouchedFields({
+      storeUrl: true,
+      consumerKey: true,
+      consumerSecret: true,
+    })
+
+    if (hasValidationError) {
+      return
+    }
+
+    onSubmit({
+      storeUrl: normalizeWooCommerceStoreUrl(storeUrl),
+      consumerKey: consumerKey.trim(),
+      consumerSecret: consumerSecret.trim(),
+    })
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Connect ${platformLabel}`}
+      description="Enter your WooCommerce API credentials to complete the connection."
+    >
+      <div className="flex flex-col gap-4">
+        <Input
+          value={storeUrl}
+          onChange={(event) => setStoreUrl(event.target.value)}
+          onBlur={() => setTouchedFields((previous) => ({ ...previous, storeUrl: true }))}
+          placeholder="https://example.com"
+          label="Store URL"
+          autoComplete="off"
+          spellCheck={false}
+          error={touchedFields.storeUrl ? storeUrlError ?? undefined : undefined}
+          disabled={isSubmitting}
+        />
+        <Input
+          value={consumerKey}
+          onChange={(event) => setConsumerKey(event.target.value)}
+          onBlur={() => setTouchedFields((previous) => ({ ...previous, consumerKey: true }))}
+          label="Consumer Key"
+          autoComplete="off"
+          spellCheck={false}
+          error={touchedFields.consumerKey ? consumerKeyError ?? undefined : undefined}
+          disabled={isSubmitting}
+        />
+        <Input
+          value={consumerSecret}
+          onChange={(event) => setConsumerSecret(event.target.value)}
+          onBlur={() => setTouchedFields((previous) => ({ ...previous, consumerSecret: true }))}
+          label="Consumer Secret"
+          autoComplete="off"
+          spellCheck={false}
+          error={touchedFields.consumerSecret ? consumerSecretError ?? undefined : undefined}
+          disabled={isSubmitting}
+        />
+        {panelErrorMessage ? (
+          <div className="rounded-[8px] border border-destructive/30 bg-destructive/10 px-3 py-2 text-footnote text-destructive">
+            {panelErrorMessage}
+          </div>
+        ) : null}
+
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="ghost" type="button" onClick={onClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={handleContinue} loading={isSubmitting}>
+            Continue
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 function ConnectPlatformCard({
   platform,
   statusLabel,
   helperText,
   isHighlighted = false,
   onStartSuccess,
+  onConnectionCompleted,
 }: ConnectPlatformCardProps) {
   const { mutate, isPending, isError, error } = useStartConnection(platform)
+  const {
+    mutate: completeWooCommerceConnection,
+    isPending: isCompletingWooCommerceConnection,
+    isError: isCompleteWooCommerceError,
+    error: completeWooCommerceError,
+  } = useCompleteConnection('woocommerce')
   const [shopifyModalOpen, setShopifyModalOpen] = useState(false)
+  const [wooCommerceModalOpen, setWooCommerceModalOpen] = useState(false)
 
   const label = toPlatformLabel(platform)
 
   const handleStart = () => {
     if (platform === 'shopify') {
       setShopifyModalOpen(true)
+      return
+    }
+    if (platform === 'woocommerce') {
+      setWooCommerceModalOpen(true)
       return
     }
 
@@ -164,6 +349,21 @@ function ConnectPlatformCard({
       }
     )
   }
+
+  const handleWooCommerceSubmit = (payload: {
+    storeUrl: string
+    consumerKey: string
+    consumerSecret: string
+  }) => {
+    completeWooCommerceConnection(payload, {
+      onSuccess: () => {
+        setWooCommerceModalOpen(false)
+        onConnectionCompleted?.(platform)
+      },
+    })
+  }
+
+  const isConnecting = isPending || isCompletingWooCommerceConnection
 
   return (
     <>
@@ -194,15 +394,15 @@ function ConnectPlatformCard({
 
         <button
           onClick={handleStart}
-          disabled={isPending}
+          disabled={isConnecting}
           className={cn(
             'rounded-[8px] px-4 py-2 text-subhead transition-all duration-200',
-            isPending
+            isConnecting
               ? 'cursor-not-allowed bg-accent/40 text-white'
               : 'bg-accent text-white hover:bg-accent-hover active:scale-[0.98]'
           )}
         >
-          {isPending ? 'Connecting…' : 'Connect'}
+          {isConnecting ? 'Connecting…' : 'Connect'}
         </button>
       </div>
 
@@ -219,6 +419,21 @@ function ConnectPlatformCard({
         }
         onClose={() => setShopifyModalOpen(false)}
         onSubmit={handleShopifySubmit}
+      />
+
+      <WooCommerceCredentialsModal
+        open={wooCommerceModalOpen}
+        isSubmitting={isCompletingWooCommerceConnection}
+        platformLabel={label}
+        submitError={
+          wooCommerceModalOpen && isCompleteWooCommerceError
+            ? completeWooCommerceError instanceof Error
+              ? completeWooCommerceError.message
+              : 'Unable to complete connection.'
+            : undefined
+        }
+        onClose={() => setWooCommerceModalOpen(false)}
+        onSubmit={handleWooCommerceSubmit}
       />
     </>
   )
@@ -250,6 +465,7 @@ export default function ConnectionsPage() {
     instructions: StartConnectionInstructionsResult
   } | null>(null)
   const [isSelectedShopifyModalOpen, setIsSelectedShopifyModalOpen] = useState(false)
+  const [isSelectedWooCommerceModalOpen, setIsSelectedWooCommerceModalOpen] = useState(false)
   const requestedPlatform = searchParams.get('platform')
   const selectedPlatform = toValidPlatform(requestedPlatform)
   const {
@@ -258,6 +474,12 @@ export default function ConnectionsPage() {
     isError: isSelectedStartError,
     error: selectedStartError,
   } = useStartConnection(selectedPlatform ?? 'shopify')
+  const {
+    mutate: completeSelectedWooCommerceConnection,
+    isPending: isCompletingSelectedWooCommerceConnection,
+    isError: isSelectedWooCommerceError,
+    error: selectedWooCommerceError,
+  } = useCompleteConnection('woocommerce')
 
   const connections = data?.data?.items ?? []
 
@@ -311,10 +533,31 @@ export default function ConnectionsPage() {
       setIsSelectedShopifyModalOpen(true)
       return
     }
+    if (selectedPlatform === 'woocommerce') {
+      setIsSelectedWooCommerceModalOpen(true)
+      return
+    }
 
     startSelectedPlatform(undefined, {
       onSuccess: (response) => handleStartSuccess(selectedPlatform, response.data),
       onSettled: () => clearPlatformQuery(),
+    })
+  }
+
+  const handleSelectedWooCommerceSubmit = (payload: {
+    storeUrl: string
+    consumerKey: string
+    consumerSecret: string
+  }) => {
+    if (selectedPlatform !== 'woocommerce') {
+      return
+    }
+
+    completeSelectedWooCommerceConnection(payload, {
+      onSuccess: () => {
+        setIsSelectedWooCommerceModalOpen(false)
+        clearPlatformQuery()
+      },
     })
   }
 
@@ -414,6 +657,21 @@ export default function ConnectionsPage() {
         onSubmit={handleSelectedShopifySubmit}
       />
 
+      <WooCommerceCredentialsModal
+        open={isSelectedWooCommerceModalOpen}
+        isSubmitting={isCompletingSelectedWooCommerceConnection}
+        platformLabel={toPlatformLabel('woocommerce')}
+        submitError={
+          isSelectedWooCommerceModalOpen && isSelectedWooCommerceError
+            ? selectedWooCommerceError instanceof Error
+              ? selectedWooCommerceError.message
+              : 'Unable to complete connection.'
+            : undefined
+        }
+        onClose={() => setIsSelectedWooCommerceModalOpen(false)}
+        onSubmit={handleSelectedWooCommerceSubmit}
+      />
+
       {isLoading ? (
         <div className="flex flex-col gap-3">
           {Array.from({ length: 3 }).map((_, index) => (
@@ -449,6 +707,11 @@ export default function ConnectionsPage() {
                       clearPlatformQuery()
                     }
                   }}
+                  onConnectionCompleted={(platform) => {
+                    if (platform === selectedPlatform) {
+                      clearPlatformQuery()
+                    }
+                  }}
                 />
               )
             })()
@@ -466,6 +729,11 @@ export default function ConnectionsPage() {
               onStartSuccess={(startedPlatform, result) => {
                 handleStartSuccess(startedPlatform, result)
                 if (startedPlatform === selectedPlatform) {
+                  clearPlatformQuery()
+                }
+              }}
+              onConnectionCompleted={(completedPlatform) => {
+                if (completedPlatform === selectedPlatform) {
                   clearPlatformQuery()
                 }
               }}
