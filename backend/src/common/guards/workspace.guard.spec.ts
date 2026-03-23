@@ -467,3 +467,42 @@ test('workspace guard allows unauthenticated GET /connections/xero/callback', as
   assert.equal(workspaceLookups, 0);
   assert.equal(membershipLookups, 0);
 });
+
+test('workspace guard allows unauthenticated GET /connections/zoho/callback', async () => {
+  const request: RequestShape = {
+    method: 'GET',
+    originalUrl: '/connections/zoho/callback',
+    url: '/connections/zoho/callback?code=abc&state=xyz',
+    headers: {},
+  };
+
+  let workspaceLookups = 0;
+  let membershipLookups = 0;
+
+  const prisma = makePrisma({
+    workspace: {
+      findUnique: async () => {
+        workspaceLookups += 1;
+        return { id: 'ws-unexpected' };
+      },
+    },
+    workspaceMember: {
+      findUnique: async () => {
+        membershipLookups += 1;
+        return {
+          id: 'wm-unexpected',
+          role: 'OWNER',
+          roleDefinitionId: null,
+          roleDefinition: null,
+        };
+      },
+    },
+  });
+
+  const guard = new WorkspaceGuard(prisma as never);
+  const result = await guard.canActivate(makeContext(request));
+
+  assert.equal(result, true);
+  assert.equal(workspaceLookups, 0);
+  assert.equal(membershipLookups, 0);
+});

@@ -323,6 +323,48 @@ test('startConnectionFlow returns composed Xero authorize URL from env', async (
   assert.ok(authUrl.searchParams.get('state'));
 });
 
+test('startConnectionFlow returns composed Zoho authorize URL when env vars exist', async () => {
+  process.env.ZOHO_CLIENT_ID = 'zoho-client-id';
+  process.env.ZOHO_REDIRECT_URI = 'https://api.example.com/connections/zoho/callback';
+  process.env.ZOHO_SCOPES = 'ZohoInventory.items.READ,ZohoInventory.settings.READ';
+
+  const { service, connectionUpsertCalls } = createService();
+
+  const result = await service.startConnectionFlow({
+    workspaceId: 'ws-zoho',
+    platform: 'zoho',
+  });
+
+  assert.equal(connectionUpsertCalls.length, 1);
+  const upsertCall = connectionUpsertCalls[0] as ConnectionUpsertCall;
+  assert.deepEqual(upsertCall.where.workspaceId_platform, {
+    workspaceId: 'ws-zoho',
+    platform: 'ZOHO',
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.data.type, 'auth_url');
+  if (result.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+
+  const authUrl = new URL(result.data.url);
+  assert.equal(authUrl.origin, 'https://accounts.zoho.com');
+  assert.equal(authUrl.pathname, '/oauth/v2/auth');
+  assert.equal(authUrl.searchParams.get('response_type'), 'code');
+  assert.equal(authUrl.searchParams.get('client_id'), 'zoho-client-id');
+  assert.equal(
+    authUrl.searchParams.get('redirect_uri'),
+    'https://api.example.com/connections/zoho/callback',
+  );
+  assert.equal(
+    authUrl.searchParams.get('scope'),
+    'ZohoInventory.items.READ,ZohoInventory.settings.READ',
+  );
+  assert.equal(authUrl.searchParams.get('access_type'), 'offline');
+  assert.ok(authUrl.searchParams.get('state'));
+});
+
 test('Shopify OAuth state signing verifies and expiration is enforced', async () => {
   process.env.CONNECTION_SECRET_KEY = '12345678901234567890123456789012';
   process.env.CONNECTION_OAUTH_STATE_KEY = 'state-secret-12345678901234567890';
@@ -669,6 +711,225 @@ test('handleCallback for Xero rejects missing, invalid, expired, and reused OAut
   );
 
   Date.now = originalNow;
+  global.fetch = originalFetch;
+});
+
+test('handleCallback for Zoho rejects missing, invalid, expired, and reused OAuth state', async () => {
+  process.env.CONNECTION_SECRET_KEY = '12345678901234567890123456789012';
+  process.env.ZOHO_CLIENT_ID = 'zoho-client-id';
+  process.env.ZOHO_REDIRECT_URI = 'https://api.example.com/connections/zoho/callback';
+  process.env.ZOHO_SCOPES = 'ZohoInventory.items.READ,ZohoInventory.settings.READ';
+  process.env.ZOHO_CLIENT_SECRET = 'zoho-client-secret';
+
+  const originalFetch = global.fetch;
+  const originalNow = Date.now;
+
+  global.fetch = (async () =>
+    ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        access_token: 'zoho-access-token',
+        refresh_token: 'zoho-refresh-token',
+        expires_in_sec: 3600,
+        token_type: 'Bearer',
+        scope: 'ZohoInventory.items.READ,ZohoInventory.settings.READ',
+      }),
+    }) as Response) as typeof fetch;
+
+  const { service } = createService();
+  const started = await service.startConnectionFlow({
+    workspaceId: 'ws-zoho-invalid',
+    platform: 'zoho',
+  });
+  assert.equal(started.data.type, 'auth_url');
+  if (started.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+
+  const state = new URL(started.data.url).searchParams.get('state');
+  assert.ok(state);
+
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-zoho-invalid',
+        platform: 'zoho',
+        payload: {
+          code: 'zoho-code',
+        },
+      }),
+    /Missing OAuth state/,
+  );
+
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-zoho-invalid',
+        platform: 'zoho',
+        payload: {
+          code: 'zoho-code',
+          state: 'not-a-valid-state',
+        },
+      }),
+    /Invalid, expired, or already-used OAuth state/,
+  );
+
+  Date.now = () => originalNow() + 11 * 60 * 1000;
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-zoho-invalid',
+        platform: 'zoho',
+        payload: {
+          code: 'zoho-code',
+          state,
+          connectionId: 'conn-1',
+        },
+      }),
+    /Invalid, expired, or already-used OAuth state/,
+  );
+  Date.now = originalNow;
+
+  const startedForReuse = await service.startConnectionFlow({
+    workspaceId: 'ws-zoho-reuse',
+    platform: 'zoho',
+  });
+  assert.equal(startedForReuse.data.type, 'auth_url');
+  if (startedForReuse.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+  const reusableState = new URL(startedForReuse.data.url).searchParams.get('state');
+  assert.ok(reusableState);
+
+  await service.handleCallback({
+    workspaceId: 'ws-zoho-reuse',
+    platform: 'zoho',
+    payload: {
+      code: 'zoho-code',
+      state: reusableState,
+      connectionId: 'conn-1',
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-zoho-reuse',
+        platform: 'zoho',
+        payload: {
+          code: 'zoho-code',
+          state: reusableState,
+          connectionId: 'conn-1',
+        },
+      }),
+    /Invalid, expired, or already-used OAuth state/,
+  );
+
+  Date.now = originalNow;
+  global.fetch = originalFetch;
+});
+
+test('handleCallback for Zoho success exchanges code, upserts encrypted secret, and sets ACTIVE status', async () => {
+  process.env.CONNECTION_SECRET_KEY = '12345678901234567890123456789012';
+  process.env.ZOHO_CLIENT_ID = 'zoho-client-id';
+  process.env.ZOHO_REDIRECT_URI = 'https://api.example.com/connections/zoho/callback';
+  process.env.ZOHO_SCOPES = 'ZohoInventory.items.READ,ZohoInventory.settings.READ';
+  process.env.ZOHO_CLIENT_SECRET = 'zoho-client-secret';
+
+  const originalFetch = global.fetch;
+  const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
+  global.fetch = (async (url, init) => {
+    fetchCalls.push({ url: String(url), init });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        access_token: 'zoho-access-token',
+        refresh_token: 'zoho-refresh-token',
+        expires_in_sec: 3600,
+        token_type: 'Bearer',
+        api_domain: 'https://www.zohoapis.com',
+        scope: 'ZohoInventory.items.READ,ZohoInventory.settings.READ',
+      }),
+    } as Response;
+  }) as typeof fetch;
+
+  const {
+    service,
+    connectionFindFirstCalls,
+    connectionSecretUpsertCalls,
+    connectionUpdateCalls,
+  } = createService();
+
+  const started = await service.startConnectionFlow({
+    workspaceId: 'ws-zoho-ok',
+    platform: 'zoho',
+  });
+  assert.equal(started.data.type, 'auth_url');
+  if (started.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+  const state = new URL(started.data.url).searchParams.get('state');
+  assert.ok(state);
+
+  const result = await service.handleCallback({
+    workspaceId: 'ws-zoho-ok',
+    platform: 'zoho',
+    payload: {
+      code: 'zoho-code-1',
+      state,
+      connectionId: 'conn-1',
+    },
+  });
+
+  assert.equal(fetchCalls.length, 1);
+  assert.equal(fetchCalls[0]?.url, 'https://accounts.zoho.com/oauth/v2/token');
+  assert.equal(fetchCalls[0]?.init?.method, 'POST');
+  const body = String(fetchCalls[0]?.init?.body ?? '');
+  assert.match(body, /grant_type=authorization_code/);
+  assert.match(body, /code=zoho-code-1/);
+
+  assert.equal(connectionFindFirstCalls.length, 1);
+  const findFirstCall = connectionFindFirstCalls[0] as ConnectionFindFirstCall;
+  assert.deepEqual(findFirstCall.where, {
+    id: 'conn-1',
+    workspaceId: 'ws-zoho-ok',
+    platform: 'ZOHO',
+  });
+
+  assert.equal(connectionSecretUpsertCalls.length, 1);
+  const secretUpsertCall = connectionSecretUpsertCalls[0] as ConnectionSecretUpsertCall;
+  assert.equal(secretUpsertCall.where.connectionId, 'conn-1');
+  assert.equal(secretUpsertCall.create.workspaceId, 'ws-zoho-ok');
+  assert.equal(secretUpsertCall.create.platform, 'ZOHO');
+  assert.equal(secretUpsertCall.create.authType, 'oauth2');
+  assert.ok(Buffer.isBuffer(secretUpsertCall.create.secretCiphertext));
+  assert.notEqual(secretUpsertCall.create.secretCiphertext.toString('utf8'), 'zoho-access-token');
+  assert.notEqual(secretUpsertCall.create.secretCiphertext.toString('utf8'), 'zoho-refresh-token');
+
+  const metadata = secretUpsertCall.create.secretMetadata;
+  assert.deepEqual(metadata.scopes, ['ZohoInventory.items.READ', 'ZohoInventory.settings.READ']);
+  assert.equal(metadata.tokenType, 'Bearer');
+  assert.equal(metadata.expiresInSeconds, 3600);
+  assert.equal(metadata.apiDomain, 'https://www.zohoapis.com');
+
+  assert.equal(connectionUpdateCalls.length, 1);
+  assert.deepEqual((connectionUpdateCalls[0] as ConnectionUpdateCall).data, {
+    status: 'ACTIVE',
+    lastError: null,
+  });
+
+  assert.deepEqual(result, {
+    success: true,
+    data: {
+      connectionId: 'conn-1',
+      platform: 'zoho',
+      stored: true,
+      status: 'connected',
+    },
+  });
+
   global.fetch = originalFetch;
 });
 
