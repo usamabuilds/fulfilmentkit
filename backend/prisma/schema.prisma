@@ -59,6 +59,7 @@ model Workspace {
   dailyMetrics    DailyMetric[]
   skuDailyMetrics SkuDailyMetric[]
   connections     Connection[]
+  connectionOAuthStates ConnectionOAuthState[]
   syncRuns        SyncRun[]
   webhookEvents   WebhookEvent[]
   forecasts       Forecast[]
@@ -372,10 +373,31 @@ model Connection {
   workspace   Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   syncRuns    SyncRun[]
   secret      ConnectionSecret?
+  oauthStates ConnectionOAuthState[]
 
   @@index([workspaceId])
   @@index([platform])
   @@unique([workspaceId, platform])
+}
+
+model ConnectionOAuthState {
+  id           String             @id @default(uuid())
+  workspaceId  String
+  connectionId String
+  platform     ConnectionPlatform
+  stateHash    String             @unique
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  workspace    Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection   Connection         @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([connectionId])
+  @@index([platform])
+  @@index([expiresAt])
+  @@index([workspaceId, connectionId, platform])
 }
 
 model ConnectionSecret {
