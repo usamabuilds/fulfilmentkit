@@ -73,6 +73,10 @@ OAuth app credentials are required:
 - XERO_CLIENT_SECRET=<xero client secret>
 - XERO_SCOPES=<space-separated xero scopes>
 - XERO_REDIRECT_URI=<https redirect uri>
+- ZOHO_CLIENT_ID=<zoho client id>
+- ZOHO_CLIENT_SECRET=<zoho client secret>
+- ZOHO_SCOPES=<comma-separated zoho scopes>
+- ZOHO_REDIRECT_URI=<https redirect uri>
 
 ### Build and start commands (Render)
 Use these settings on Render:

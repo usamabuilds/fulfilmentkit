@@ -41,6 +41,12 @@ export const envSchema = z
     XERO_SCOPES: z.string().min(1),
     XERO_REDIRECT_URI: z.string().url(),
 
+    // Zoho
+    ZOHO_CLIENT_ID: z.string().min(1),
+    ZOHO_CLIENT_SECRET: z.string().min(1),
+    ZOHO_SCOPES: z.string().min(1),
+    ZOHO_REDIRECT_URI: z.string().url(),
+
     // Node environment
     NODE_ENV: z.enum(['development', 'production']).default('development'),
   })
