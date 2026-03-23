@@ -949,6 +949,127 @@ export class ConnectionsService {
     };
   }
 
+  private async exchangeZohoAccessToken(args: {
+    code: string;
+  }): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    expiresInSeconds: number;
+    tokenType: string;
+    apiDomain: string | null;
+    scope: string | null;
+    rawResponseKeys: string[];
+  }> {
+    const { clientId, clientSecret, redirectUri } = this.getZohoTokenConfig();
+
+    const formBody = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: args.code,
+      redirect_uri: redirectUri,
+      client_id: clientId,
+      client_secret: clientSecret,
+    });
+
+    const response = await fetch('https://accounts.zoho.com/oauth/v2/token', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: formBody.toString(),
+    });
+
+    let data: unknown = null;
+    try {
+      data = await response.json();
+    } catch {
+      if (!response.ok) {
+        throw new BadRequestException(
+          `Zoho token exchange failed with status ${response.status}`,
+        );
+      }
+      throw new BadRequestException('Invalid Zoho token response payload');
+    }
+
+    if (!response.ok) {
+      const details =
+        typeof data === 'object' && data !== null
+          ? [
+              typeof (data as { error?: unknown }).error === 'string'
+                ? (data as { error: string }).error
+                : null,
+              typeof (data as { error_description?: unknown }).error_description === 'string'
+                ? (data as { error_description: string }).error_description
+                : null,
+            ]
+              .filter(Boolean)
+              .join(': ')
+          : '';
+
+      throw new BadRequestException(
+        details
+          ? `Zoho token exchange failed with status ${response.status}: ${details}`
+          : `Zoho token exchange failed with status ${response.status}`,
+      );
+    }
+
+    if (typeof data !== 'object' || data === null) {
+      throw new BadRequestException('Invalid Zoho token response payload');
+    }
+
+    const accessToken = (data as { access_token?: unknown }).access_token;
+    const refreshToken = (data as { refresh_token?: unknown }).refresh_token;
+    const tokenType = (data as { token_type?: unknown }).token_type;
+    const apiDomain = (data as { api_domain?: unknown }).api_domain;
+    const scope = (data as { scope?: unknown }).scope;
+    const expiresIn = (data as { expires_in?: unknown }).expires_in;
+    const expiresInSec = (data as { expires_in_sec?: unknown }).expires_in_sec;
+
+    if (typeof accessToken !== 'string' || !accessToken.trim()) {
+      throw new BadRequestException('Zoho token response missing access_token');
+    }
+    if (typeof refreshToken !== 'string' || !refreshToken.trim()) {
+      throw new BadRequestException('Zoho token response missing refresh_token');
+    }
+    if (typeof tokenType !== 'string' || !tokenType.trim()) {
+      throw new BadRequestException('Zoho token response missing token_type');
+    }
+
+    const parseExpires = (value: unknown): number | null => {
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        return value;
+      }
+      if (typeof value === 'string' && value.trim()) {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          return parsed;
+        }
+      }
+      return null;
+    };
+
+    const parsedExpiresInSec = parseExpires(expiresInSec);
+    const parsedExpiresIn = parseExpires(expiresIn);
+    const expiresInSeconds = parsedExpiresInSec ?? parsedExpiresIn;
+    if (!expiresInSeconds) {
+      throw new BadRequestException(
+        'Zoho token response missing expires_in or expires_in_sec',
+      );
+    }
+
+    return {
+      accessToken: accessToken.trim(),
+      refreshToken: refreshToken.trim(),
+      expiresInSeconds,
+      tokenType: tokenType.trim(),
+      apiDomain: typeof apiDomain === 'string' && apiDomain.trim()
+        ? apiDomain.trim()
+        : null,
+      scope: typeof scope === 'string' && scope.trim() ? scope.trim() : null,
+      rawResponseKeys: Object.keys(data),
+    };
+  }
+
   async handleCallback(args: CallbackArgs) {
     const { platform, payload } = args;
 
@@ -979,6 +1100,20 @@ export class ConnectionsService {
       const consumedState = await this.lookupAndValidateOAuthStateOnCallback({
         state: payload?.state,
         platform: 'XERO',
+        expectedWorkspaceId: args.workspaceId,
+        expectedConnectionId: connectionIdFromPayload || undefined,
+      });
+      workspaceId = consumedState.workspaceId;
+      connectionIdFromState = consumedState.connectionId;
+    }
+
+    if (platform === 'zoho') {
+      const connectionIdFromPayload = typeof payload?.connectionId === 'string'
+        ? payload.connectionId.trim()
+        : '';
+      const consumedState = await this.lookupAndValidateOAuthStateOnCallback({
+        state: payload?.state,
+        platform: 'ZOHO',
         expectedWorkspaceId: args.workspaceId,
         expectedConnectionId: connectionIdFromPayload || undefined,
       });
@@ -1076,6 +1211,47 @@ export class ConnectionsService {
           tokenReceivedAt: nowIso,
           oauthCompletedAt: nowIso,
           xeroResponseKeys: tokenResponse.rawResponseKeys,
+        };
+      }
+
+      if (platform === 'zoho') {
+        const zohoError = typeof payload?.error === 'string' ? payload.error.trim() : '';
+        const zohoErrorDescription = typeof payload?.error_description === 'string'
+          ? payload.error_description.trim()
+          : '';
+        const code = typeof payload?.code === 'string' ? payload.code.trim() : '';
+
+        if (zohoError) {
+          throw new BadRequestException(zohoErrorDescription || zohoError);
+        }
+        if (!code) {
+          throw new BadRequestException('Missing Zoho OAuth code');
+        }
+
+        const tokenResponse = await this.exchangeZohoAccessToken({ code });
+        const now = new Date();
+        const nowIso = now.toISOString();
+        const expiresAtIso = new Date(now.getTime() + tokenResponse.expiresInSeconds * 1000).toISOString();
+        const scopeList = (tokenResponse.scope ?? '')
+          .split(/[,\s]+/)
+          .map((value) => value.trim())
+          .filter(Boolean);
+
+        secretPayload = {
+          accessToken: tokenResponse.accessToken,
+          refreshToken: tokenResponse.refreshToken,
+          expiresInSeconds: tokenResponse.expiresInSeconds,
+        };
+        providerMetadata = {
+          scopes: scopeList,
+          tokenType: tokenResponse.tokenType,
+          expiresInSeconds: tokenResponse.expiresInSeconds,
+          accessTokenExpiresAt: expiresAtIso,
+          tokenReceivedAt: nowIso,
+          oauthCompletedAt: nowIso,
+          ...(tokenResponse.apiDomain ? { apiDomain: tokenResponse.apiDomain } : {}),
+          ...(tokenResponse.scope ? { scope: tokenResponse.scope } : {}),
+          zohoResponseKeys: tokenResponse.rawResponseKeys,
         };
       }
 
