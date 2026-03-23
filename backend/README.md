@@ -64,6 +64,16 @@ AI keys are optional for now:
 - AI_DATA_SCOPE=internal_only
 - AI_ALLOW_RAW_DB=false
 
+OAuth app credentials are required:
+- SHOPIFY_CLIENT_ID=<shopify client id>
+- SHOPIFY_CLIENT_SECRET=<shopify client secret>
+- SHOPIFY_SCOPES=<comma-separated shopify scopes>
+- SHOPIFY_REDIRECT_URI=<https redirect uri>
+- XERO_CLIENT_ID=<xero client id>
+- XERO_CLIENT_SECRET=<xero client secret>
+- XERO_SCOPES=<space-separated xero scopes>
+- XERO_REDIRECT_URI=<https redirect uri>
+
 ### Build and start commands (Render)
 Use these settings on Render:
 
