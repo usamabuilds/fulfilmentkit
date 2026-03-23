@@ -624,7 +624,7 @@ export default function ConnectionsPage() {
 
   useEffect(() => {
     const xeroError = searchParams.get('xero_error')
-    const xeroConnected = searchParams.get('xero_connected')
+    const xeroConnected = searchParams.get('xero')
     const zohoError = searchParams.get('zoho_error')
     const zohoConnected = searchParams.get('zoho')
 
@@ -649,14 +649,14 @@ export default function ConnectionsPage() {
         tone: 'error',
         message: normalizedError || 'Unable to connect Xero. Please try again.',
       })
-    } else if (parseBooleanParam(xeroConnected)) {
+    } else if (parseSuccessParam(xeroConnected)) {
       setCallbackNotice({
         tone: 'success',
         message: 'Xero is connected and ready to sync.',
       })
     }
 
-    clearPlatformQuery(['xero_error', 'xero_connected', 'zoho_error', 'zoho'])
+    clearPlatformQuery(['xero_error', 'xero', 'zoho_error', 'zoho'])
   }, [clearPlatformQuery, searchParams])
 
   return (

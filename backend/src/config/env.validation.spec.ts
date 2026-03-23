@@ -18,6 +18,10 @@ const baseEnv = {
   XERO_CLIENT_SECRET: 'xero-client-secret',
   XERO_SCOPES: 'openid profile email accounting.transactions',
   XERO_REDIRECT_URI: 'https://app.example.com/auth/xero/callback',
+  ZOHO_CLIENT_ID: 'zoho-client-id',
+  ZOHO_CLIENT_SECRET: 'zoho-client-secret',
+  ZOHO_SCOPES: 'ZohoInventory.items.READ,ZohoInventory.settings.READ',
+  ZOHO_REDIRECT_URI: 'https://app.example.com/auth/zoho/callback',
   NODE_ENV: 'development',
 } as const;
 
@@ -212,6 +216,61 @@ expectInvalid(
     XERO_REDIRECT_URI: 'not-a-url',
   },
   'XERO_REDIRECT_URI',
+  'Invalid URL',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    ZOHO_CLIENT_ID: undefined,
+  },
+  'ZOHO_CLIENT_ID',
+  'Invalid input: expected string, received undefined',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    ZOHO_CLIENT_SECRET: undefined,
+  },
+  'ZOHO_CLIENT_SECRET',
+  'Invalid input: expected string, received undefined',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    ZOHO_SCOPES: undefined,
+  },
+  'ZOHO_SCOPES',
+  'Invalid input: expected string, received undefined',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    ZOHO_REDIRECT_URI: 'not-a-url',
+  },
+  'ZOHO_REDIRECT_URI',
+  'Invalid URL',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    FRONTEND_BASE_URL: 'not-a-url',
+  },
+  'FRONTEND_BASE_URL',
   'Invalid URL',
 );
 

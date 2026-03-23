@@ -7,6 +7,7 @@ export const envSchema = z
     // Server
     PORT: z.coerce.number().int().positive(),
     API_BASE_URL: z.string().url(),
+    FRONTEND_BASE_URL: z.string().url().optional(),
 
     // Database
     DATABASE_URL: z.string().min(1),
