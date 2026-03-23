@@ -35,6 +35,12 @@ export const envSchema = z
     SHOPIFY_SCOPES: z.string().min(1),
     SHOPIFY_REDIRECT_URI: z.string().url(),
 
+    // Xero
+    XERO_CLIENT_ID: z.string().min(1),
+    XERO_CLIENT_SECRET: z.string().min(1),
+    XERO_SCOPES: z.string().min(1),
+    XERO_REDIRECT_URI: z.string().url(),
+
     // Node environment
     NODE_ENV: z.enum(['development', 'production']).default('development'),
   })

@@ -14,6 +14,10 @@ const baseEnv = {
   SHOPIFY_CLIENT_SECRET: 'shopify-client-secret',
   SHOPIFY_SCOPES: 'read_products,write_products',
   SHOPIFY_REDIRECT_URI: 'https://app.example.com/auth/shopify/callback',
+  XERO_CLIENT_ID: 'xero-client-id',
+  XERO_CLIENT_SECRET: 'xero-client-secret',
+  XERO_SCOPES: 'openid profile email accounting.transactions',
+  XERO_REDIRECT_URI: 'https://app.example.com/auth/xero/callback',
   NODE_ENV: 'development',
 } as const;
 
@@ -164,6 +168,50 @@ expectInvalid(
     SHOPIFY_REDIRECT_URI: 'not-a-url',
   },
   'SHOPIFY_REDIRECT_URI',
+  'Invalid URL',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    XERO_CLIENT_ID: undefined,
+  },
+  'XERO_CLIENT_ID',
+  'Invalid input: expected string, received undefined',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    XERO_CLIENT_SECRET: undefined,
+  },
+  'XERO_CLIENT_SECRET',
+  'Invalid input: expected string, received undefined',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    XERO_SCOPES: undefined,
+  },
+  'XERO_SCOPES',
+  'Invalid input: expected string, received undefined',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    XERO_REDIRECT_URI: 'not-a-url',
+  },
+  'XERO_REDIRECT_URI',
   'Invalid URL',
 );
 
