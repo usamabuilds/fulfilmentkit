@@ -70,6 +70,15 @@ type ShopifyOAuthState = {
   nonce: string;
 };
 
+type XeroOAuthState = {
+  workspaceId: string;
+  connectionId: string;
+  platform: ConnectionPlatform;
+  state: string;
+  nonce: string;
+  exp: number;
+};
+
 type TriggerManualSyncArgs = {
   workspaceId: string;
   connectionId: string;
@@ -197,18 +206,20 @@ export class ConnectionsService {
           },
         };
       case 'xero':
+      {
+        const url = await this.buildXeroAuthorizeUrl({
+          workspaceId,
+          connectionId: connection.id,
+        });
+
         return {
           success: true,
           data: {
-            type: 'instructions',
-            title: 'Connect Xero via OAuth 2.0',
-            steps: [
-              'Start OAuth 2.0 authorization for your Xero organization.',
-              'Approve access and complete callback handling when the endpoint is available.',
-            ],
-            message: 'Xero setup is OAuth 2.0 based and does not expose secrets in responses.',
+            type: 'auth_url',
+            url,
           },
         };
+      }
       case 'sage':
         return {
           success: true,
@@ -312,6 +323,93 @@ export class ConnectionsService {
     });
 
     return `https://${args.shop}/admin/oauth/authorize?${params.toString()}`;
+  }
+
+  private getXeroOAuthConfig(): {
+    clientId: string;
+    redirectUri: string;
+    scopes: string;
+  } {
+    const clientId = process.env.XERO_CLIENT_ID;
+    const redirectUri = process.env.XERO_REDIRECT_URI;
+    const scopes = process.env.XERO_SCOPES;
+
+    if (!clientId || !redirectUri || !scopes) {
+      throw new Error(
+        'XERO_CLIENT_ID, XERO_REDIRECT_URI, and XERO_SCOPES must be set',
+      );
+    }
+
+    return {
+      clientId,
+      redirectUri,
+      scopes,
+    };
+  }
+
+  private async buildXeroAuthorizeUrl(args: {
+    workspaceId: string;
+    connectionId: string;
+  }): Promise<string> {
+    const config = this.getXeroOAuthConfig();
+    const state = crypto.randomBytes(32).toString('base64url');
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const exp = Math.floor(Date.now() / 1000) + 10 * 60;
+
+    await this.persistXeroOAuthState({
+      workspaceId: args.workspaceId,
+      connectionId: args.connectionId,
+      platform: 'XERO',
+      state,
+      nonce,
+      exp,
+    });
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: config.clientId,
+      redirect_uri: config.redirectUri,
+      scope: config.scopes,
+      state,
+    });
+
+    return `https://login.xero.com/identity/connect/authorize?${params.toString()}`;
+  }
+
+  private async persistXeroOAuthState(payload: XeroOAuthState): Promise<void> {
+    const { ciphertext, metadata } = this.encryptJson(payload);
+    const expiresAtIso = new Date(payload.exp * 1000).toISOString();
+
+    await this.prisma.connectionSecret.upsert({
+      where: { connectionId: payload.connectionId },
+      create: {
+        connectionId: payload.connectionId,
+        workspaceId: payload.workspaceId,
+        platform: payload.platform,
+        authType: 'oauth2_state',
+        secretCiphertext: ciphertext,
+        secretMetadata: {
+          ...metadata,
+          provider: 'xero',
+          oauthStateExpiresAt: expiresAtIso,
+          nonce: payload.nonce,
+          savedAt: new Date().toISOString(),
+        },
+      },
+      update: {
+        workspaceId: payload.workspaceId,
+        platform: payload.platform,
+        authType: 'oauth2_state',
+        secretCiphertext: ciphertext,
+        secretMetadata: {
+          ...metadata,
+          provider: 'xero',
+          oauthStateExpiresAt: expiresAtIso,
+          nonce: payload.nonce,
+          savedAt: new Date().toISOString(),
+        },
+      },
+    });
   }
 
   private getOAuthStateSecret(): string {
