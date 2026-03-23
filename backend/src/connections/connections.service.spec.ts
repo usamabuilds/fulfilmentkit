@@ -68,8 +68,56 @@ function createService() {
   const connectionFindFirstCalls: Array<Record<string, unknown>> = [];
   const connectionSecretUpsertCalls: Array<Record<string, unknown>> = [];
   const connectionUpdateCalls: Array<Record<string, unknown>> = [];
+  const oauthStates = new Map<
+    string,
+    {
+      workspaceId: string;
+      connectionId: string;
+      platform: ConnectionPlatform;
+      expiresAt: Date;
+      usedAt: Date | null;
+    }
+  >();
 
   const prisma = {
+    $executeRaw: async (
+      _strings: TemplateStringsArray,
+      ...values: unknown[]
+    ) => {
+      const workspaceId = values[1] as string;
+      const connectionId = values[2] as string;
+      const platform = values[3] as ConnectionPlatform;
+      const stateHash = values[4] as string;
+      const expiresAt = values[5] as Date;
+
+      oauthStates.set(`${platform}:${stateHash}`, {
+        workspaceId,
+        connectionId,
+        platform,
+        expiresAt,
+        usedAt: null,
+      });
+
+      return 1;
+    },
+    $queryRaw: async (
+      _strings: TemplateStringsArray,
+      ...values: unknown[]
+    ): Promise<Array<{ workspaceId: string; connectionId: string }>> => {
+      const stateHash = values[0] as string;
+      const platform = values[1] as ConnectionPlatform;
+      const state = oauthStates.get(`${platform}:${stateHash}`);
+
+      if (!state || state.usedAt || state.expiresAt.getTime() <= Date.now()) {
+        return [];
+      }
+
+      state.usedAt = new Date();
+      return [{
+        workspaceId: state.workspaceId,
+        connectionId: state.connectionId,
+      }];
+    },
     connection: {
       upsert: async (args: Record<string, unknown>) => {
         connectionUpsertCalls.push(args);
@@ -119,6 +167,7 @@ function createService() {
     connectionFindFirstCalls,
     connectionSecretUpsertCalls,
     connectionUpdateCalls,
+    oauthStates,
   };
 }
 
@@ -234,6 +283,44 @@ test('startConnectionFlow for WooCommerce keeps start non-OAuth and only returns
     result.data.message,
     'WooCommerce uses API key credentials for this flow; start only initializes the connection record.',
   );
+});
+
+test('startConnectionFlow returns composed Xero authorize URL from env', async () => {
+  process.env.XERO_CLIENT_ID = 'xero-client-id';
+  process.env.XERO_REDIRECT_URI = 'https://api.example.com/connections/xero/callback';
+  process.env.XERO_SCOPES = 'openid profile accounting.transactions';
+
+  const { service, connectionUpsertCalls } = createService();
+
+  const result = await service.startConnectionFlow({
+    workspaceId: 'ws-xero',
+    platform: 'xero',
+  });
+
+  assert.equal(connectionUpsertCalls.length, 1);
+  const upsertCall = connectionUpsertCalls[0] as ConnectionUpsertCall;
+  assert.deepEqual(upsertCall.where.workspaceId_platform, {
+    workspaceId: 'ws-xero',
+    platform: 'XERO',
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.data.type, 'auth_url');
+  if (result.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+
+  const authUrl = new URL(result.data.url);
+  assert.equal(authUrl.origin, 'https://login.xero.com');
+  assert.equal(authUrl.pathname, '/identity/connect/authorize');
+  assert.equal(authUrl.searchParams.get('response_type'), 'code');
+  assert.equal(authUrl.searchParams.get('client_id'), 'xero-client-id');
+  assert.equal(
+    authUrl.searchParams.get('redirect_uri'),
+    'https://api.example.com/connections/xero/callback',
+  );
+  assert.equal(authUrl.searchParams.get('scope'), 'openid profile accounting.transactions');
+  assert.ok(authUrl.searchParams.get('state'));
 });
 
 test('Shopify OAuth state signing verifies and expiration is enforced', async () => {
@@ -465,6 +552,277 @@ test('handleCallback token exchange failure marks connection as error and stores
   assert.equal(updateCall.data.status, 'ERROR');
   assert.match(updateCall.data.lastError ?? '', /Shopify token exchange failed with status 401/);
   assert.doesNotMatch(updateCall.data.lastError ?? '', /bad-code|access_token|shpat/i);
+
+  global.fetch = originalFetch;
+});
+
+test('handleCallback for Xero rejects missing, invalid, expired, and reused OAuth state', async () => {
+  process.env.CONNECTION_SECRET_KEY = '12345678901234567890123456789012';
+  process.env.XERO_CLIENT_ID = 'xero-client-id';
+  process.env.XERO_REDIRECT_URI = 'https://api.example.com/connections/xero/callback';
+  process.env.XERO_SCOPES = 'openid profile accounting.transactions';
+  process.env.XERO_CLIENT_SECRET = 'xero-client-secret';
+
+  const originalFetch = global.fetch;
+  const originalNow = Date.now;
+
+  global.fetch = (async () =>
+    ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        access_token: 'xero-access-token',
+        refresh_token: 'xero-refresh-token',
+        expires_in: 1800,
+        scope: 'openid profile accounting.transactions',
+        token_type: 'Bearer',
+      }),
+    }) as Response) as typeof fetch;
+
+  const { service } = createService();
+  const started = await service.startConnectionFlow({
+    workspaceId: 'ws-xero-invalid',
+    platform: 'xero',
+  });
+  assert.equal(started.data.type, 'auth_url');
+  if (started.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+
+  const state = new URL(started.data.url).searchParams.get('state');
+  assert.ok(state);
+
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-xero-invalid',
+        platform: 'xero',
+        payload: {
+          code: 'xero-code',
+        },
+      }),
+    /Missing OAuth state/,
+  );
+
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-xero-invalid',
+        platform: 'xero',
+        payload: {
+          code: 'xero-code',
+          state: 'not-a-valid-state',
+        },
+      }),
+    /Invalid, expired, or already-used OAuth state/,
+  );
+
+  Date.now = () => originalNow() + 11 * 60 * 1000;
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-xero-invalid',
+        platform: 'xero',
+        payload: {
+          code: 'xero-code',
+          state,
+          connectionId: 'conn-1',
+        },
+      }),
+    /Invalid, expired, or already-used OAuth state/,
+  );
+  Date.now = originalNow;
+
+  const startedForReuse = await service.startConnectionFlow({
+    workspaceId: 'ws-xero-reuse',
+    platform: 'xero',
+  });
+  assert.equal(startedForReuse.data.type, 'auth_url');
+  if (startedForReuse.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+  const reusableState = new URL(startedForReuse.data.url).searchParams.get('state');
+  assert.ok(reusableState);
+
+  await service.handleCallback({
+    workspaceId: 'ws-xero-reuse',
+    platform: 'xero',
+    payload: {
+      code: 'xero-code',
+      state: reusableState,
+      connectionId: 'conn-1',
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-xero-reuse',
+        platform: 'xero',
+        payload: {
+          code: 'xero-code',
+          state: reusableState,
+          connectionId: 'conn-1',
+        },
+      }),
+    /Invalid, expired, or already-used OAuth state/,
+  );
+
+  Date.now = originalNow;
+  global.fetch = originalFetch;
+});
+
+test('handleCallback for Xero success exchanges code, stores encrypted secret, and sets ACTIVE status', async () => {
+  process.env.CONNECTION_SECRET_KEY = '12345678901234567890123456789012';
+  process.env.XERO_CLIENT_ID = 'xero-client-id';
+  process.env.XERO_REDIRECT_URI = 'https://api.example.com/connections/xero/callback';
+  process.env.XERO_SCOPES = 'openid profile accounting.transactions';
+  process.env.XERO_CLIENT_SECRET = 'xero-client-secret';
+
+  const originalFetch = global.fetch;
+  const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
+  global.fetch = (async (url, init) => {
+    fetchCalls.push({ url: String(url), init });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        access_token: 'xero-access-token',
+        refresh_token: 'xero-refresh-token',
+        expires_in: 1800,
+        scope: 'openid profile accounting.transactions',
+        token_type: 'Bearer',
+      }),
+    } as Response;
+  }) as typeof fetch;
+
+  const {
+    service,
+    connectionFindFirstCalls,
+    connectionSecretUpsertCalls,
+    connectionUpdateCalls,
+  } = createService();
+
+  const started = await service.startConnectionFlow({
+    workspaceId: 'ws-xero-ok',
+    platform: 'xero',
+  });
+  assert.equal(started.data.type, 'auth_url');
+  if (started.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+  const state = new URL(started.data.url).searchParams.get('state');
+  assert.ok(state);
+
+  const result = await service.handleCallback({
+    workspaceId: 'ws-xero-ok',
+    platform: 'xero',
+    payload: {
+      code: 'xero-code-1',
+      state,
+      connectionId: 'conn-1',
+    },
+  });
+
+  assert.equal(fetchCalls.length, 1);
+  assert.equal(fetchCalls[0]?.url, 'https://identity.xero.com/connect/token');
+  assert.equal(fetchCalls[0]?.init?.method, 'POST');
+  const body = String(fetchCalls[0]?.init?.body ?? '');
+  assert.match(body, /grant_type=authorization_code/);
+  assert.match(body, /code=xero-code-1/);
+
+  assert.equal(connectionFindFirstCalls.length, 1);
+  const findFirstCall = connectionFindFirstCalls[0] as ConnectionFindFirstCall;
+  assert.deepEqual(findFirstCall.where, {
+    id: 'conn-1',
+    workspaceId: 'ws-xero-ok',
+    platform: 'XERO',
+  });
+
+  assert.equal(connectionSecretUpsertCalls.length, 1);
+  const secretUpsertCall = connectionSecretUpsertCalls[0] as ConnectionSecretUpsertCall;
+  assert.equal(secretUpsertCall.where.connectionId, 'conn-1');
+  assert.equal(secretUpsertCall.create.workspaceId, 'ws-xero-ok');
+  assert.equal(secretUpsertCall.create.platform, 'XERO');
+  assert.equal(secretUpsertCall.create.authType, 'oauth2');
+  assert.ok(Buffer.isBuffer(secretUpsertCall.create.secretCiphertext));
+  assert.notEqual(secretUpsertCall.create.secretCiphertext.toString('utf8'), 'xero-access-token');
+  assert.notEqual(secretUpsertCall.create.secretCiphertext.toString('utf8'), 'xero-refresh-token');
+
+  assert.equal(connectionUpdateCalls.length, 1);
+  assert.deepEqual((connectionUpdateCalls[0] as ConnectionUpdateCall).data, {
+    status: 'ACTIVE',
+    lastError: null,
+  });
+
+  assert.deepEqual(result, {
+    success: true,
+    data: {
+      connectionId: 'conn-1',
+      platform: 'xero',
+      stored: true,
+      status: 'connected',
+    },
+  });
+
+  global.fetch = originalFetch;
+});
+
+test('handleCallback for Xero token exchange failure marks connection as ERROR', async () => {
+  process.env.CONNECTION_SECRET_KEY = '12345678901234567890123456789012';
+  process.env.XERO_CLIENT_ID = 'xero-client-id';
+  process.env.XERO_REDIRECT_URI = 'https://api.example.com/connections/xero/callback';
+  process.env.XERO_SCOPES = 'openid profile accounting.transactions';
+  process.env.XERO_CLIENT_SECRET = 'xero-client-secret';
+
+  const originalFetch = global.fetch;
+  global.fetch = (async () =>
+    ({
+      ok: false,
+      status: 401,
+      json: async () => ({
+        error: 'invalid_grant',
+        error_description: 'Code expired',
+      }),
+    }) as Response) as typeof fetch;
+
+  const {
+    service,
+    connectionSecretUpsertCalls,
+    connectionUpdateCalls,
+  } = createService();
+
+  const started = await service.startConnectionFlow({
+    workspaceId: 'ws-xero-fail',
+    platform: 'xero',
+  });
+  assert.equal(started.data.type, 'auth_url');
+  if (started.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+  const state = new URL(started.data.url).searchParams.get('state');
+  assert.ok(state);
+
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-xero-fail',
+        platform: 'xero',
+        payload: {
+          code: 'bad-code',
+          state,
+          connectionId: 'conn-1',
+        },
+      }),
+    /Xero token exchange failed with status 401/,
+  );
+
+  assert.equal(connectionSecretUpsertCalls.length, 0);
+  assert.equal(connectionUpdateCalls.length, 1);
+  const update = connectionUpdateCalls[0] as ConnectionUpdateCall;
+  assert.equal(update.where.id, 'conn-1');
+  assert.equal(update.data.status, 'ERROR');
+  assert.match(update.data.lastError ?? '', /Xero token exchange failed with status 401/);
 
   global.fetch = originalFetch;
 });
