@@ -28,6 +28,14 @@ const xeroCallbackQuerySchema = z.object({
   error: z.string().trim().min(1).optional(),
   error_description: z.string().trim().min(1).optional(),
 });
+const zohoCallbackQuerySchema = z.object({
+  code: z.string().trim().min(1).optional(),
+  state: z.string().trim().min(1),
+  error: z.string().trim().min(1).optional(),
+  error_description: z.string().trim().min(1).optional(),
+}).refine((value) => Boolean(value.code || value.error), {
+  message: 'Missing Zoho OAuth response payload',
+});
 
 @Controller('connections')
 export class ConnectionsController {
@@ -87,7 +95,7 @@ export class ConnectionsController {
       .parse(decodedPayload);
   }
 
-  private resolveXeroCallbackContext(rawState: string): {
+  private resolveOAuthCallbackContext(rawState: string, provider: 'Xero' | 'Zoho'): {
     workspaceId: string;
     connectionId: string;
   } {
@@ -95,7 +103,7 @@ export class ConnectionsController {
     try {
       decodedPayload = JSON.parse(Buffer.from(rawState, 'base64url').toString('utf8'));
     } catch {
-      throw new BadRequestException('Invalid Xero state');
+      throw new BadRequestException(`Invalid ${provider} state`);
     }
 
     return z
@@ -106,7 +114,7 @@ export class ConnectionsController {
       .parse(decodedPayload);
   }
 
-  private toConciseXeroError(error: unknown): string {
+  private toConciseCallbackError(error: unknown): string {
     const fallback = 'callback_failed';
     if (!(error instanceof Error) || !error.message.trim()) {
       return fallback;
@@ -213,7 +221,7 @@ export class ConnectionsController {
         throw new BadRequestException(parsedQuery.error_description ?? parsedQuery.error);
       }
 
-      const context = this.resolveXeroCallbackContext(parsedQuery.state);
+      const context = this.resolveOAuthCallbackContext(parsedQuery.state, 'Xero');
 
       await this.connectionsService.handleCallback({
         workspaceId: context.workspaceId,
@@ -229,7 +237,43 @@ export class ConnectionsController {
       res.redirect(redirectUrl.toString());
       return;
     } catch (error) {
-      redirectUrl.searchParams.set('xero_error', this.toConciseXeroError(error));
+      redirectUrl.searchParams.set('xero_error', this.toConciseCallbackError(error));
+      res.redirect(redirectUrl.toString());
+      return;
+    }
+  }
+
+  @Get('zoho/callback')
+  async zohoCallback(@Query() query: Record<string, unknown>, @Res() res: Response): Promise<void> {
+    const redirectUrl = this.getFrontendConnectionsUrl();
+
+    try {
+      const parsedQuery = zohoCallbackQuerySchema.parse(query);
+
+      if (parsedQuery.error) {
+        throw new BadRequestException(parsedQuery.error_description ?? parsedQuery.error);
+      }
+      if (!parsedQuery.code) {
+        throw new BadRequestException('Missing Zoho OAuth code');
+      }
+
+      const context = this.resolveOAuthCallbackContext(parsedQuery.state, 'Zoho');
+
+      await this.connectionsService.handleCallback({
+        workspaceId: context.workspaceId,
+        platform: 'zoho',
+        payload: {
+          code: parsedQuery.code,
+          state: parsedQuery.state,
+          connectionId: context.connectionId,
+        },
+      });
+
+      redirectUrl.searchParams.set('zoho', 'success');
+      res.redirect(redirectUrl.toString());
+      return;
+    } catch (error) {
+      redirectUrl.searchParams.set('zoho_error', this.toConciseCallbackError(error));
       res.redirect(redirectUrl.toString());
       return;
     }
