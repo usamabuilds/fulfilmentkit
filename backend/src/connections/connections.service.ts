@@ -64,19 +64,11 @@ type CallbackArgs = {
 type ShopifyOAuthState = {
   workspaceId: string;
   connectionId: string;
+  platform: 'shopify';
   shop: string;
   iat: number;
   exp: number;
   nonce: string;
-};
-
-type XeroOAuthState = {
-  workspaceId: string;
-  connectionId: string;
-  platform: ConnectionPlatform;
-  state: string;
-  nonce: string;
-  exp: number;
 };
 
 type TriggerManualSyncArgs = {
@@ -152,7 +144,7 @@ export class ConnectionsService {
     switch (platform) {
       case 'shopify': {
         const shop = this.normalizeAndValidateShopifyShop(payload?.shop);
-        const url = this.buildShopifyOAuthUrl({
+        const url = await this.buildShopifyOAuthUrl({
           workspaceId,
           connectionId: connection.id,
           shop,
@@ -299,7 +291,7 @@ export class ConnectionsService {
     workspaceId: string;
     connectionId: string;
     shop: string;
-  }): string {
+  }): Promise<string> {
     const clientId = process.env.SHOPIFY_CLIENT_ID;
     const scopes = process.env.SHOPIFY_SCOPES;
     const redirectUri = process.env.SHOPIFY_REDIRECT_URI;
@@ -309,20 +301,26 @@ export class ConnectionsService {
       );
     }
 
-    const state = this.generateAndSignShopifyOAuthState({
+    return this.createAndStoreOAuthStateAtStart({
       workspaceId: args.workspaceId,
       connectionId: args.connectionId,
-      shop: args.shop,
-    });
+      platform: 'SHOPIFY',
+      buildStateToken: (expiresAt) => this.generateAndSignShopifyOAuthState({
+        workspaceId: args.workspaceId,
+        connectionId: args.connectionId,
+        shop: args.shop,
+        expiresAt,
+      }),
+    }).then((state) => {
+      const params = new URLSearchParams({
+        client_id: clientId,
+        scope: scopes,
+        redirect_uri: redirectUri,
+        state,
+      });
 
-    const params = new URLSearchParams({
-      client_id: clientId,
-      scope: scopes,
-      redirect_uri: redirectUri,
-      state,
+      return `https://${args.shop}/admin/oauth/authorize?${params.toString()}`;
     });
-
-    return `https://${args.shop}/admin/oauth/authorize?${params.toString()}`;
   }
 
   private getXeroOAuthConfig(): {
@@ -352,17 +350,18 @@ export class ConnectionsService {
     connectionId: string;
   }): Promise<string> {
     const config = this.getXeroOAuthConfig();
-    const state = crypto.randomBytes(32).toString('base64url');
-    const nonce = crypto.randomBytes(16).toString('hex');
-    const exp = Math.floor(Date.now() / 1000) + 10 * 60;
-
-    await this.persistXeroOAuthState({
+    const state = await this.createAndStoreOAuthStateAtStart({
       workspaceId: args.workspaceId,
       connectionId: args.connectionId,
       platform: 'XERO',
-      state,
-      nonce,
-      exp,
+      buildStateToken: () => Buffer.from(
+        JSON.stringify({
+          workspaceId: args.workspaceId,
+          connectionId: args.connectionId,
+          nonce: crypto.randomBytes(16).toString('hex'),
+        }),
+        'utf8',
+      ).toString('base64url'),
     });
 
     const params = new URLSearchParams({
@@ -376,42 +375,6 @@ export class ConnectionsService {
     return `https://login.xero.com/identity/connect/authorize?${params.toString()}`;
   }
 
-  private async persistXeroOAuthState(payload: XeroOAuthState): Promise<void> {
-    const { ciphertext, metadata } = this.encryptJson(payload);
-    const expiresAtIso = new Date(payload.exp * 1000).toISOString();
-
-    await this.prisma.connectionSecret.upsert({
-      where: { connectionId: payload.connectionId },
-      create: {
-        connectionId: payload.connectionId,
-        workspaceId: payload.workspaceId,
-        platform: payload.platform,
-        authType: 'oauth2_state',
-        secretCiphertext: ciphertext,
-        secretMetadata: {
-          ...metadata,
-          provider: 'xero',
-          oauthStateExpiresAt: expiresAtIso,
-          nonce: payload.nonce,
-          savedAt: new Date().toISOString(),
-        },
-      },
-      update: {
-        workspaceId: payload.workspaceId,
-        platform: payload.platform,
-        authType: 'oauth2_state',
-        secretCiphertext: ciphertext,
-        secretMetadata: {
-          ...metadata,
-          provider: 'xero',
-          oauthStateExpiresAt: expiresAtIso,
-          nonce: payload.nonce,
-          savedAt: new Date().toISOString(),
-        },
-      },
-    });
-  }
-
   private getOAuthStateSecret(): string {
     const stateSecret = process.env.CONNECTION_OAUTH_STATE_KEY ?? process.env.CONNECTION_SECRET_KEY;
     if (!stateSecret) {
@@ -423,18 +386,100 @@ export class ConnectionsService {
     return stateSecret;
   }
 
+  private hashOAuthState(state: string): string {
+    return crypto.createHash('sha256').update(state, 'utf8').digest('hex');
+  }
+
+  private async createAndStoreOAuthStateAtStart(args: {
+    workspaceId: string;
+    connectionId: string;
+    platform: ConnectionPlatform;
+    buildStateToken: (expiresAt: Date) => string;
+    ttlMs?: number;
+  }): Promise<string> {
+    const ttlMs = args.ttlMs ?? 10 * 60 * 1000;
+    const expiresAt = new Date(Date.now() + ttlMs);
+    const state = args.buildStateToken(expiresAt);
+
+    await this.prisma.$executeRaw`
+      INSERT INTO "ConnectionOAuthState" (
+        "id",
+        "workspaceId",
+        "connectionId",
+        "platform",
+        "stateHash",
+        "expiresAt",
+        "createdAt",
+        "updatedAt"
+      )
+      VALUES (
+        ${crypto.randomUUID()},
+        ${args.workspaceId},
+        ${args.connectionId},
+        ${args.platform}::"ConnectionPlatform",
+        ${this.hashOAuthState(state)},
+        ${expiresAt},
+        NOW(),
+        NOW()
+      )
+    `;
+
+    return state;
+  }
+
+  private async lookupAndValidateOAuthStateOnCallback(args: {
+    state: unknown;
+    platform: ConnectionPlatform;
+    expectedWorkspaceId?: string;
+    expectedConnectionId?: string;
+  }): Promise<{ workspaceId: string; connectionId: string }> {
+    if (typeof args.state !== 'string' || !args.state.trim()) {
+      throw new BadRequestException('Missing OAuth state');
+    }
+
+    const stateHash = this.hashOAuthState(args.state);
+    const consumedRows = await this.prisma.$queryRaw<Array<{
+      workspaceId: string;
+      connectionId: string;
+    }>>`
+      UPDATE "ConnectionOAuthState"
+      SET "usedAt" = NOW(), "updatedAt" = NOW()
+      WHERE "stateHash" = ${stateHash}
+        AND "platform" = ${args.platform}::"ConnectionPlatform"
+        AND "usedAt" IS NULL
+        AND "expiresAt" > NOW()
+      RETURNING "workspaceId", "connectionId"
+    `;
+
+    const consumedState = consumedRows[0];
+    if (!consumedState) {
+      throw new BadRequestException('Invalid, expired, or already-used OAuth state');
+    }
+
+    if (args.expectedWorkspaceId && consumedState.workspaceId !== args.expectedWorkspaceId) {
+      throw new BadRequestException('OAuth state workspace mismatch');
+    }
+    if (args.expectedConnectionId && consumedState.connectionId !== args.expectedConnectionId) {
+      throw new BadRequestException('OAuth state connection mismatch');
+    }
+
+    return consumedState;
+  }
+
   private generateAndSignShopifyOAuthState(args: {
     workspaceId: string;
     connectionId: string;
     shop: string;
+    expiresAt: Date;
   }): string {
     const nowInSeconds = Math.floor(Date.now() / 1000);
     const payload: ShopifyOAuthState = {
       workspaceId: args.workspaceId,
       connectionId: args.connectionId,
+      platform: 'shopify',
       shop: args.shop,
       iat: nowInSeconds,
-      exp: nowInSeconds + 10 * 60,
+      exp: Math.floor(args.expiresAt.getTime() / 1000),
       nonce: crypto.randomBytes(12).toString('hex'),
     };
 
@@ -494,6 +539,7 @@ export class ConnectionsService {
       !payload.workspaceId.trim() ||
       typeof payload.connectionId !== 'string' ||
       !payload.connectionId.trim() ||
+      payload.platform !== 'shopify' ||
       typeof payload.shop !== 'string' ||
       !payload.shop.trim() ||
       typeof payload.iat !== 'number' ||
@@ -523,6 +569,7 @@ export class ConnectionsService {
     return {
       workspaceId: payload.workspaceId,
       connectionId: payload.connectionId,
+      platform: payload.platform,
       shop: payload.shop,
       iat: payload.iat,
       exp: payload.exp,
@@ -717,8 +764,28 @@ export class ConnectionsService {
         state: payload?.state,
         shop: payload?.shop,
       });
-      workspaceId = verifiedState.workspaceId;
-      connectionIdFromState = verifiedState.connectionId;
+      const consumedState = await this.lookupAndValidateOAuthStateOnCallback({
+        state: payload?.state,
+        platform: 'SHOPIFY',
+        expectedWorkspaceId: verifiedState.workspaceId,
+        expectedConnectionId: verifiedState.connectionId,
+      });
+      workspaceId = consumedState.workspaceId;
+      connectionIdFromState = consumedState.connectionId;
+    }
+
+    if (platform === 'xero') {
+      const connectionIdFromPayload = typeof payload?.connectionId === 'string'
+        ? payload.connectionId.trim()
+        : '';
+      const consumedState = await this.lookupAndValidateOAuthStateOnCallback({
+        state: payload?.state,
+        platform: 'XERO',
+        expectedWorkspaceId: args.workspaceId,
+        expectedConnectionId: connectionIdFromPayload || undefined,
+      });
+      workspaceId = consumedState.workspaceId;
+      connectionIdFromState = consumedState.connectionId;
     }
 
     const connection = connectionIdFromState
