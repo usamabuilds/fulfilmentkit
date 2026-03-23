@@ -345,6 +345,28 @@ export class ConnectionsService {
     };
   }
 
+  private getXeroTokenConfig(): {
+    clientId: string;
+    clientSecret: string;
+    redirectUri: string;
+  } {
+    const clientId = process.env.XERO_CLIENT_ID;
+    const clientSecret = process.env.XERO_CLIENT_SECRET;
+    const redirectUri = process.env.XERO_REDIRECT_URI;
+
+    if (!clientId || !clientSecret || !redirectUri) {
+      throw new Error(
+        'XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_REDIRECT_URI must be set',
+      );
+    }
+
+    return {
+      clientId,
+      clientSecret,
+      redirectUri,
+    };
+  }
+
   private async buildXeroAuthorizeUrl(args: {
     workspaceId: string;
     connectionId: string;
@@ -751,6 +773,105 @@ export class ConnectionsService {
     };
   }
 
+  private async exchangeXeroAccessToken(args: {
+    code: string;
+  }): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+    scope: string;
+    tokenType: string;
+    rawResponseKeys: string[];
+  }> {
+    const { clientId, clientSecret, redirectUri } = this.getXeroTokenConfig();
+    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`, 'utf8').toString('base64');
+
+    const formBody = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: args.code,
+      redirect_uri: redirectUri,
+    });
+
+    const response = await fetch('https://identity.xero.com/connect/token', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${basicAuth}`,
+      },
+      body: formBody.toString(),
+    });
+
+    let data: unknown = null;
+    try {
+      data = await response.json();
+    } catch {
+      if (!response.ok) {
+        throw new BadRequestException(
+          `Xero token exchange failed with status ${response.status}`,
+        );
+      }
+      throw new BadRequestException('Invalid Xero token response payload');
+    }
+
+    if (!response.ok) {
+      const details =
+        typeof data === 'object' && data !== null
+          ? [
+              typeof (data as { error?: unknown }).error === 'string'
+                ? (data as { error: string }).error
+                : null,
+              typeof (data as { error_description?: unknown }).error_description === 'string'
+                ? (data as { error_description: string }).error_description
+                : null,
+            ]
+              .filter(Boolean)
+              .join(': ')
+          : '';
+
+      throw new BadRequestException(
+        details
+          ? `Xero token exchange failed with status ${response.status}: ${details}`
+          : `Xero token exchange failed with status ${response.status}`,
+      );
+    }
+
+    if (typeof data !== 'object' || data === null) {
+      throw new BadRequestException('Invalid Xero token response payload');
+    }
+
+    const accessToken = (data as { access_token?: unknown }).access_token;
+    const refreshToken = (data as { refresh_token?: unknown }).refresh_token;
+    const expiresIn = (data as { expires_in?: unknown }).expires_in;
+    const scope = (data as { scope?: unknown }).scope;
+    const tokenType = (data as { token_type?: unknown }).token_type;
+
+    if (typeof accessToken !== 'string' || !accessToken.trim()) {
+      throw new BadRequestException('Xero token response missing access_token');
+    }
+    if (typeof refreshToken !== 'string' || !refreshToken.trim()) {
+      throw new BadRequestException('Xero token response missing refresh_token');
+    }
+    if (!Number.isFinite(expiresIn) || typeof expiresIn !== 'number' || expiresIn <= 0) {
+      throw new BadRequestException('Xero token response missing expires_in');
+    }
+    if (typeof scope !== 'string' || !scope.trim()) {
+      throw new BadRequestException('Xero token response missing scope');
+    }
+    if (typeof tokenType !== 'string' || !tokenType.trim()) {
+      throw new BadRequestException('Xero token response missing token_type');
+    }
+
+    return {
+      accessToken: accessToken.trim(),
+      refreshToken: refreshToken.trim(),
+      expiresIn,
+      scope: scope.trim(),
+      tokenType: tokenType.trim(),
+      rawResponseKeys: Object.keys(data),
+    };
+  }
+
   async handleCallback(args: CallbackArgs) {
     const { platform, payload } = args;
 
@@ -840,6 +961,44 @@ export class ConnectionsService {
           tokenReceivedAt: nowIso,
           oauthCompletedAt: nowIso,
           shopifyResponseKeys: tokenResponse.rawResponseKeys,
+        };
+      }
+
+      if (platform === 'xero') {
+        const xeroError = typeof payload?.error === 'string' ? payload.error.trim() : '';
+        const xeroErrorDescription = typeof payload?.error_description === 'string'
+          ? payload.error_description.trim()
+          : '';
+        const code = typeof payload?.code === 'string' ? payload.code.trim() : '';
+
+        if (xeroError) {
+          throw new BadRequestException(xeroErrorDescription || xeroError);
+        }
+        if (!code) {
+          throw new BadRequestException('Missing Xero OAuth code');
+        }
+
+        const tokenResponse = await this.exchangeXeroAccessToken({ code });
+        const now = new Date();
+        const nowIso = now.toISOString();
+        const expiresAtIso = new Date(now.getTime() + tokenResponse.expiresIn * 1000).toISOString();
+        const scopeList = tokenResponse.scope.split(/\s+/).map((value) => value.trim()).filter(Boolean);
+
+        secretPayload = {
+          accessToken: tokenResponse.accessToken,
+          refreshToken: tokenResponse.refreshToken,
+          expiresIn: tokenResponse.expiresIn,
+          tokenType: tokenResponse.tokenType,
+          scope: tokenResponse.scope,
+        };
+        providerMetadata = {
+          scopes: scopeList,
+          tokenType: tokenResponse.tokenType,
+          expiresIn: tokenResponse.expiresIn,
+          accessTokenExpiresAt: expiresAtIso,
+          tokenReceivedAt: nowIso,
+          oauthCompletedAt: nowIso,
+          xeroResponseKeys: tokenResponse.rawResponseKeys,
         };
       }
 
