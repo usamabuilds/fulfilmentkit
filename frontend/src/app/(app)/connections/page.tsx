@@ -461,6 +461,20 @@ function toValidPlatform(input: string | null): ConnectionPlatform | null {
   return connectionPlatforms.find((platform) => platform === normalized) ?? null
 }
 
+function parseBooleanParam(input: string | null): boolean {
+  if (!input) {
+    return false
+  }
+
+  const normalized = input.trim().toLowerCase()
+
+  return normalized === '1' || normalized === 'true' || normalized === 'yes'
+}
+
+function normalizeCallbackMessage(input: string): string {
+  return input.replace(/\+/g, ' ').trim()
+}
+
 export default function ConnectionsPage() {
   const router = useRouter()
   const pathname = usePathname()
@@ -469,6 +483,10 @@ export default function ConnectionsPage() {
   const [instructionResult, setInstructionResult] = useState<{
     platform: ConnectionPlatform
     instructions: StartConnectionInstructionsResult
+  } | null>(null)
+  const [xeroCallbackNotice, setXeroCallbackNotice] = useState<{
+    tone: 'success' | 'error'
+    message: string
   } | null>(null)
   const [isSelectedShopifyModalOpen, setIsSelectedShopifyModalOpen] = useState(false)
   const [isSelectedWooCommerceModalOpen, setIsSelectedWooCommerceModalOpen] = useState(false)
@@ -523,9 +541,11 @@ export default function ConnectionsPage() {
     })
   }
 
-  const clearPlatformQuery = useCallback(() => {
+  const clearPlatformQuery = useCallback((keys: string[] = ['platform']) => {
     const params = new URLSearchParams(searchParams.toString())
-    params.delete('platform')
+    keys.forEach((key) => {
+      params.delete(key)
+    })
     const nextQuery = params.toString()
     const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname
 
@@ -592,12 +612,62 @@ export default function ConnectionsPage() {
     }
   }, [clearPlatformQuery, requestedPlatform, selectedPlatform])
 
+  useEffect(() => {
+    const xeroError = searchParams.get('xero_error')
+    const xeroConnected = searchParams.get('xero_connected')
+
+    if (!xeroError && !xeroConnected) {
+      return
+    }
+
+    if (xeroError) {
+      const normalizedError = normalizeCallbackMessage(xeroError)
+      setXeroCallbackNotice({
+        tone: 'error',
+        message: normalizedError || 'Unable to connect Xero. Please try again.',
+      })
+    } else if (parseBooleanParam(xeroConnected)) {
+      setXeroCallbackNotice({
+        tone: 'success',
+        message: 'Xero is connected and ready to sync.',
+      })
+    }
+
+    clearPlatformQuery(['xero_error', 'xero_connected'])
+  }, [clearPlatformQuery, searchParams])
+
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-title-1 text-text-primary">Connections</h1>
         <p className="mt-1 text-body text-text-secondary">Manage your platform integrations.</p>
       </div>
+
+      {xeroCallbackNotice ? (
+        <div
+          className={cn(
+            'glass-panel flex items-start justify-between gap-3 p-4',
+            xeroCallbackNotice.tone === 'error'
+              ? 'border border-destructive/30 bg-destructive/10'
+              : 'border border-emerald-500/30 bg-emerald-500/10'
+          )}
+        >
+          <p
+            className={cn(
+              'text-footnote',
+              xeroCallbackNotice.tone === 'error' ? 'text-destructive' : 'text-emerald-700'
+            )}
+          >
+            {xeroCallbackNotice.message}
+          </p>
+          <button
+            onClick={() => setXeroCallbackNotice(null)}
+            className="rounded-[8px] bg-black/5 px-3 py-1.5 text-footnote text-text-secondary transition-colors hover:bg-black/10"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
 
       {instructionResult ? (
         <div className="glass-panel flex flex-col gap-3 p-5">
