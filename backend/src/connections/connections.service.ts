@@ -185,18 +185,20 @@ export class ConnectionsService {
           },
         };
       case 'zoho':
+      {
+        const url = await this.buildZohoAuthorizeUrl({
+          workspaceId,
+          connectionId: connection.id,
+        });
+
         return {
           success: true,
           data: {
-            type: 'instructions',
-            title: 'Connect Zoho via OAuth 2.0',
-            steps: [
-              'Initiate the Zoho OAuth 2.0 authorization flow from the connector settings.',
-              'Complete consent in Zoho and return to the callback endpoint when available.',
-            ],
-            message: 'Zoho integration uses OAuth 2.0 tokens stored server-side.',
+            type: 'auth_url',
+            url,
           },
         };
+      }
       case 'xero':
       {
         const url = await this.buildXeroAuthorizeUrl({
@@ -365,6 +367,81 @@ export class ConnectionsService {
       clientSecret,
       redirectUri,
     };
+  }
+
+  private getZohoOAuthConfig(): {
+    clientId: string;
+    redirectUri: string;
+    scopes: string;
+  } {
+    const clientId = process.env.ZOHO_CLIENT_ID;
+    const redirectUri = process.env.ZOHO_REDIRECT_URI;
+    const scopes = process.env.ZOHO_SCOPES;
+
+    if (!clientId || !redirectUri || !scopes) {
+      throw new Error(
+        'ZOHO_CLIENT_ID, ZOHO_REDIRECT_URI, and ZOHO_SCOPES must be set',
+      );
+    }
+
+    return {
+      clientId,
+      redirectUri,
+      scopes,
+    };
+  }
+
+  private getZohoTokenConfig(): {
+    clientId: string;
+    clientSecret: string;
+    redirectUri: string;
+  } {
+    const clientId = process.env.ZOHO_CLIENT_ID;
+    const clientSecret = process.env.ZOHO_CLIENT_SECRET;
+    const redirectUri = process.env.ZOHO_REDIRECT_URI;
+
+    if (!clientId || !clientSecret || !redirectUri) {
+      throw new Error(
+        'ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, and ZOHO_REDIRECT_URI must be set',
+      );
+    }
+
+    return {
+      clientId,
+      clientSecret,
+      redirectUri,
+    };
+  }
+
+  private async buildZohoAuthorizeUrl(args: {
+    workspaceId: string;
+    connectionId: string;
+  }): Promise<string> {
+    const config = this.getZohoOAuthConfig();
+    const state = await this.createAndStoreOAuthStateAtStart({
+      workspaceId: args.workspaceId,
+      connectionId: args.connectionId,
+      platform: 'ZOHO',
+      buildStateToken: () => Buffer.from(
+        JSON.stringify({
+          workspaceId: args.workspaceId,
+          connectionId: args.connectionId,
+          nonce: crypto.randomBytes(16).toString('hex'),
+        }),
+        'utf8',
+      ).toString('base64url'),
+    });
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: config.clientId,
+      redirect_uri: config.redirectUri,
+      scope: config.scopes,
+      state,
+      access_type: 'offline',
+    });
+
+    return `https://accounts.zoho.com/oauth/v2/auth?${params.toString()}`;
   }
 
   private async buildXeroAuthorizeUrl(args: {
