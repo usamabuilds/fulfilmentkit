@@ -22,6 +22,12 @@ const woocommerceCallbackBodySchema = z.object({
   consumerKey: z.string().trim().min(1),
   consumerSecret: z.string().trim().min(1),
 });
+const xeroCallbackQuerySchema = z.object({
+  code: z.string().trim().min(1),
+  state: z.string().trim().min(1),
+  error: z.string().trim().min(1).optional(),
+  error_description: z.string().trim().min(1).optional(),
+});
 
 @Controller('connections')
 export class ConnectionsController {
@@ -79,6 +85,39 @@ export class ConnectionsController {
         platform: z.literal('shopify'),
       })
       .parse(decodedPayload);
+  }
+
+  private resolveXeroCallbackContext(rawState: string): {
+    workspaceId: string;
+    connectionId: string;
+  } {
+    let decodedPayload: unknown;
+    try {
+      decodedPayload = JSON.parse(Buffer.from(rawState, 'base64url').toString('utf8'));
+    } catch {
+      throw new BadRequestException('Invalid Xero state');
+    }
+
+    return z
+      .object({
+        workspaceId: z.string().trim().min(1),
+        connectionId: z.string().trim().min(1),
+      })
+      .parse(decodedPayload);
+  }
+
+  private toConciseXeroError(error: unknown): string {
+    const fallback = 'callback_failed';
+    if (!(error instanceof Error) || !error.message.trim()) {
+      return fallback;
+    }
+
+    return error.message
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 64) || fallback;
   }
 
   @Get()
@@ -158,6 +197,39 @@ export class ConnectionsController {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Shopify callback failed';
       redirectUrl.searchParams.set('shopify_error', errorMessage);
+      res.redirect(redirectUrl.toString());
+      return;
+    }
+  }
+
+  @Get('xero/callback')
+  async xeroCallback(@Query() query: Record<string, unknown>, @Res() res: Response): Promise<void> {
+    const redirectUrl = this.getFrontendConnectionsUrl();
+
+    try {
+      const parsedQuery = xeroCallbackQuerySchema.parse(query);
+
+      if (parsedQuery.error) {
+        throw new BadRequestException(parsedQuery.error_description ?? parsedQuery.error);
+      }
+
+      const context = this.resolveXeroCallbackContext(parsedQuery.state);
+
+      await this.connectionsService.handleCallback({
+        workspaceId: context.workspaceId,
+        platform: 'xero',
+        payload: {
+          code: parsedQuery.code,
+          state: parsedQuery.state,
+          connectionId: context.connectionId,
+        },
+      });
+
+      redirectUrl.searchParams.set('xero', 'success');
+      res.redirect(redirectUrl.toString());
+      return;
+    } catch (error) {
+      redirectUrl.searchParams.set('xero_error', this.toConciseXeroError(error));
       res.redirect(redirectUrl.toString());
       return;
     }
