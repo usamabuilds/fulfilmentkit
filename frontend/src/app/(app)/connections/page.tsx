@@ -471,6 +471,16 @@ function parseBooleanParam(input: string | null): boolean {
   return normalized === '1' || normalized === 'true' || normalized === 'yes'
 }
 
+function parseSuccessParam(input: string | null): boolean {
+  if (!input) {
+    return false
+  }
+
+  const normalized = input.trim().toLowerCase()
+
+  return parseBooleanParam(input) || normalized === 'success' || normalized === 'connected'
+}
+
 function normalizeCallbackMessage(input: string): string {
   return input.replace(/\+/g, ' ').trim()
 }
@@ -484,7 +494,7 @@ export default function ConnectionsPage() {
     platform: ConnectionPlatform
     instructions: StartConnectionInstructionsResult
   } | null>(null)
-  const [xeroCallbackNotice, setXeroCallbackNotice] = useState<{
+  const [callbackNotice, setCallbackNotice] = useState<{
     tone: 'success' | 'error'
     message: string
   } | null>(null)
@@ -615,25 +625,38 @@ export default function ConnectionsPage() {
   useEffect(() => {
     const xeroError = searchParams.get('xero_error')
     const xeroConnected = searchParams.get('xero_connected')
+    const zohoError = searchParams.get('zoho_error')
+    const zohoConnected = searchParams.get('zoho')
 
-    if (!xeroError && !xeroConnected) {
+    if (!xeroError && !xeroConnected && !zohoError && !zohoConnected) {
       return
     }
 
-    if (xeroError) {
+    if (zohoError) {
+      const normalizedError = normalizeCallbackMessage(zohoError)
+      setCallbackNotice({
+        tone: 'error',
+        message: normalizedError || 'Unable to connect Zoho. Please try again.',
+      })
+    } else if (parseSuccessParam(zohoConnected)) {
+      setCallbackNotice({
+        tone: 'success',
+        message: 'Zoho connected and ready to sync.',
+      })
+    } else if (xeroError) {
       const normalizedError = normalizeCallbackMessage(xeroError)
-      setXeroCallbackNotice({
+      setCallbackNotice({
         tone: 'error',
         message: normalizedError || 'Unable to connect Xero. Please try again.',
       })
     } else if (parseBooleanParam(xeroConnected)) {
-      setXeroCallbackNotice({
+      setCallbackNotice({
         tone: 'success',
         message: 'Xero is connected and ready to sync.',
       })
     }
 
-    clearPlatformQuery(['xero_error', 'xero_connected'])
+    clearPlatformQuery(['xero_error', 'xero_connected', 'zoho_error', 'zoho'])
   }, [clearPlatformQuery, searchParams])
 
   return (
@@ -643,11 +666,11 @@ export default function ConnectionsPage() {
         <p className="mt-1 text-body text-text-secondary">Manage your platform integrations.</p>
       </div>
 
-      {xeroCallbackNotice ? (
+      {callbackNotice ? (
         <div
           className={cn(
             'glass-panel flex items-start justify-between gap-3 p-4',
-            xeroCallbackNotice.tone === 'error'
+            callbackNotice.tone === 'error'
               ? 'border border-destructive/30 bg-destructive/10'
               : 'border border-emerald-500/30 bg-emerald-500/10'
           )}
@@ -655,13 +678,13 @@ export default function ConnectionsPage() {
           <p
             className={cn(
               'text-footnote',
-              xeroCallbackNotice.tone === 'error' ? 'text-destructive' : 'text-emerald-700'
+              callbackNotice.tone === 'error' ? 'text-destructive' : 'text-emerald-700'
             )}
           >
-            {xeroCallbackNotice.message}
+            {callbackNotice.message}
           </p>
           <button
-            onClick={() => setXeroCallbackNotice(null)}
+            onClick={() => setCallbackNotice(null)}
             className="rounded-[8px] bg-black/5 px-3 py-1.5 text-footnote text-text-secondary transition-colors hover:bg-black/10"
           >
             Dismiss
