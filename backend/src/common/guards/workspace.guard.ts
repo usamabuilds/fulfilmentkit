@@ -47,13 +47,15 @@ export class WorkspaceGuard implements CanActivate {
     const isShopifyOAuthCallbackRoute =
       path === '/connections/shopify/callback' && method === 'GET';
     const isXeroOAuthCallbackRoute = path === '/connections/xero/callback' && method === 'GET';
+    const isZohoOAuthCallbackRoute = path === '/connections/zoho/callback' && method === 'GET';
 
     if (
       isAuthPublicRoute ||
       isAccountRoute ||
       isWorkspaceSelfServiceRoute ||
       isShopifyOAuthCallbackRoute ||
-      isXeroOAuthCallbackRoute
+      isXeroOAuthCallbackRoute ||
+      isZohoOAuthCallbackRoute
     ) {
       await this.resolveOrCreateUserFromAuth(request, {
         allowRequestUserFallback: false,
