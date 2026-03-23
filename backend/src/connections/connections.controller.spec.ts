@@ -149,3 +149,72 @@ test('xeroCallback redirects frontend with concise error when callback fails', a
     'https://app.example.com/connections?xero_error=xero_callback_verification_failed_badly',
   );
 });
+
+test('zohoCallback redirects frontend to success URL when callback succeeds', async () => {
+  process.env.FRONTEND_BASE_URL = 'https://app.example.com';
+  const { controller, handleCallbackCalls } = createController();
+  let redirectedTo = '';
+
+  const state = Buffer.from(
+    JSON.stringify({ workspaceId: 'ws-zoho', connectionId: 'conn-1' }),
+    'utf8',
+  ).toString('base64url');
+
+  await controller.zohoCallback(
+    {
+      code: 'zoho-code',
+      state,
+    },
+    {
+      redirect: (url: string) => {
+        redirectedTo = url;
+      },
+    } as never,
+  );
+
+  assert.equal(handleCallbackCalls.length, 1);
+  assert.deepEqual(handleCallbackCalls[0], {
+    workspaceId: 'ws-zoho',
+    platform: 'zoho',
+    payload: {
+      code: 'zoho-code',
+      state,
+      connectionId: 'conn-1',
+    },
+  });
+
+  const redirectUrl = new URL(redirectedTo);
+  assert.equal(redirectUrl.toString(), 'https://app.example.com/connections?zoho=success');
+});
+
+test('zohoCallback redirects frontend with concise error when callback fails', async () => {
+  process.env.FRONTEND_BASE_URL = 'https://app.example.com';
+  const { controller, setHandleCallbackError, handleCallbackCalls } = createController();
+  let redirectedTo = '';
+
+  setHandleCallbackError(new Error('Zoho callback verification failed badly'));
+
+  const state = Buffer.from(
+    JSON.stringify({ workspaceId: 'ws-zoho', connectionId: 'conn-1' }),
+    'utf8',
+  ).toString('base64url');
+
+  await controller.zohoCallback(
+    {
+      code: 'zoho-code',
+      state,
+    },
+    {
+      redirect: (url: string) => {
+        redirectedTo = url;
+      },
+    } as never,
+  );
+
+  assert.equal(handleCallbackCalls.length, 1);
+  const redirectUrl = new URL(redirectedTo);
+  assert.equal(
+    redirectUrl.toString(),
+    'https://app.example.com/connections?zoho_error=zoho_callback_verification_failed_badly',
+  );
+});
