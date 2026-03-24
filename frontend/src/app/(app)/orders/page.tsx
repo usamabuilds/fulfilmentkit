@@ -47,10 +47,10 @@ export default function OrdersPage() {
   const router = useRouter()
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState('')
+  const [channel, setChannel] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const preferencesQuery = useMyPreferences()
-
 
   useEffect(() => {
     if (fromDate || toDate) {
@@ -72,10 +72,11 @@ export default function OrdersPage() {
       page,
       pageSize: PAGE_SIZE,
       status: status || undefined,
+      channel: channel || undefined,
       from: fromDate || undefined,
       to: toDate || undefined,
     }),
-    [fromDate, page, status, toDate],
+    [channel, fromDate, page, status, toDate],
   )
 
   const { data, isLoading } = useOrders(queryParams)
@@ -89,6 +90,18 @@ export default function OrdersPage() {
     [orders],
   )
 
+  const availableChannels = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          orders
+            .map((order) => order.channel)
+            .filter((channelValue): channelValue is string => Boolean(channelValue)),
+        ),
+      ).sort((a, b) => a.localeCompare(b)),
+    [orders],
+  )
+
   return (
     <div className="flex flex-col gap-6">
       <div className="glass-panel p-6">
@@ -97,7 +110,7 @@ export default function OrdersPage() {
       </div>
 
       <div className="glass-card p-4">
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <label className="flex flex-col gap-2">
             <span className="text-subhead text-text-secondary">Status</span>
             <select
@@ -112,6 +125,25 @@ export default function OrdersPage() {
               {availableStatuses.map((statusValue) => (
                 <option key={statusValue} value={statusValue}>
                   {statusValue}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-2">
+            <span className="text-subhead text-text-secondary">Channel</span>
+            <select
+              value={channel}
+              onChange={(event) => {
+                setPage(1)
+                setChannel(event.target.value)
+              }}
+              className="glass-input text-text-primary"
+            >
+              <option value="">All channels</option>
+              {availableChannels.map((channelValue) => (
+                <option key={channelValue} value={channelValue}>
+                  {channelValue}
                 </option>
               ))}
             </select>
