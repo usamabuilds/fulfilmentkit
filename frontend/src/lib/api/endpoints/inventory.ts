@@ -1,12 +1,13 @@
 import { apiGetList } from '@/lib/api/client'
 
 export interface InventoryItem {
-  id: string
   sku: string
   name: string
-  quantity: number
-  lowStockThreshold: number
-  createdAt: string
+  locationId: string
+  locationCode: string
+  onHand: number
+  lowStockThreshold?: number | null
+  outOfStockThreshold?: number | null
 }
 
 export const inventoryApi = {

@@ -42,16 +42,11 @@ export class InventoryService {
           { product: { sku: 'asc' } },
         ],
         select: {
-          id: true,
           locationId: true,
-          productId: true,
           onHand: true,
-          createdAt: true,
-          updatedAt: true,
           location: {
             select: {
               code: true,
-              name: true,
             },
           },
           product: {
@@ -65,14 +60,13 @@ export class InventoryService {
     ]);
 
     const items = rows.map((r) => ({
-      id: r.id,
+      sku: r.product.sku,
+      name: r.product.name,
       locationId: r.locationId,
-      productId: r.productId,
+      locationCode: r.location.code,
       onHand: r.onHand,
-      location: r.location,
-      product: r.product,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
+      lowStockThreshold: null,
+      outOfStockThreshold: null,
     }));
 
     return { total, items };
