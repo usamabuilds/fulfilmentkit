@@ -1178,6 +1178,7 @@ export class ConnectionsService {
     expiresIn: number;
     refreshTokenExpiresIn: number;
     tokenType: string;
+    scope: string | null;
     rawResponseKeys: string[];
   }> {
     const { clientId, clientSecret, redirectUri, environment } = this.getQuickBooksTokenConfig();
@@ -1245,6 +1246,7 @@ export class ConnectionsService {
     const expiresIn = (data as { expires_in?: unknown }).expires_in;
     const refreshTokenExpiresIn = (data as { x_refresh_token_expires_in?: unknown }).x_refresh_token_expires_in;
     const tokenType = (data as { token_type?: unknown }).token_type;
+    const scope = (data as { scope?: unknown }).scope;
 
     if (typeof accessToken !== 'string' || !accessToken.trim()) {
       throw new BadRequestException('QuickBooks token response missing access_token');
@@ -1272,6 +1274,7 @@ export class ConnectionsService {
       expiresIn,
       refreshTokenExpiresIn,
       tokenType: tokenType.trim(),
+      scope: typeof scope === 'string' && scope.trim() ? scope.trim() : null,
       rawResponseKeys: Object.keys(data),
     };
   }
@@ -1481,12 +1484,16 @@ export class ConnectionsService {
           ? payload.error_description.trim()
           : '';
         const code = typeof payload?.code === 'string' ? payload.code.trim() : '';
+        const realmId = typeof payload?.realmId === 'string' ? payload.realmId.trim() : '';
 
         if (quickBooksError) {
           throw new BadRequestException(quickBooksErrorDescription || quickBooksError);
         }
         if (!code) {
           throw new BadRequestException('Missing QuickBooks OAuth code');
+        }
+        if (!realmId) {
+          throw new BadRequestException('Missing QuickBooks realmId');
         }
 
         const tokenResponse = await this.exchangeQuickBooksAccessToken({ code });
@@ -1496,6 +1503,10 @@ export class ConnectionsService {
         const refreshTokenExpiresAt = new Date(
           now.getTime() + tokenResponse.refreshTokenExpiresIn * 1000,
         ).toISOString();
+        const scopeList = (tokenResponse.scope ?? '')
+          .split(/\s+/)
+          .map((value) => value.trim())
+          .filter(Boolean);
 
         secretPayload = {
           accessToken: tokenResponse.accessToken,
@@ -1503,8 +1514,11 @@ export class ConnectionsService {
           expiresIn: tokenResponse.expiresIn,
           refreshTokenExpiresIn: tokenResponse.refreshTokenExpiresIn,
           tokenType: tokenResponse.tokenType,
+          ...(tokenResponse.scope ? { scope: tokenResponse.scope } : {}),
         };
         providerMetadata = {
+          realmId,
+          scopes: scopeList,
           tokenType: tokenResponse.tokenType,
           expiresIn: tokenResponse.expiresIn,
           refreshTokenExpiresIn: tokenResponse.refreshTokenExpiresIn,
@@ -1512,6 +1526,7 @@ export class ConnectionsService {
           refreshTokenExpiresAt,
           tokenReceivedAt: nowIso,
           oauthCompletedAt: nowIso,
+          ...(tokenResponse.scope ? { scope: tokenResponse.scope } : {}),
           quickBooksResponseKeys: tokenResponse.rawResponseKeys,
         };
       }
