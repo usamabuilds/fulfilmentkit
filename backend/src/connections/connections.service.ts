@@ -1170,6 +1170,112 @@ export class ConnectionsService {
     };
   }
 
+  private async exchangeQuickBooksAccessToken(args: {
+    code: string;
+  }): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+    refreshTokenExpiresIn: number;
+    tokenType: string;
+    rawResponseKeys: string[];
+  }> {
+    const { clientId, clientSecret, redirectUri, environment } = this.getQuickBooksTokenConfig();
+    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`, 'utf8').toString('base64');
+    const tokenEndpoint = environment === 'production'
+      ? 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
+      : 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
+
+    const formBody = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: args.code,
+      redirect_uri: redirectUri,
+    });
+
+    const response = await fetch(tokenEndpoint, {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${basicAuth}`,
+      },
+      body: formBody.toString(),
+    });
+
+    let data: unknown = null;
+    try {
+      data = await response.json();
+    } catch {
+      if (!response.ok) {
+        throw new BadRequestException(
+          `QuickBooks token exchange failed with status ${response.status}`,
+        );
+      }
+      throw new BadRequestException('Invalid QuickBooks token response payload');
+    }
+
+    if (!response.ok) {
+      const details =
+        typeof data === 'object' && data !== null
+          ? [
+              typeof (data as { error?: unknown }).error === 'string'
+                ? (data as { error: string }).error
+                : null,
+              typeof (data as { error_description?: unknown }).error_description === 'string'
+                ? (data as { error_description: string }).error_description
+                : null,
+            ]
+              .filter(Boolean)
+              .join(': ')
+          : '';
+
+      throw new BadRequestException(
+        details
+          ? `QuickBooks token exchange failed with status ${response.status}: ${details}`
+          : `QuickBooks token exchange failed with status ${response.status}`,
+      );
+    }
+
+    if (typeof data !== 'object' || data === null) {
+      throw new BadRequestException('Invalid QuickBooks token response payload');
+    }
+
+    const accessToken = (data as { access_token?: unknown }).access_token;
+    const refreshToken = (data as { refresh_token?: unknown }).refresh_token;
+    const expiresIn = (data as { expires_in?: unknown }).expires_in;
+    const refreshTokenExpiresIn = (data as { x_refresh_token_expires_in?: unknown }).x_refresh_token_expires_in;
+    const tokenType = (data as { token_type?: unknown }).token_type;
+
+    if (typeof accessToken !== 'string' || !accessToken.trim()) {
+      throw new BadRequestException('QuickBooks token response missing access_token');
+    }
+    if (typeof refreshToken !== 'string' || !refreshToken.trim()) {
+      throw new BadRequestException('QuickBooks token response missing refresh_token');
+    }
+    if (!Number.isFinite(expiresIn) || typeof expiresIn !== 'number' || expiresIn <= 0) {
+      throw new BadRequestException('QuickBooks token response missing expires_in');
+    }
+    if (
+      !Number.isFinite(refreshTokenExpiresIn)
+      || typeof refreshTokenExpiresIn !== 'number'
+      || refreshTokenExpiresIn <= 0
+    ) {
+      throw new BadRequestException('QuickBooks token response missing x_refresh_token_expires_in');
+    }
+    if (typeof tokenType !== 'string' || !tokenType.trim()) {
+      throw new BadRequestException('QuickBooks token response missing token_type');
+    }
+
+    return {
+      accessToken: accessToken.trim(),
+      refreshToken: refreshToken.trim(),
+      expiresIn,
+      refreshTokenExpiresIn,
+      tokenType: tokenType.trim(),
+      rawResponseKeys: Object.keys(data),
+    };
+  }
+
   async handleCallback(args: CallbackArgs) {
     const { platform, payload } = args;
 
@@ -1214,6 +1320,20 @@ export class ConnectionsService {
       const consumedState = await this.lookupAndValidateOAuthStateOnCallback({
         state: payload?.state,
         platform: 'ZOHO',
+        expectedWorkspaceId: args.workspaceId,
+        expectedConnectionId: connectionIdFromPayload || undefined,
+      });
+      workspaceId = consumedState.workspaceId;
+      connectionIdFromState = consumedState.connectionId;
+    }
+
+    if (platform === 'quickbooks') {
+      const connectionIdFromPayload = typeof payload?.connectionId === 'string'
+        ? payload.connectionId.trim()
+        : '';
+      const consumedState = await this.lookupAndValidateOAuthStateOnCallback({
+        state: payload?.state,
+        platform: 'QUICKBOOKS',
         expectedWorkspaceId: args.workspaceId,
         expectedConnectionId: connectionIdFromPayload || undefined,
       });
@@ -1352,6 +1472,47 @@ export class ConnectionsService {
           ...(tokenResponse.apiDomain ? { apiDomain: tokenResponse.apiDomain } : {}),
           ...(tokenResponse.scope ? { scope: tokenResponse.scope } : {}),
           zohoResponseKeys: tokenResponse.rawResponseKeys,
+        };
+      }
+
+      if (platform === 'quickbooks') {
+        const quickBooksError = typeof payload?.error === 'string' ? payload.error.trim() : '';
+        const quickBooksErrorDescription = typeof payload?.error_description === 'string'
+          ? payload.error_description.trim()
+          : '';
+        const code = typeof payload?.code === 'string' ? payload.code.trim() : '';
+
+        if (quickBooksError) {
+          throw new BadRequestException(quickBooksErrorDescription || quickBooksError);
+        }
+        if (!code) {
+          throw new BadRequestException('Missing QuickBooks OAuth code');
+        }
+
+        const tokenResponse = await this.exchangeQuickBooksAccessToken({ code });
+        const now = new Date();
+        const nowIso = now.toISOString();
+        const accessTokenExpiresAt = new Date(now.getTime() + tokenResponse.expiresIn * 1000).toISOString();
+        const refreshTokenExpiresAt = new Date(
+          now.getTime() + tokenResponse.refreshTokenExpiresIn * 1000,
+        ).toISOString();
+
+        secretPayload = {
+          accessToken: tokenResponse.accessToken,
+          refreshToken: tokenResponse.refreshToken,
+          expiresIn: tokenResponse.expiresIn,
+          refreshTokenExpiresIn: tokenResponse.refreshTokenExpiresIn,
+          tokenType: tokenResponse.tokenType,
+        };
+        providerMetadata = {
+          tokenType: tokenResponse.tokenType,
+          expiresIn: tokenResponse.expiresIn,
+          refreshTokenExpiresIn: tokenResponse.refreshTokenExpiresIn,
+          accessTokenExpiresAt,
+          refreshTokenExpiresAt,
+          tokenReceivedAt: nowIso,
+          oauthCompletedAt: nowIso,
+          quickBooksResponseKeys: tokenResponse.rawResponseKeys,
         };
       }
 
