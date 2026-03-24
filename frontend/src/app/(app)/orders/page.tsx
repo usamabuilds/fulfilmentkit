@@ -43,6 +43,18 @@ function parseAmount(value: string): number {
   return Number.isNaN(parsed) ? 0 : parsed
 }
 
+function getOrderDateValue(orderedAt: string | null | undefined, createdAt: string | null | undefined): string {
+  if (orderedAt && orderedAt.trim().length > 0) {
+    return formatDate(orderedAt)
+  }
+
+  if (createdAt && createdAt.trim().length > 0) {
+    return formatDate(createdAt)
+  }
+
+  return '—'
+}
+
 export default function OrdersPage() {
   const router = useRouter()
   const [page, setPage] = useState(1)
@@ -242,7 +254,7 @@ export default function OrdersPage() {
                   <th className="px-5 py-3 text-left text-subhead text-text-secondary">Channel</th>
                   <th className="px-5 py-3 text-left text-subhead text-text-secondary">Status</th>
                   <th className="px-5 py-3 text-left text-subhead text-text-secondary">Total</th>
-                  <th className="px-5 py-3 text-left text-subhead text-text-secondary">Created</th>
+                  <th className="px-5 py-3 text-left text-subhead text-text-secondary">Order date</th>
                 </tr>
               </thead>
               <tbody>
@@ -270,7 +282,9 @@ export default function OrdersPage() {
                     <td className="px-5 py-3 text-body text-text-primary">
                       {formatCurrency(parseAmount(order.total), order.currency)}
                     </td>
-                    <td className="px-5 py-3 text-body text-text-secondary">{formatDate(order.createdAt)}</td>
+                    <td className="px-5 py-3 text-body text-text-secondary">
+                      {getOrderDateValue(order.orderedAt, order.createdAt)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
