@@ -241,18 +241,20 @@ export class ConnectionsService {
           },
         };
       case 'quickbooks':
+      {
+        const url = await this.buildQuickBooksAuthorizeUrl({
+          workspaceId,
+          connectionId: connection.id,
+        });
+
         return {
           success: true,
           data: {
-            type: 'instructions',
-            title: 'Connect QuickBooks via OAuth 2.0',
-            steps: [
-              'Start the QuickBooks OAuth 2.0 authorization process.',
-              'Approve app access and complete callback handling when available.',
-            ],
-            message: 'QuickBooks integration is OAuth 2.0 based with server-side token storage.',
+            type: 'auth_url',
+            url,
           },
         };
+      }
       default: {
         const unreachablePlatform: never = platform;
         throw new NotFoundException(
@@ -413,6 +415,70 @@ export class ConnectionsService {
     };
   }
 
+  private getQuickBooksOAuthConfig(): {
+    clientId: string;
+    redirectUri: string;
+    scopes: string;
+    environment: 'sandbox' | 'production';
+  } {
+    const clientId = process.env.QUICKBOOKS_CLIENT_ID;
+    const redirectUri = process.env.QUICKBOOKS_REDIRECT_URI;
+    const scopes = process.env.QUICKBOOKS_SCOPES;
+    const environmentRaw = process.env.QUICKBOOKS_ENVIRONMENT ?? 'sandbox';
+    const environment = environmentRaw.toLowerCase();
+
+    if (!clientId || !redirectUri || !scopes) {
+      throw new Error(
+        'QUICKBOOKS_CLIENT_ID, QUICKBOOKS_REDIRECT_URI, and QUICKBOOKS_SCOPES must be set',
+      );
+    }
+
+    if (environment !== 'sandbox' && environment !== 'production') {
+      throw new Error(
+        'QUICKBOOKS_ENVIRONMENT must be either "sandbox" or "production"',
+      );
+    }
+
+    return {
+      clientId,
+      redirectUri,
+      scopes,
+      environment,
+    };
+  }
+
+  private getQuickBooksTokenConfig(): {
+    clientId: string;
+    clientSecret: string;
+    redirectUri: string;
+    environment: 'sandbox' | 'production';
+  } {
+    const clientId = process.env.QUICKBOOKS_CLIENT_ID;
+    const clientSecret = process.env.QUICKBOOKS_CLIENT_SECRET;
+    const redirectUri = process.env.QUICKBOOKS_REDIRECT_URI;
+    const environmentRaw = process.env.QUICKBOOKS_ENVIRONMENT ?? 'sandbox';
+    const environment = environmentRaw.toLowerCase();
+
+    if (!clientId || !clientSecret || !redirectUri) {
+      throw new Error(
+        'QUICKBOOKS_CLIENT_ID, QUICKBOOKS_CLIENT_SECRET, and QUICKBOOKS_REDIRECT_URI must be set',
+      );
+    }
+
+    if (environment !== 'sandbox' && environment !== 'production') {
+      throw new Error(
+        'QUICKBOOKS_ENVIRONMENT must be either "sandbox" or "production"',
+      );
+    }
+
+    return {
+      clientId,
+      clientSecret,
+      redirectUri,
+      environment,
+    };
+  }
+
   private async buildZohoAuthorizeUrl(args: {
     workspaceId: string;
     connectionId: string;
@@ -472,6 +538,40 @@ export class ConnectionsService {
     });
 
     return `https://login.xero.com/identity/connect/authorize?${params.toString()}`;
+  }
+
+  private async buildQuickBooksAuthorizeUrl(args: {
+    workspaceId: string;
+    connectionId: string;
+  }): Promise<string> {
+    const config = this.getQuickBooksOAuthConfig();
+    const state = await this.createAndStoreOAuthStateAtStart({
+      workspaceId: args.workspaceId,
+      connectionId: args.connectionId,
+      platform: 'QUICKBOOKS',
+      buildStateToken: () => Buffer.from(
+        JSON.stringify({
+          workspaceId: args.workspaceId,
+          connectionId: args.connectionId,
+          nonce: crypto.randomBytes(16).toString('hex'),
+        }),
+        'utf8',
+      ).toString('base64url'),
+    });
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: config.clientId,
+      redirect_uri: config.redirectUri,
+      scope: config.scopes,
+      state,
+    });
+
+    const authorizeBaseUrl = config.environment === 'production'
+      ? 'https://appcenter.intuit.com/connect/oauth2'
+      : 'https://sandbox.appcenter.intuit.com/connect/oauth2';
+
+    return `${authorizeBaseUrl}?${params.toString()}`;
   }
 
   private getOAuthStateSecret(): string {
