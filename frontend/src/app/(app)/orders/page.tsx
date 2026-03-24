@@ -92,7 +92,7 @@ export default function OrdersPage() {
     [channel, debouncedSearch, fromDate, page, status, toDate],
   )
 
-  const { data, isLoading } = useOrders(queryParams)
+  const { data, isLoading, isError, error, isFetching, refetch } = useOrders(queryParams)
 
   const orders = data?.data?.items ?? []
   const total = data?.data?.total ?? 0
@@ -206,6 +206,27 @@ export default function OrdersPage() {
 
       {isLoading ? (
         <PageSkeleton rows={8} />
+      ) : isError ? (
+        <EmptyState
+          title="Could not load orders"
+          subtitle={
+            error instanceof Error
+              ? `${error.message} Try again or adjust your filters, then retry.`
+              : 'Try again or adjust your filters, then retry.'
+          }
+          action={
+            <button
+              type="button"
+              onClick={() => {
+                void refetch()
+              }}
+              className="rounded-[10px] bg-black/10 px-4 py-2 text-subhead text-text-primary transition-all hover:bg-black/15 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isFetching}
+            >
+              {isFetching ? 'Retrying...' : 'Retry'}
+            </button>
+          }
+        />
       ) : orders.length === 0 ? (
         <EmptyState
           title="No orders found"
