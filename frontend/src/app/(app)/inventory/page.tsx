@@ -40,23 +40,23 @@ export default function InventoryPage() {
                 <tr className="border-b border-border-subtle">
                   <th className="px-5 py-3 text-left text-subhead text-text-secondary">SKU</th>
                   <th className="px-5 py-3 text-left text-subhead text-text-secondary">Name</th>
-                  <th className="px-5 py-3 text-left text-subhead text-text-secondary">Quantity</th>
+                  <th className="px-5 py-3 text-left text-subhead text-text-secondary">On Hand</th>
                   <th className="px-5 py-3 text-left text-subhead text-text-secondary">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item) => (
                   <tr
-                    key={item.id}
+                    key={`${item.locationId}:${item.sku}`}
                     className="last:border-0 border-b border-border-subtle transition-colors hover:bg-black/[0.02]"
                   >
                     <td className="px-5 py-3 font-mono text-sm text-body text-text-primary">{item.sku}</td>
                     <td className="px-5 py-3 text-body text-text-primary">{item.name}</td>
-                    <td className="px-5 py-3 text-body text-text-primary">{item.quantity}</td>
+                    <td className="px-5 py-3 text-body text-text-primary">{item.onHand}</td>
                     <td className="px-5 py-3">
                       <StockLevelBadge
-                        quantity={item.quantity}
-                        threshold={item.lowStockThreshold}
+                        onHand={item.onHand}
+                        threshold={item.lowStockThreshold ?? 0}
                       />
                     </td>
                   </tr>

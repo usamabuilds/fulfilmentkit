@@ -1,13 +1,13 @@
 import { cn } from '@/lib/utils/cn'
 
 interface StockLevelBadgeProps {
-  quantity: number
+  onHand: number
   threshold: number
 }
 
-export function StockLevelBadge({ quantity, threshold }: StockLevelBadgeProps) {
-  const isLow = quantity <= threshold
-  const isOut = quantity === 0
+export function StockLevelBadge({ onHand, threshold }: StockLevelBadgeProps) {
+  const isLow = onHand <= threshold
+  const isOut = onHand === 0
 
   return (
     <span
