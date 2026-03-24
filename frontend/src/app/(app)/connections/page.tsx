@@ -627,8 +627,10 @@ export default function ConnectionsPage() {
     const xeroConnected = searchParams.get('xero')
     const zohoError = searchParams.get('zoho_error')
     const zohoConnected = searchParams.get('zoho')
+    const quickBooksError = searchParams.get('quickbooks_error')
+    const quickBooksConnected = searchParams.get('quickbooks')
 
-    if (!xeroError && !xeroConnected && !zohoError && !zohoConnected) {
+    if (!xeroError && !xeroConnected && !zohoError && !zohoConnected && !quickBooksError && !quickBooksConnected) {
       return
     }
 
@@ -654,9 +656,27 @@ export default function ConnectionsPage() {
         tone: 'success',
         message: 'Xero is connected and ready to sync.',
       })
+    } else if (quickBooksError) {
+      const normalizedError = normalizeCallbackMessage(quickBooksError)
+      setCallbackNotice({
+        tone: 'error',
+        message: normalizedError || 'Unable to connect QuickBooks. Please try again.',
+      })
+    } else if (parseSuccessParam(quickBooksConnected)) {
+      setCallbackNotice({
+        tone: 'success',
+        message: 'QuickBooks connected and ready to sync.',
+      })
     }
 
-    clearPlatformQuery(['xero_error', 'xero', 'zoho_error', 'zoho'])
+    clearPlatformQuery([
+      'xero_error',
+      'xero',
+      'zoho_error',
+      'zoho',
+      'quickbooks_error',
+      'quickbooks',
+    ])
   }, [clearPlatformQuery, searchParams])
 
   return (
