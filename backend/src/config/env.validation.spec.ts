@@ -317,10 +317,32 @@ expectInvalid(
     ...baseEnv,
     AUTH_MODE: 'local',
     JWT_SECRET: 'local-secret',
+    QUICKBOOKS_ENVIRONMENT: undefined,
+  },
+  'QUICKBOOKS_ENVIRONMENT',
+  'Invalid option: expected one of "sandbox"|"production"',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
     QUICKBOOKS_ENVIRONMENT: 'staging',
   },
   'QUICKBOOKS_ENVIRONMENT',
   'Invalid option: expected one of "sandbox"|"production"',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    NODE_ENV: 'test',
+  },
+  'NODE_ENV',
+  'Invalid option: expected one of "development"|"production"',
 );
 
 expectInvalid(

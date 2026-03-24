@@ -218,3 +218,75 @@ test('zohoCallback redirects frontend with concise error when callback fails', a
     'https://app.example.com/connections?zoho_error=zoho_callback_verification_failed_badly',
   );
 });
+
+test('quickbooksCallback redirects frontend to success URL when callback succeeds', async () => {
+  process.env.FRONTEND_BASE_URL = 'https://app.example.com';
+  const { controller, handleCallbackCalls } = createController();
+  let redirectedTo = '';
+
+  const state = Buffer.from(
+    JSON.stringify({ workspaceId: 'ws-qb', connectionId: 'conn-1' }),
+    'utf8',
+  ).toString('base64url');
+
+  await controller.quickbooksCallback(
+    {
+      code: 'qb-code',
+      state,
+      realmId: '1234567890',
+    },
+    {
+      redirect: (url: string) => {
+        redirectedTo = url;
+      },
+    } as never,
+  );
+
+  assert.equal(handleCallbackCalls.length, 1);
+  assert.deepEqual(handleCallbackCalls[0], {
+    workspaceId: 'ws-qb',
+    platform: 'quickbooks',
+    payload: {
+      code: 'qb-code',
+      state,
+      connectionId: 'conn-1',
+      realmId: '1234567890',
+    },
+  });
+
+  const redirectUrl = new URL(redirectedTo);
+  assert.equal(redirectUrl.toString(), 'https://app.example.com/connections?quickbooks=success');
+});
+
+test('quickbooksCallback redirects frontend with concise quickbooks_error when callback fails', async () => {
+  process.env.FRONTEND_BASE_URL = 'https://app.example.com';
+  const { controller, setHandleCallbackError, handleCallbackCalls } = createController();
+  let redirectedTo = '';
+
+  setHandleCallbackError(new Error('QuickBooks callback verification failed badly'));
+
+  const state = Buffer.from(
+    JSON.stringify({ workspaceId: 'ws-qb', connectionId: 'conn-1' }),
+    'utf8',
+  ).toString('base64url');
+
+  await controller.quickbooksCallback(
+    {
+      code: 'qb-code',
+      state,
+      realmId: '1234567890',
+    },
+    {
+      redirect: (url: string) => {
+        redirectedTo = url;
+      },
+    } as never,
+  );
+
+  assert.equal(handleCallbackCalls.length, 1);
+  const redirectUrl = new URL(redirectedTo);
+  assert.equal(
+    redirectUrl.toString(),
+    'https://app.example.com/connections?quickbooks_error=quickbooks_callback_verification_failed_badly',
+  );
+});
