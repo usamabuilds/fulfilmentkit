@@ -48,6 +48,13 @@ export const envSchema = z
     ZOHO_SCOPES: z.string().min(1),
     ZOHO_REDIRECT_URI: z.string().url(),
 
+    // QuickBooks
+    QUICKBOOKS_CLIENT_ID: z.string().min(1),
+    QUICKBOOKS_CLIENT_SECRET: z.string().min(1),
+    QUICKBOOKS_SCOPES: z.string().min(1),
+    QUICKBOOKS_REDIRECT_URI: z.string().url(),
+    QUICKBOOKS_ENVIRONMENT: z.enum(['sandbox', 'production']),
+
     // Node environment
     NODE_ENV: z.enum(['development', 'production']).default('development'),
   })
