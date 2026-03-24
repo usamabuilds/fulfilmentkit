@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { OrderStatusBadge } from '@/components/modules/orders/OrderStatusBadge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PageSkeleton } from '@/components/ui/PageSkeleton'
@@ -57,13 +57,16 @@ function getOrderDateValue(orderedAt: string | null | undefined, createdAt: stri
 
 export default function OrdersPage() {
   const router = useRouter()
-  const [page, setPage] = useState(1)
-  const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [status, setStatus] = useState('')
-  const [channel, setChannel] = useState('')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
+  const searchParams = useSearchParams()
+
+  const initialPage = Number.parseInt(searchParams.get('page') ?? '1', 10)
+  const [page, setPage] = useState(Number.isNaN(initialPage) ? 1 : Math.max(1, initialPage))
+  const [search, setSearch] = useState(searchParams.get('search') ?? '')
+  const [debouncedSearch, setDebouncedSearch] = useState(searchParams.get('search') ?? '')
+  const [status, setStatus] = useState(searchParams.get('status') ?? '')
+  const [channel, setChannel] = useState(searchParams.get('channel') ?? '')
+  const [fromDate, setFromDate] = useState(searchParams.get('from') ?? '')
+  const [toDate, setToDate] = useState(searchParams.get('to') ?? '')
   const preferencesQuery = useMyPreferences()
 
   useEffect(() => {
@@ -75,6 +78,45 @@ export default function OrdersPage() {
       window.clearTimeout(timeout)
     }
   }, [search])
+
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams()
+
+    if (page > 1) {
+      nextParams.set('page', String(page))
+    }
+
+    const trimmedSearch = search.trim()
+    if (trimmedSearch.length > 0) {
+      nextParams.set('search', trimmedSearch)
+    }
+
+    if (status) {
+      nextParams.set('status', status)
+    }
+
+    if (channel) {
+      nextParams.set('channel', channel)
+    }
+
+    if (fromDate) {
+      nextParams.set('from', fromDate)
+    }
+
+    if (toDate) {
+      nextParams.set('to', toDate)
+    }
+
+    const nextQueryString = nextParams.toString()
+    const currentQueryString = searchParams.toString()
+
+    if (nextQueryString === currentQueryString) {
+      return
+    }
+
+    router.replace(nextQueryString.length > 0 ? `/orders?${nextQueryString}` : '/orders')
+  }, [channel, fromDate, page, router, search, searchParams, status, toDate])
 
   useEffect(() => {
     if (fromDate || toDate) {
@@ -111,20 +153,23 @@ export default function OrdersPage() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   const availableStatuses = useMemo(
-    () => Array.from(new Set(orders.map((order) => order.status))).sort((a, b) => a.localeCompare(b)),
-    [orders],
+    () =>
+      Array.from(new Set([...orders.map((order) => order.status), status].filter((value) => value.length > 0))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [orders, status],
   )
 
   const availableChannels = useMemo(
     () =>
       Array.from(
         new Set(
-          orders
-            .map((order) => order.channel)
-            .filter((channelValue): channelValue is string => Boolean(channelValue)),
+          [...orders.map((order) => order.channel), channel].filter(
+            (channelValue): channelValue is string => Boolean(channelValue),
+          ),
         ),
       ).sort((a, b) => a.localeCompare(b)),
-    [orders],
+    [channel, orders],
   )
 
   return (
