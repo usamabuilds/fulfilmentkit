@@ -36,6 +36,17 @@ const zohoCallbackQuerySchema = z.object({
 }).refine((value) => Boolean(value.code || value.error), {
   message: 'Missing Zoho OAuth response payload',
 });
+const quickbooksCallbackQuerySchema = z.object({
+  code: z.string().trim().min(1).optional(),
+  state: z.string().trim().min(1),
+  realmId: z.string().trim().min(1).optional(),
+  error: z.string().trim().min(1).optional(),
+  error_description: z.string().trim().min(1).optional(),
+}).refine((value) => Boolean(value.code || value.error), {
+  message: 'Missing QuickBooks OAuth response payload',
+}).refine((value) => Boolean(value.error || value.realmId), {
+  message: 'Missing QuickBooks realmId',
+});
 
 @Controller('connections')
 export class ConnectionsController {
@@ -95,7 +106,7 @@ export class ConnectionsController {
       .parse(decodedPayload);
   }
 
-  private resolveOAuthCallbackContext(rawState: string, provider: 'Xero' | 'Zoho'): {
+  private resolveOAuthCallbackContext(rawState: string, provider: 'Xero' | 'Zoho' | 'QuickBooks'): {
     workspaceId: string;
     connectionId: string;
   } {
@@ -274,6 +285,46 @@ export class ConnectionsController {
       return;
     } catch (error) {
       redirectUrl.searchParams.set('zoho_error', this.toConciseCallbackError(error));
+      res.redirect(redirectUrl.toString());
+      return;
+    }
+  }
+
+  @Get('quickbooks/callback')
+  async quickbooksCallback(@Query() query: Record<string, unknown>, @Res() res: Response): Promise<void> {
+    const redirectUrl = this.getFrontendConnectionsUrl();
+
+    try {
+      const parsedQuery = quickbooksCallbackQuerySchema.parse(query);
+
+      if (parsedQuery.error) {
+        throw new BadRequestException(parsedQuery.error_description ?? parsedQuery.error);
+      }
+      if (!parsedQuery.code) {
+        throw new BadRequestException('Missing QuickBooks OAuth code');
+      }
+      if (!parsedQuery.realmId) {
+        throw new BadRequestException('Missing QuickBooks realmId');
+      }
+
+      const context = this.resolveOAuthCallbackContext(parsedQuery.state, 'QuickBooks');
+
+      await this.connectionsService.handleCallback({
+        workspaceId: context.workspaceId,
+        platform: 'quickbooks',
+        payload: {
+          code: parsedQuery.code,
+          state: parsedQuery.state,
+          connectionId: context.connectionId,
+          realmId: parsedQuery.realmId,
+        },
+      });
+
+      redirectUrl.searchParams.set('quickbooks', 'success');
+      res.redirect(redirectUrl.toString());
+      return;
+    } catch (error) {
+      redirectUrl.searchParams.set('quickbooks_error', this.toConciseCallbackError(error));
       res.redirect(redirectUrl.toString());
       return;
     }
