@@ -46,11 +46,23 @@ function parseAmount(value: string): number {
 export default function OrdersPage() {
   const router = useRouter()
   const [page, setPage] = useState(1)
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [status, setStatus] = useState('')
   const [channel, setChannel] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const preferencesQuery = useMyPreferences()
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 300)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [search])
 
   useEffect(() => {
     if (fromDate || toDate) {
@@ -71,12 +83,13 @@ export default function OrdersPage() {
     () => ({
       page,
       pageSize: PAGE_SIZE,
+      search: debouncedSearch.trim() || undefined,
       status: status || undefined,
       channel: channel || undefined,
       from: fromDate || undefined,
       to: toDate || undefined,
     }),
-    [channel, fromDate, page, status, toDate],
+    [channel, debouncedSearch, fromDate, page, status, toDate],
   )
 
   const { data, isLoading } = useOrders(queryParams)
@@ -110,7 +123,21 @@ export default function OrdersPage() {
       </div>
 
       <div className="glass-card p-4">
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-5">
+          <label className="flex flex-col gap-2">
+            <span className="text-subhead text-text-secondary">Search</span>
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => {
+                setPage(1)
+                setSearch(event.target.value)
+              }}
+              placeholder="Search order number"
+              className="glass-input text-text-primary"
+            />
+          </label>
+
           <label className="flex flex-col gap-2">
             <span className="text-subhead text-text-secondary">Status</span>
             <select
