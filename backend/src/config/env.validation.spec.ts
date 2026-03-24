@@ -22,6 +22,11 @@ const baseEnv = {
   ZOHO_CLIENT_SECRET: 'zoho-client-secret',
   ZOHO_SCOPES: 'ZohoInventory.items.READ,ZohoInventory.settings.READ',
   ZOHO_REDIRECT_URI: 'https://app.example.com/auth/zoho/callback',
+  QUICKBOOKS_CLIENT_ID: 'quickbooks-client-id',
+  QUICKBOOKS_CLIENT_SECRET: 'quickbooks-client-secret',
+  QUICKBOOKS_SCOPES: 'com.intuit.quickbooks.accounting',
+  QUICKBOOKS_REDIRECT_URI: 'https://app.example.com/auth/quickbooks/callback',
+  QUICKBOOKS_ENVIRONMENT: 'sandbox',
   NODE_ENV: 'development',
 } as const;
 
@@ -261,6 +266,61 @@ expectInvalid(
   },
   'ZOHO_REDIRECT_URI',
   'Invalid URL',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    QUICKBOOKS_CLIENT_ID: undefined,
+  },
+  'QUICKBOOKS_CLIENT_ID',
+  'Invalid input: expected string, received undefined',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    QUICKBOOKS_CLIENT_SECRET: undefined,
+  },
+  'QUICKBOOKS_CLIENT_SECRET',
+  'Invalid input: expected string, received undefined',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    QUICKBOOKS_SCOPES: undefined,
+  },
+  'QUICKBOOKS_SCOPES',
+  'Invalid input: expected string, received undefined',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    QUICKBOOKS_REDIRECT_URI: 'not-a-url',
+  },
+  'QUICKBOOKS_REDIRECT_URI',
+  'Invalid URL',
+);
+
+expectInvalid(
+  {
+    ...baseEnv,
+    AUTH_MODE: 'local',
+    JWT_SECRET: 'local-secret',
+    QUICKBOOKS_ENVIRONMENT: 'staging',
+  },
+  'QUICKBOOKS_ENVIRONMENT',
+  'Invalid option: expected one of "sandbox"|"production"',
 );
 
 expectInvalid(
