@@ -54,7 +54,13 @@ type ShopifyStateVerifier = {
 };
 
 function signShopifyState(payload: Record<string, unknown>, secret: string): string {
-  const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const encodedPayload = Buffer.from(
+    JSON.stringify({
+      platform: 'shopify',
+      ...payload,
+    }),
+    'utf8',
+  ).toString('base64url');
   const signature = crypto
     .createHmac('sha256', secret)
     .update(encodedPayload)
@@ -365,6 +371,45 @@ test('startConnectionFlow returns composed Zoho authorize URL when env vars exis
   assert.ok(authUrl.searchParams.get('state'));
 });
 
+test('startConnectionFlow returns composed QuickBooks authorize URL from env and includes state', async () => {
+  process.env.QUICKBOOKS_CLIENT_ID = 'quickbooks-client-id';
+  process.env.QUICKBOOKS_REDIRECT_URI = 'https://api.example.com/connections/quickbooks/callback';
+  process.env.QUICKBOOKS_SCOPES = 'com.intuit.quickbooks.accounting';
+  process.env.QUICKBOOKS_ENVIRONMENT = 'sandbox';
+
+  const { service, connectionUpsertCalls } = createService();
+
+  const result = await service.startConnectionFlow({
+    workspaceId: 'ws-qb',
+    platform: 'quickbooks',
+  });
+
+  assert.equal(connectionUpsertCalls.length, 1);
+  const upsertCall = connectionUpsertCalls[0] as ConnectionUpsertCall;
+  assert.deepEqual(upsertCall.where.workspaceId_platform, {
+    workspaceId: 'ws-qb',
+    platform: 'QUICKBOOKS',
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.data.type, 'auth_url');
+  if (result.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+
+  const authUrl = new URL(result.data.url);
+  assert.equal(authUrl.origin, 'https://sandbox.appcenter.intuit.com');
+  assert.equal(authUrl.pathname, '/connect/oauth2');
+  assert.equal(authUrl.searchParams.get('response_type'), 'code');
+  assert.equal(authUrl.searchParams.get('client_id'), 'quickbooks-client-id');
+  assert.equal(
+    authUrl.searchParams.get('redirect_uri'),
+    'https://api.example.com/connections/quickbooks/callback',
+  );
+  assert.equal(authUrl.searchParams.get('scope'), 'com.intuit.quickbooks.accounting');
+  assert.ok(authUrl.searchParams.get('state'));
+});
+
 test('Shopify OAuth state signing verifies and expiration is enforced', async () => {
   process.env.CONNECTION_SECRET_KEY = '12345678901234567890123456789012';
   process.env.CONNECTION_OAUTH_STATE_KEY = 'state-secret-12345678901234567890';
@@ -413,14 +458,12 @@ test('Shopify OAuth state signing verifies and expiration is enforced', async ()
     process.env.CONNECTION_OAUTH_STATE_KEY as string,
   );
 
-  await assert.rejects(
+  assert.throws(
     () =>
-      Promise.resolve(
-        verifier.verifyShopifyOAuthState({
-          state: expiredState,
-          shop: 'state-shop.myshopify.com',
-        }),
-      ),
+      verifier.verifyShopifyOAuthState({
+        state: expiredState,
+        shop: 'state-shop.myshopify.com',
+      }),
     (error: unknown) => {
       assert.ok(error instanceof BadRequestException);
       const badRequestError = error as BadRequestException;
@@ -458,24 +501,23 @@ test('handleCallback token exchange success stores encrypted secret and activate
     connectionUpdateCalls,
   } = createService();
 
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  const state = signShopifyState(
-    {
-      workspaceId: 'ws-shopify',
-      connectionId: 'conn-1',
-      shop: 'demo-shop.myshopify.com',
-      iat: nowSeconds,
-      exp: nowSeconds + 600,
-      nonce: 'nonce-1',
-    },
-    process.env.CONNECTION_OAUTH_STATE_KEY as string,
-  );
+  const started = await service.startConnectionFlow({
+    workspaceId: 'ws-shopify',
+    platform: 'shopify',
+    payload: { shop: 'demo-shop.myshopify.com' },
+  });
+  assert.equal(started.data.type, 'auth_url');
+  if (started.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+  const state = new URL(started.data.url).searchParams.get('state');
+  assert.ok(state);
 
   const result = await service.handleCallback({
-    workspaceId: 'ignored-by-state',
-    platform: 'shopify',
-    payload: {
-      state,
+      workspaceId: 'ignored-by-state',
+      platform: 'shopify',
+      payload: {
+        state,
       shop: 'demo-shop.myshopify.com',
       code: 'oauth-code',
       hmac: 'from-shopify',
@@ -554,18 +596,17 @@ test('handleCallback token exchange failure marks connection as error and stores
     connectionUpdateCalls,
   } = createService();
 
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  const state = signShopifyState(
-    {
-      workspaceId: 'ws-error',
-      connectionId: 'conn-1',
-      shop: 'demo-shop.myshopify.com',
-      iat: nowSeconds,
-      exp: nowSeconds + 600,
-      nonce: 'nonce-2',
-    },
-    process.env.CONNECTION_OAUTH_STATE_KEY as string,
-  );
+  const started = await service.startConnectionFlow({
+    workspaceId: 'ws-error',
+    platform: 'shopify',
+    payload: { shop: 'demo-shop.myshopify.com' },
+  });
+  assert.equal(started.data.type, 'auth_url');
+  if (started.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+  const state = new URL(started.data.url).searchParams.get('state');
+  assert.ok(state);
 
   await assert.rejects(
     () =>
@@ -830,6 +871,129 @@ test('handleCallback for Zoho rejects missing, invalid, expired, and reused OAut
   global.fetch = originalFetch;
 });
 
+test('handleCallback for QuickBooks rejects missing, invalid, expired, and reused OAuth state', async () => {
+  process.env.CONNECTION_SECRET_KEY = '12345678901234567890123456789012';
+  process.env.QUICKBOOKS_CLIENT_ID = 'quickbooks-client-id';
+  process.env.QUICKBOOKS_CLIENT_SECRET = 'quickbooks-client-secret';
+  process.env.QUICKBOOKS_SCOPES = 'com.intuit.quickbooks.accounting';
+  process.env.QUICKBOOKS_REDIRECT_URI = 'https://api.example.com/connections/quickbooks/callback';
+  process.env.QUICKBOOKS_ENVIRONMENT = 'sandbox';
+
+  const originalFetch = global.fetch;
+  const originalNow = Date.now;
+
+  global.fetch = (async () =>
+    ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        access_token: 'qb-access-token',
+        refresh_token: 'qb-refresh-token',
+        expires_in: 3600,
+        x_refresh_token_expires_in: 8640000,
+        token_type: 'Bearer',
+        scope: 'com.intuit.quickbooks.accounting',
+      }),
+    }) as Response) as typeof fetch;
+
+  const { service } = createService();
+  const started = await service.startConnectionFlow({
+    workspaceId: 'ws-qb-invalid',
+    platform: 'quickbooks',
+  });
+  assert.equal(started.data.type, 'auth_url');
+  if (started.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+
+  const state = new URL(started.data.url).searchParams.get('state');
+  assert.ok(state);
+
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-qb-invalid',
+        platform: 'quickbooks',
+        payload: {
+          code: 'qb-code',
+          realmId: '1234567890',
+        },
+      }),
+    /Missing OAuth state/,
+  );
+
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-qb-invalid',
+        platform: 'quickbooks',
+        payload: {
+          code: 'qb-code',
+          state: 'not-a-valid-state',
+          realmId: '1234567890',
+        },
+      }),
+    /Invalid, expired, or already-used OAuth state/,
+  );
+
+  Date.now = () => originalNow() + 11 * 60 * 1000;
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-qb-invalid',
+        platform: 'quickbooks',
+        payload: {
+          code: 'qb-code',
+          state,
+          connectionId: 'conn-1',
+          realmId: '1234567890',
+        },
+      }),
+    /Invalid, expired, or already-used OAuth state/,
+  );
+  Date.now = originalNow;
+
+  const startedForReuse = await service.startConnectionFlow({
+    workspaceId: 'ws-qb-reuse',
+    platform: 'quickbooks',
+  });
+  assert.equal(startedForReuse.data.type, 'auth_url');
+  if (startedForReuse.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+  const reusableState = new URL(startedForReuse.data.url).searchParams.get('state');
+  assert.ok(reusableState);
+
+  await service.handleCallback({
+    workspaceId: 'ws-qb-reuse',
+    platform: 'quickbooks',
+    payload: {
+      code: 'qb-code',
+      state: reusableState,
+      connectionId: 'conn-1',
+      realmId: '1234567890',
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-qb-reuse',
+        platform: 'quickbooks',
+        payload: {
+          code: 'qb-code',
+          state: reusableState,
+          connectionId: 'conn-1',
+          realmId: '1234567890',
+        },
+      }),
+    /Invalid, expired, or already-used OAuth state/,
+  );
+
+  Date.now = originalNow;
+  global.fetch = originalFetch;
+});
+
 test('handleCallback for Zoho success exchanges code, upserts encrypted secret, and sets ACTIVE status', async () => {
   process.env.CONNECTION_SECRET_KEY = '12345678901234567890123456789012';
   process.env.ZOHO_CLIENT_ID = 'zoho-client-id';
@@ -1084,6 +1248,174 @@ test('handleCallback for Xero token exchange failure marks connection as ERROR',
   assert.equal(update.where.id, 'conn-1');
   assert.equal(update.data.status, 'ERROR');
   assert.match(update.data.lastError ?? '', /Xero token exchange failed with status 401/);
+
+  global.fetch = originalFetch;
+});
+
+test('handleCallback for QuickBooks success exchanges code, stores encrypted secret with realmId metadata, and sets ACTIVE status', async () => {
+  process.env.CONNECTION_SECRET_KEY = '12345678901234567890123456789012';
+  process.env.QUICKBOOKS_CLIENT_ID = 'quickbooks-client-id';
+  process.env.QUICKBOOKS_CLIENT_SECRET = 'quickbooks-client-secret';
+  process.env.QUICKBOOKS_SCOPES = 'com.intuit.quickbooks.accounting';
+  process.env.QUICKBOOKS_REDIRECT_URI = 'https://api.example.com/connections/quickbooks/callback';
+  process.env.QUICKBOOKS_ENVIRONMENT = 'sandbox';
+
+  const originalFetch = global.fetch;
+  const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
+  global.fetch = (async (url, init) => {
+    fetchCalls.push({ url: String(url), init });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        access_token: 'qb-access-token',
+        refresh_token: 'qb-refresh-token',
+        expires_in: 3600,
+        x_refresh_token_expires_in: 8640000,
+        token_type: 'Bearer',
+        scope: 'com.intuit.quickbooks.accounting',
+      }),
+    } as Response;
+  }) as typeof fetch;
+
+  const {
+    service,
+    connectionFindFirstCalls,
+    connectionSecretUpsertCalls,
+    connectionUpdateCalls,
+  } = createService();
+
+  const started = await service.startConnectionFlow({
+    workspaceId: 'ws-qb-ok',
+    platform: 'quickbooks',
+  });
+  assert.equal(started.data.type, 'auth_url');
+  if (started.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+  const state = new URL(started.data.url).searchParams.get('state');
+  assert.ok(state);
+
+  const result = await service.handleCallback({
+    workspaceId: 'ws-qb-ok',
+    platform: 'quickbooks',
+    payload: {
+      code: 'qb-code-1',
+      state,
+      connectionId: 'conn-1',
+      realmId: '1234567890',
+    },
+  });
+
+  assert.equal(fetchCalls.length, 1);
+  assert.equal(fetchCalls[0]?.url, 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer');
+  assert.equal(fetchCalls[0]?.init?.method, 'POST');
+  const body = String(fetchCalls[0]?.init?.body ?? '');
+  assert.match(body, /grant_type=authorization_code/);
+  assert.match(body, /code=qb-code-1/);
+
+  assert.equal(connectionFindFirstCalls.length, 1);
+  const findFirstCall = connectionFindFirstCalls[0] as ConnectionFindFirstCall;
+  assert.deepEqual(findFirstCall.where, {
+    id: 'conn-1',
+    workspaceId: 'ws-qb-ok',
+    platform: 'QUICKBOOKS',
+  });
+
+  assert.equal(connectionSecretUpsertCalls.length, 1);
+  const secretUpsertCall = connectionSecretUpsertCalls[0] as ConnectionSecretUpsertCall;
+  assert.equal(secretUpsertCall.where.connectionId, 'conn-1');
+  assert.equal(secretUpsertCall.create.workspaceId, 'ws-qb-ok');
+  assert.equal(secretUpsertCall.create.platform, 'QUICKBOOKS');
+  assert.equal(secretUpsertCall.create.authType, 'oauth2');
+  assert.ok(Buffer.isBuffer(secretUpsertCall.create.secretCiphertext));
+  assert.notEqual(secretUpsertCall.create.secretCiphertext.toString('utf8'), 'qb-access-token');
+  assert.notEqual(secretUpsertCall.create.secretCiphertext.toString('utf8'), 'qb-refresh-token');
+
+  const metadata = secretUpsertCall.create.secretMetadata;
+  assert.equal(metadata.realmId, '1234567890');
+  assert.deepEqual(metadata.scopes, ['com.intuit.quickbooks.accounting']);
+  assert.equal(metadata.tokenType, 'Bearer');
+  assert.equal(metadata.expiresIn, 3600);
+  assert.equal(metadata.refreshTokenExpiresIn, 8640000);
+
+  assert.equal(connectionUpdateCalls.length, 1);
+  assert.deepEqual((connectionUpdateCalls[0] as ConnectionUpdateCall).data, {
+    status: 'ACTIVE',
+    lastError: null,
+  });
+
+  assert.deepEqual(result, {
+    success: true,
+    data: {
+      connectionId: 'conn-1',
+      platform: 'quickbooks',
+      stored: true,
+      status: 'connected',
+    },
+  });
+
+  global.fetch = originalFetch;
+});
+
+test('handleCallback for QuickBooks token exchange failure marks connection as ERROR and stores no plaintext secret', async () => {
+  process.env.CONNECTION_SECRET_KEY = '12345678901234567890123456789012';
+  process.env.QUICKBOOKS_CLIENT_ID = 'quickbooks-client-id';
+  process.env.QUICKBOOKS_CLIENT_SECRET = 'quickbooks-client-secret';
+  process.env.QUICKBOOKS_SCOPES = 'com.intuit.quickbooks.accounting';
+  process.env.QUICKBOOKS_REDIRECT_URI = 'https://api.example.com/connections/quickbooks/callback';
+  process.env.QUICKBOOKS_ENVIRONMENT = 'sandbox';
+
+  const originalFetch = global.fetch;
+  global.fetch = (async () =>
+    ({
+      ok: false,
+      status: 401,
+      json: async () => ({
+        error: 'invalid_grant',
+        error_description: 'Code expired',
+      }),
+    }) as Response) as typeof fetch;
+
+  const {
+    service,
+    connectionSecretUpsertCalls,
+    connectionUpdateCalls,
+  } = createService();
+
+  const started = await service.startConnectionFlow({
+    workspaceId: 'ws-qb-fail',
+    platform: 'quickbooks',
+  });
+  assert.equal(started.data.type, 'auth_url');
+  if (started.data.type !== 'auth_url') {
+    assert.fail('Expected auth_url response');
+  }
+  const state = new URL(started.data.url).searchParams.get('state');
+  assert.ok(state);
+
+  await assert.rejects(
+    () =>
+      service.handleCallback({
+        workspaceId: 'ws-qb-fail',
+        platform: 'quickbooks',
+        payload: {
+          code: 'bad-code',
+          state,
+          connectionId: 'conn-1',
+          realmId: '1234567890',
+        },
+      }),
+    /QuickBooks token exchange failed with status 401/,
+  );
+
+  assert.equal(connectionSecretUpsertCalls.length, 0);
+  assert.equal(connectionUpdateCalls.length, 1);
+  const update = connectionUpdateCalls[0] as ConnectionUpdateCall;
+  assert.equal(update.where.id, 'conn-1');
+  assert.equal(update.data.status, 'ERROR');
+  assert.match(update.data.lastError ?? '', /QuickBooks token exchange failed with status 401/);
+  assert.doesNotMatch(update.data.lastError ?? '', /bad-code|access_token|refresh_token/i);
 
   global.fetch = originalFetch;
 });
