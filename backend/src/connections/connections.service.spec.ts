@@ -398,7 +398,7 @@ test('startConnectionFlow returns composed QuickBooks authorize URL from env and
   }
 
   const authUrl = new URL(result.data.url);
-  assert.equal(authUrl.origin, 'https://sandbox.appcenter.intuit.com');
+  assert.equal(authUrl.origin, 'https://appcenter.intuit.com');
   assert.equal(authUrl.pathname, '/connect/oauth2');
   assert.equal(authUrl.searchParams.get('response_type'), 'code');
   assert.equal(authUrl.searchParams.get('client_id'), 'quickbooks-client-id');

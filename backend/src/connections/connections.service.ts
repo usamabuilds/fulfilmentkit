@@ -567,9 +567,7 @@ export class ConnectionsService {
       state,
     });
 
-    const authorizeBaseUrl = config.environment === 'production'
-      ? 'https://appcenter.intuit.com/connect/oauth2'
-      : 'https://sandbox.appcenter.intuit.com/connect/oauth2';
+    const authorizeBaseUrl = 'https://appcenter.intuit.com/connect/oauth2';
 
     return `${authorizeBaseUrl}?${params.toString()}`;
   }
