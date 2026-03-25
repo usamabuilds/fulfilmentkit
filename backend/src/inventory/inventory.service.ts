@@ -44,6 +44,7 @@ export class InventoryService {
         select: {
           locationId: true,
           onHand: true,
+          reserved: true,
           location: {
             select: {
               code: true,
@@ -59,15 +60,22 @@ export class InventoryService {
       }),
     ]);
 
-    const items = rows.map((r) => ({
-      sku: r.product.sku,
-      name: r.product.name,
-      locationId: r.locationId,
-      locationCode: r.location.code,
-      onHand: r.onHand,
-      lowStockThreshold: null,
-      outOfStockThreshold: null,
-    }));
+    const items = rows.map((r) => {
+      // Business rule: available = onHand - reserved, clamped to never go below zero.
+      const available = Math.max(r.onHand - r.reserved, 0);
+
+      return {
+        available,
+        sku: r.product.sku,
+        name: r.product.name,
+        locationId: r.locationId,
+        locationCode: r.location.code,
+        onHand: r.onHand,
+        reserved: r.reserved,
+        lowStockThreshold: null,
+        outOfStockThreshold: null,
+      };
+    });
 
     return { total, items };
   }

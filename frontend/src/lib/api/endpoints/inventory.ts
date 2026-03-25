@@ -5,6 +5,8 @@ export interface InventoryItem {
   name: string
   locationId: string
   locationCode: string
+  available: number
+  reserved: number
   onHand: number
   lowStockThreshold?: number | null
   outOfStockThreshold?: number | null
