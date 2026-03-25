@@ -28,6 +28,13 @@ const dashboardAlertsQuerySchema = z.object({
   to: z.string().optional(),
 });
 
+const dashboardTopSkusQuerySchema = z.object({
+  from: z.string().optional(),
+  to: z.string().optional(),
+  limit: z.coerce.number().int().positive().max(100).default(25),
+  sortBy: z.enum(['revenue', 'units', 'refunds', 'margin']).default('revenue'),
+});
+
 @Controller('dashboard')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
@@ -90,6 +97,23 @@ export class DashboardController {
       workspaceId,
       from,
       to,
+    });
+
+    return apiResponse(result);
+  }
+
+  @Get('top-skus')
+  async topSkus(@Req() req: any, @Query() query: any) {
+    const workspaceId = req.workspaceId;
+    const q = validateQuery(dashboardTopSkusQuerySchema, query);
+    const { from, to } = parseDateRange(q);
+
+    const result = await this.dashboardService.topSkus({
+      workspaceId,
+      from,
+      to,
+      limit: q.limit,
+      sortBy: q.sortBy,
     });
 
     return apiResponse(result);
