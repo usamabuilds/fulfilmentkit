@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type ChangeEvent } from 'react'
+import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { StockLevelBadge } from '@/components/modules/inventory/StockLevelBadge'
 import { useInventory } from '@/lib/hooks/useInventory'
 import { useLocations } from '@/lib/hooks/useLocations'
@@ -8,12 +8,15 @@ import { useLocations } from '@/lib/hooks/useLocations'
 export default function InventoryPage() {
   const [page, setPage] = useState(1)
   const [selectedLocationId, setSelectedLocationId] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch] = useState('')
   const pageSize = 20
 
   const { data, isLoading } = useInventory({
     page,
     pageSize,
     locationId: selectedLocationId || undefined,
+    search: search || undefined,
   })
   const { data: locationsData, isLoading: isLocationsLoading } = useLocations()
 
@@ -27,6 +30,12 @@ export default function InventoryPage() {
     setPage(1)
   }
 
+  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setSearch(searchInput.trim())
+    setPage(1)
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -37,6 +46,21 @@ export default function InventoryPage() {
       </div>
 
       <div className="glass-panel p-4">
+        <form onSubmit={handleSearchSubmit} className="mb-4 flex gap-2">
+          <input
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder="Search by SKU or name"
+            className="w-full rounded-[10px] border border-border-subtle bg-transparent px-3 py-2 text-body text-text-primary outline-none transition-colors placeholder:text-text-secondary focus:border-border-strong"
+          />
+          <button
+            type="submit"
+            className="rounded-[8px] border border-border-subtle px-4 py-2 text-subhead text-text-secondary transition-all hover:bg-black/5"
+          >
+            Search
+          </button>
+        </form>
+
         <label htmlFor="location-filter" className="mb-2 block text-subhead text-text-secondary">
           Location
         </label>

@@ -6,7 +6,14 @@ export function useInventory(params?: InventoryListParams) {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
 
   return useQuery({
-    queryKey: ['inventory', workspaceId, params],
+    queryKey: [
+      'inventory',
+      workspaceId,
+      params?.page ?? 1,
+      params?.pageSize ?? 20,
+      params?.locationId ?? '',
+      params?.search ?? '',
+    ],
     queryFn: () => inventoryApi.list(params),
     enabled: !!workspaceId,
   })
