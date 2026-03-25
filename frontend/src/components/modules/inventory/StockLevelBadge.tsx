@@ -6,8 +6,8 @@ interface StockLevelBadgeProps {
 }
 
 export function StockLevelBadge({ onHand, threshold }: StockLevelBadgeProps) {
-  const isLow = onHand <= threshold
-  const isOut = onHand === 0
+  const isOut = onHand <= 0
+  const isLow = !isOut && onHand <= threshold
 
   return (
     <span
@@ -15,10 +15,10 @@ export function StockLevelBadge({ onHand, threshold }: StockLevelBadgeProps) {
         'text-caption-2 rounded-full px-2.5 py-1',
         isOut && 'bg-destructive/10 text-destructive',
         isLow && !isOut && 'bg-warning/10 text-warning',
-        !isLow && 'bg-success/10 text-success',
+        !isOut && !isLow && 'bg-success/10 text-success',
       )}
     >
-      {isOut ? 'Out of stock' : isLow ? 'Low stock' : 'In stock'}
+      {isOut ? 'Out of stock' : isLow ? 'Low stock' : 'Healthy'}
     </span>
   )
 }

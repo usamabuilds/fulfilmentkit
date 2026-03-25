@@ -117,7 +117,7 @@ export default function InventoryPage() {
                     <td className="px-5 py-3 text-body text-text-primary">{item.onHand}</td>
                     <td className="px-5 py-3">
                       <StockLevelBadge
-                        onHand={item.available}
+                        onHand={item.onHand}
                         threshold={item.lowStockThreshold ?? 0}
                       />
                     </td>

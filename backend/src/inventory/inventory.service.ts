@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Prisma } from '../generated/prisma';
 import { PrismaService } from '../common/prisma/prisma.service';
 
 type InventoryListArgs = {
@@ -9,12 +10,22 @@ type InventoryListArgs = {
   take: number;
 };
 
+const DEFAULT_LOW_STOCK_THRESHOLD = 5;
+
+type InventoryListRow = {
+  locationId: string;
+  onHand: number;
+  reserved: number;
+  location: { code: string };
+  product: { sku: string; name: string };
+};
+
 @Injectable()
 export class InventoryService {
   constructor(private readonly prisma: PrismaService) {}
 
   async list(args: InventoryListArgs) {
-    const where: any = {
+    const where: Prisma.InventoryWhereInput = {
       workspaceId: args.workspaceId,
     };
 
@@ -33,7 +44,7 @@ export class InventoryService {
 
     const [total, rows] = await Promise.all([
       this.prisma.inventory.count({ where }),
-      this.prisma.inventory.findMany({
+      (this.prisma.inventory.findMany as unknown as (args: unknown) => Promise<InventoryListRow[]>)({
         where,
         skip: args.skip,
         take: args.take,
@@ -72,7 +83,7 @@ export class InventoryService {
         locationCode: r.location.code,
         onHand: r.onHand,
         reserved: r.reserved,
-        lowStockThreshold: null,
+        lowStockThreshold: DEFAULT_LOW_STOCK_THRESHOLD,
         outOfStockThreshold: null,
       };
     });
