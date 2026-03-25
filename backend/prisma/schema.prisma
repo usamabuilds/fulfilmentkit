@@ -236,6 +236,7 @@ model Inventory {
   locationId  String
   productId   String
   onHand      Int
+  reserved    Int       @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   location    Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)

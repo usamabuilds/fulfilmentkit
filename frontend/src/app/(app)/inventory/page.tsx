@@ -98,6 +98,8 @@ export default function InventoryPage() {
                 <tr className="border-b border-border-subtle">
                   <th className="px-5 py-3 text-left text-subhead text-text-secondary">SKU</th>
                   <th className="px-5 py-3 text-left text-subhead text-text-secondary">Name</th>
+                  <th className="px-5 py-3 text-left text-subhead text-text-secondary">Available</th>
+                  <th className="px-5 py-3 text-left text-subhead text-text-secondary">Reserved</th>
                   <th className="px-5 py-3 text-left text-subhead text-text-secondary">On Hand</th>
                   <th className="px-5 py-3 text-left text-subhead text-text-secondary">Status</th>
                 </tr>
@@ -110,10 +112,12 @@ export default function InventoryPage() {
                   >
                     <td className="px-5 py-3 font-mono text-sm text-body text-text-primary">{item.sku}</td>
                     <td className="px-5 py-3 text-body text-text-primary">{item.name}</td>
+                    <td className="px-5 py-3 text-body text-text-primary">{item.available}</td>
+                    <td className="px-5 py-3 text-body text-text-primary">{item.reserved}</td>
                     <td className="px-5 py-3 text-body text-text-primary">{item.onHand}</td>
                     <td className="px-5 py-3">
                       <StockLevelBadge
-                        onHand={item.onHand}
+                        onHand={item.available}
                         threshold={item.lowStockThreshold ?? 0}
                       />
                     </td>
