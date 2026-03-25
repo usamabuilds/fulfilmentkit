@@ -52,6 +52,30 @@ export interface DashboardBreakdown {
   items: DashboardBreakdownItem[]
 }
 
+export type DashboardTopSkuSortBy = 'revenue' | 'units' | 'refunds' | 'margin'
+
+export interface DashboardTopSkusParams {
+  from?: string
+  to?: string
+  limit: number
+  sortBy?: DashboardTopSkuSortBy
+}
+
+export interface DashboardTopSkuRow {
+  sku: string
+  name: string
+  revenue: string
+  units: number
+  refunds: string
+  fees: string
+  margin: string
+  share: string
+}
+
+export interface DashboardTopSkus {
+  rows: DashboardTopSkuRow[]
+}
+
 export type DashboardAlertType = 'stockouts' | 'low_stock' | 'margin_leakage' | 'refund_spikes'
 
 export type DashboardAlertLevel = 'critical' | 'warning' | 'info'
@@ -109,5 +133,16 @@ export const dashboardApi = {
     const queryString = query.toString()
     const path = queryString ? `/dashboard/alerts?${queryString}` : '/dashboard/alerts'
     return apiGet<DashboardAlertsResponse>(path)
+  },
+  getTopSkus: (params: DashboardTopSkusParams) => {
+    const query = new URLSearchParams()
+    query.set('limit', String(params.limit))
+    if (params.sortBy) query.set('sortBy', params.sortBy)
+    if (params.from) query.set('from', params.from)
+    if (params.to) query.set('to', params.to)
+
+    const queryString = query.toString()
+    const path = queryString ? `/dashboard/top-skus?${queryString}` : '/dashboard/top-skus'
+    return apiGet<DashboardTopSkus>(path)
   },
 }

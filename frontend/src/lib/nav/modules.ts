@@ -20,6 +20,7 @@ export const modules: NavModule[] = [
     pages: [
       { label: 'Overview', href: '/dashboard' },
       { label: 'Trends', href: '/dashboard/trends' },
+      { label: 'Top SKU Performance', href: '/dashboard/top-skus' },
       { label: 'Breakdown', href: '/dashboard/breakdown' },
       { label: 'Alerts', href: '/dashboard/alerts' },
     ],

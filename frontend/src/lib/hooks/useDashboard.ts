@@ -3,6 +3,7 @@ import {
   dashboardApi,
   type DashboardBreakdownParams,
   type DashboardStatsParams,
+  type DashboardTopSkusParams,
   type DashboardTrendsParams,
 } from '@/lib/api/endpoints/dashboard'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
@@ -57,6 +58,24 @@ export function useDashboardAlerts(params?: DashboardStatsParams, enabled = true
   return useQuery({
     queryKey: ['dashboard', 'alerts', workspaceId, params?.from ?? null, params?.to ?? null],
     queryFn: () => dashboardApi.getAlerts(params),
+    enabled: !!workspaceId && enabled,
+  })
+}
+
+export function useDashboardTopSkus(params: DashboardTopSkusParams, enabled = true) {
+  const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
+
+  return useQuery({
+    queryKey: [
+      'dashboard',
+      'top-skus',
+      workspaceId,
+      params.sortBy ?? 'revenue',
+      params.limit,
+      params.from ?? null,
+      params.to ?? null,
+    ],
+    queryFn: () => dashboardApi.getTopSkus(params),
     enabled: !!workspaceId && enabled,
   })
 }

@@ -34,6 +34,16 @@ type DashboardAlertsArgs = {
   to?: Date;
 };
 
+type TopSkusSortBy = 'revenue' | 'units' | 'refunds' | 'margin';
+
+type DashboardTopSkusArgs = {
+  workspaceId: string;
+  from?: Date;
+  to?: Date;
+  limit: number;
+  sortBy: TopSkusSortBy;
+};
+
 type AlertType = 'stockouts' | 'low_stock' | 'margin_leakage' | 'refund_spikes';
 type AlertLevel = 'critical' | 'warning' | 'info';
 
@@ -43,6 +53,17 @@ type DashboardAlert = {
   title: string;
   message: string;
   count?: number;
+};
+
+type DashboardTopSkuRow = {
+  sku: string;
+  name: string;
+  revenue: string;
+  units: number;
+  refunds: string;
+  fees: string;
+  margin: string;
+  share: string;
 };
 
 function decimalToString(v: any) {
@@ -87,6 +108,264 @@ function isoDate(d: Date) {
 @Injectable()
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async topSkus(args: DashboardTopSkusArgs) {
+    const { workspaceId, sortBy, limit } = args;
+    const rangeFrom = args.from ? startOfDayUtc(args.from) : startOfDayUtc(new Date());
+    const rangeTo = args.to ? toEndOfDayUtc(args.to) : toEndOfDayUtc(new Date());
+
+    // Try metrics tables first (SkuDailyMetric)
+    const skuMetricRows = await this.prisma.skuDailyMetric.findMany({
+      where: {
+        workspaceId,
+        day: {
+          gte: startOfDayUtc(rangeFrom),
+          lte: startOfDayUtc(rangeTo),
+        },
+      },
+      select: {
+        unitsSold: true,
+        revenue: true,
+        refundsAmount: true,
+        feesAmount: true,
+        product: {
+          select: {
+            sku: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (skuMetricRows.length > 0) {
+      const totals = new Map<
+        string,
+        {
+          sku: string;
+          name: string;
+          revenue: Prisma.Decimal;
+          units: number;
+          refunds: Prisma.Decimal;
+          fees: Prisma.Decimal;
+          margin: Prisma.Decimal;
+        }
+      >();
+      let grandRevenue = new Prisma.Decimal('0');
+
+      for (const row of skuMetricRows) {
+        const sku = row.product?.sku ?? 'unknown';
+        const name = row.product?.name ?? sku;
+        const revenue = new Prisma.Decimal(decimalToString(row.revenue));
+        const refunds = new Prisma.Decimal(decimalToString(row.refundsAmount));
+        const fees = new Prisma.Decimal(decimalToString(row.feesAmount));
+        const margin = revenue.minus(refunds).minus(fees);
+        const current = totals.get(sku) ?? {
+          sku,
+          name,
+          revenue: new Prisma.Decimal('0'),
+          units: 0,
+          refunds: new Prisma.Decimal('0'),
+          fees: new Prisma.Decimal('0'),
+          margin: new Prisma.Decimal('0'),
+        };
+
+        current.revenue = current.revenue.plus(revenue);
+        current.units += row.unitsSold ?? 0;
+        current.refunds = current.refunds.plus(refunds);
+        current.fees = current.fees.plus(fees);
+        current.margin = current.margin.plus(margin);
+        totals.set(sku, current);
+        grandRevenue = grandRevenue.plus(revenue);
+      }
+
+      const rows = Array.from(totals.values())
+        .map<DashboardTopSkuRow>((item) => {
+          const share = grandRevenue.gt(0)
+            ? item.revenue.div(grandRevenue).mul(100)
+            : new Prisma.Decimal('0');
+
+          return {
+            sku: item.sku,
+            name: item.name,
+            revenue: decimalToString(item.revenue),
+            units: item.units,
+            refunds: decimalToString(item.refunds),
+            fees: decimalToString(item.fees),
+            margin: decimalToString(item.margin),
+            share: decimalToString(share),
+          };
+        })
+        .sort((a, b) => {
+          if (sortBy === 'units') return b.units - a.units;
+          return Number(b[sortBy]) - Number(a[sortBy]);
+        })
+        .slice(0, limit);
+
+      return { rows };
+    }
+
+    // Fallback to raw tables
+    const itemRows = await this.prisma.orderItem.findMany({
+      where: {
+        order: {
+          workspaceId,
+          orderedAt: {
+            gte: rangeFrom,
+            lte: rangeTo,
+          },
+        },
+      },
+      select: {
+        orderId: true,
+        quantity: true,
+        total: true,
+        product: {
+          select: {
+            sku: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (itemRows.length === 0) {
+      return { rows: [] as DashboardTopSkuRow[] };
+    }
+
+    const orderRevenueTotals = new Map<string, Prisma.Decimal>();
+    const orderSkuRevenue = new Map<string, Map<string, Prisma.Decimal>>();
+    const skuTotals = new Map<
+      string,
+      {
+        sku: string;
+        name: string;
+        revenue: Prisma.Decimal;
+        units: number;
+        refunds: Prisma.Decimal;
+        fees: Prisma.Decimal;
+      }
+    >();
+
+    for (const row of itemRows) {
+      const sku = row.product?.sku ?? 'unknown';
+      const name = row.product?.name ?? sku;
+      const revenue = new Prisma.Decimal(decimalToString(row.total));
+      const units = row.quantity ?? 0;
+      const skuCurrent = skuTotals.get(sku) ?? {
+        sku,
+        name,
+        revenue: new Prisma.Decimal('0'),
+        units: 0,
+        refunds: new Prisma.Decimal('0'),
+        fees: new Prisma.Decimal('0'),
+      };
+
+      skuCurrent.revenue = skuCurrent.revenue.plus(revenue);
+      skuCurrent.units += units;
+      skuTotals.set(sku, skuCurrent);
+
+      const orderCurrent = orderRevenueTotals.get(row.orderId) ?? new Prisma.Decimal('0');
+      orderRevenueTotals.set(row.orderId, orderCurrent.plus(revenue));
+
+      const skuMap = orderSkuRevenue.get(row.orderId) ?? new Map<string, Prisma.Decimal>();
+      skuMap.set(sku, (skuMap.get(sku) ?? new Prisma.Decimal('0')).plus(revenue));
+      orderSkuRevenue.set(row.orderId, skuMap);
+    }
+
+    const orderIds = Array.from(orderRevenueTotals.keys());
+
+    const [refundRows, feeRows] = await Promise.all([
+      this.prisma.refund.findMany({
+        where: {
+          workspaceId,
+          orderId: { in: orderIds },
+          createdAt: {
+            gte: rangeFrom,
+            lte: rangeTo,
+          },
+        },
+        select: {
+          orderId: true,
+          amount: true,
+        },
+      }),
+      this.prisma.fee.findMany({
+        where: {
+          workspaceId,
+          orderId: { in: orderIds },
+          createdAt: {
+            gte: rangeFrom,
+            lte: rangeTo,
+          },
+        },
+        select: {
+          orderId: true,
+          amount: true,
+        },
+      }),
+    ]);
+
+    const allocateOrderAmount = (orderId: string | null, amount: Prisma.Decimal, kind: 'refunds' | 'fees') => {
+      if (!orderId) return;
+      const orderTotal = orderRevenueTotals.get(orderId);
+      const skuMap = orderSkuRevenue.get(orderId);
+      if (!orderTotal || !skuMap || orderTotal.lte(0)) return;
+
+      for (const [sku, skuRevenue] of skuMap.entries()) {
+        const skuCurrent = skuTotals.get(sku);
+        if (!skuCurrent) continue;
+        const allocated = skuRevenue.div(orderTotal).mul(amount);
+        if (kind === 'refunds') {
+          skuCurrent.refunds = skuCurrent.refunds.plus(allocated);
+        } else {
+          skuCurrent.fees = skuCurrent.fees.plus(allocated);
+        }
+      }
+    };
+
+    for (const row of refundRows) {
+      allocateOrderAmount(
+        row.orderId,
+        new Prisma.Decimal(decimalToString(row.amount)),
+        'refunds',
+      );
+    }
+
+    for (const row of feeRows) {
+      allocateOrderAmount(row.orderId, new Prisma.Decimal(decimalToString(row.amount)), 'fees');
+    }
+
+    let grandRevenue = new Prisma.Decimal('0');
+    for (const row of skuTotals.values()) {
+      grandRevenue = grandRevenue.plus(row.revenue);
+    }
+
+    const rows = Array.from(skuTotals.values())
+      .map<DashboardTopSkuRow>((item) => {
+        const margin = item.revenue.minus(item.refunds).minus(item.fees);
+        const share = grandRevenue.gt(0)
+          ? item.revenue.div(grandRevenue).mul(100)
+          : new Prisma.Decimal('0');
+
+        return {
+          sku: item.sku,
+          name: item.name,
+          revenue: decimalToString(item.revenue),
+          units: item.units,
+          refunds: decimalToString(item.refunds),
+          fees: decimalToString(item.fees),
+          margin: decimalToString(margin),
+          share: decimalToString(share),
+        };
+      })
+      .sort((a, b) => {
+        if (sortBy === 'units') return b.units - a.units;
+        return Number(b[sortBy]) - Number(a[sortBy]);
+      })
+      .slice(0, limit);
+
+    return { rows };
+  }
 
   async summary(args: DashboardSummaryArgs) {
     const { workspaceId, from, to } = args;
