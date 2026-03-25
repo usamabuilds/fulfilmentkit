@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { inventoryApi } from '@/lib/api/endpoints/inventory'
+import { inventoryApi, type InventoryListParams } from '@/lib/api/endpoints/inventory'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 
-export function useInventory(params?: { page?: number; pageSize?: number }) {
+export function useInventory(params?: InventoryListParams) {
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
 
   return useQuery({
