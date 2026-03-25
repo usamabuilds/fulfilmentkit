@@ -14,6 +14,7 @@ export interface InventoryListParams {
   page?: number
   pageSize?: number
   locationId?: string
+  search?: string
 }
 
 export const inventoryApi = {
@@ -22,6 +23,7 @@ export const inventoryApi = {
     if (params?.page) query.set('page', String(params.page))
     if (params?.pageSize) query.set('pageSize', String(params.pageSize))
     if (params?.locationId) query.set('locationId', params.locationId)
+    if (params?.search?.trim()) query.set('search', params.search.trim())
     return apiGetList<InventoryItem>(`/inventory?${query}`)
   },
 }
