@@ -1,25 +1,188 @@
-import Link from 'next/link'
-import { notFound } from 'next/navigation'
-import { reportCatalogByKey, type ReportKey } from '@/lib/reports/report-catalog'
+'use client'
 
-type ReportDetailPageProps = {
-  params: Promise<{ reportKey: string }>
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import Link from 'next/link'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { EmptyState } from '@/components/ui/EmptyState'
+import {
+  reportsApi,
+  type ReportDefinitionDto,
+  type ReportFilterDefinitionMapDto,
+  type ReportFilterDefinitionDto,
+} from '@/lib/api/endpoints/reports'
+import { useWorkspaceStore } from '@/lib/store/workspaceStore'
+
+type FilterValue = string | number | string[]
+type FilterState = Record<string, FilterValue>
+
+function getDefaultFilterState(definitions: ReportFilterDefinitionMapDto): FilterState {
+  return Object.entries(definitions).reduce<FilterState>((acc, [fieldKey, definition]) => {
+    acc[fieldKey] = definition.default
+    return acc
+  }, {})
 }
 
-export default async function ReportDetailPage({ params }: ReportDetailPageProps) {
-  const { reportKey } = await params
-  const report = reportCatalogByKey[reportKey as ReportKey]
+function parseFiltersFromParams(searchParams: URLSearchParams, definitions: ReportFilterDefinitionMapDto): FilterState {
+  const defaults = getDefaultFilterState(definitions)
+  const parsed: FilterState = { ...defaults }
+
+  Object.entries(definitions).forEach(([fieldKey, definition]) => {
+    const paramValue = searchParams.get(fieldKey)
+    if (!paramValue) {
+      return
+    }
+
+    if (definition.type === 'number') {
+      const parsedNumber = Number(paramValue)
+      if (!Number.isNaN(parsedNumber)) {
+        parsed[fieldKey] = parsedNumber
+      }
+      return
+    }
+
+    if (definition.type === 'multi-select') {
+      const values = paramValue
+        .split(',')
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+      if (values.length > 0) {
+        parsed[fieldKey] = values
+      }
+      return
+    }
+
+    parsed[fieldKey] = paramValue
+  })
+
+  return parsed
+}
+
+function toQueryString(definitions: ReportFilterDefinitionMapDto, filters: FilterState): string {
+  const params = new URLSearchParams()
+
+  Object.entries(definitions).forEach(([fieldKey, definition]) => {
+    const value = filters[fieldKey]
+
+    if (definition.type === 'multi-select' && Array.isArray(value)) {
+      if (value.length > 0) {
+        params.set(fieldKey, value.join(','))
+      }
+      return
+    }
+
+    if (definition.type === 'number' && typeof value === 'number') {
+      params.set(fieldKey, String(value))
+      return
+    }
+
+    if (typeof value === 'string' && value.trim().length > 0) {
+      params.set(fieldKey, value)
+    }
+  })
+
+  return params.toString()
+}
+
+function getInputLabel(definition: ReportFilterDefinitionDto): string {
+  return definition.description ? `${definition.label} (${definition.description})` : definition.label
+}
+
+export default function ReportDetailPage() {
+  const router = useRouter()
+  const params = useParams<{ reportKey: string }>()
+  const searchParams = useSearchParams()
+  const workspaceId = useWorkspaceStore((state) => state.workspace?.id)
+
+  const reportsQuery = useQuery({
+    queryKey: ['reports', workspaceId],
+    queryFn: () => reportsApi.list(),
+    enabled: Boolean(workspaceId),
+  })
+
+  const report = useMemo<ReportDefinitionDto | undefined>(() => {
+    const items = reportsQuery.data?.data.items ?? []
+    return items.find((item) => item.key === params.reportKey)
+  }, [params.reportKey, reportsQuery.data?.data.items])
+
+  const initialFilters = useMemo(() => {
+    if (!report) {
+      return null
+    }
+    return parseFiltersFromParams(new URLSearchParams(searchParams.toString()), report.filterDefinitions)
+  }, [report, searchParams])
+
+  const [filters, setFilters] = useState<FilterState>(initialFilters ?? {})
+
+  useEffect(() => {
+    if (initialFilters) {
+      setFilters(initialFilters)
+    }
+  }, [initialFilters])
+
+  const runMutation = useMutation({
+    mutationFn: (nextFilters: FilterState) => {
+      if (!report) {
+        throw new Error('Report is missing')
+      }
+      return reportsApi.run(report.key, { filters: nextFilters })
+    },
+  })
+
+  if (reportsQuery.isLoading) {
+    return <div className="glass-panel p-6 text-body text-text-secondary">Loading report metadata…</div>
+  }
 
   if (!report) {
-    notFound()
+    return (
+      <div className="glass-panel p-6">
+        <p className="text-body text-text-secondary">Report not found.</p>
+      </div>
+    )
   }
+
+  const syncQueryParams = (nextFilters: FilterState) => {
+    const queryString = toQueryString(report.filterDefinitions, nextFilters)
+    router.replace(queryString.length > 0 ? `/reports/${report.key}?${queryString}` : `/reports/${report.key}`)
+  }
+
+  const handleStringFilterChange = (fieldKey: string) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const nextValue = event.target.value
+    setFilters((current) => {
+      const next = { ...current, [fieldKey]: nextValue }
+      syncQueryParams(next)
+      return next
+    })
+  }
+
+  const handleNumberFilterChange = (fieldKey: string) => (event: ChangeEvent<HTMLInputElement>) => {
+    const rawValue = event.target.value
+    const parsedNumber = Number(rawValue)
+
+    setFilters((current) => {
+      const next = { ...current, [fieldKey]: Number.isNaN(parsedNumber) ? 0 : parsedNumber }
+      syncQueryParams(next)
+      return next
+    })
+  }
+
+  const handleMultiSelectChange = (fieldKey: string) => (event: ChangeEvent<HTMLSelectElement>) => {
+    const values = Array.from(event.target.selectedOptions).map((option) => option.value)
+    setFilters((current) => {
+      const next = { ...current, [fieldKey]: values }
+      syncQueryParams(next)
+      return next
+    })
+  }
+
+  const run = runMutation.data?.data
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-title-1 text-text-primary">{report.label}</h1>
-          <p className="mt-1 text-body text-text-secondary">{report.description}</p>
+          <p className="mt-1 text-body text-text-secondary">Configure filters and run your report on demand.</p>
         </div>
         <Link
           href="/reports"
@@ -30,32 +193,136 @@ export default async function ReportDetailPage({ params }: ReportDetailPageProps
       </div>
 
       <div className="glass-panel p-6">
-        <h2 className="text-headline text-text-primary">Execution Settings</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div>
-            <p className="text-caption-1 text-text-tertiary">Default Date Range</p>
-            <p className="text-body text-text-primary">{report.defaultFilters.dateRange.replaceAll('_', ' ')}</p>
-          </div>
-          <div>
-            <p className="text-caption-1 text-text-tertiary">Default Region</p>
-            <p className="text-body text-text-primary">{report.defaultFilters.region}</p>
-          </div>
-          <div>
-            <p className="text-caption-1 text-text-tertiary">Default Status</p>
-            <p className="text-body text-text-primary">{report.defaultFilters.status}</p>
-          </div>
-          <div>
-            <p className="text-caption-1 text-text-tertiary">Export Capability</p>
-            <p className="text-body text-text-primary">{report.supportsExport ? 'CSV/Excel ready' : 'No export support'}</p>
-          </div>
+        <h2 className="text-headline text-text-primary">Execution Filters</h2>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {Object.entries(report.filterDefinitions).map(([fieldKey, definition]) => {
+            if (definition.type === 'date-range' || definition.type === 'select') {
+              return (
+                <label key={fieldKey} className="flex flex-col gap-2">
+                  <span className="text-subhead text-text-secondary">{getInputLabel(definition)}</span>
+                  <select
+                    value={typeof filters[fieldKey] === 'string' ? filters[fieldKey] : definition.default}
+                    onChange={handleStringFilterChange(fieldKey)}
+                    className="glass-input text-text-primary"
+                  >
+                    {definition.type === 'date-range' &&
+                      definition.presets.map((preset) => (
+                        <option key={preset} value={preset}>
+                          {preset.replaceAll('_', ' ')}
+                        </option>
+                      ))}
+                    {definition.type === 'select' &&
+                      definition.options.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              )
+            }
+
+            if (definition.type === 'multi-select') {
+              return (
+                <label key={fieldKey} className="flex flex-col gap-2">
+                  <span className="text-subhead text-text-secondary">{getInputLabel(definition)}</span>
+                  <select
+                    multiple
+                    value={Array.isArray(filters[fieldKey]) ? filters[fieldKey] : definition.default}
+                    onChange={handleMultiSelectChange(fieldKey)}
+                    className="glass-input min-h-[120px] text-text-primary"
+                  >
+                    {definition.options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )
+            }
+
+            if (definition.type === 'number') {
+              return (
+                <label key={fieldKey} className="flex flex-col gap-2">
+                  <span className="text-subhead text-text-secondary">{getInputLabel(definition)}</span>
+                  <input
+                    type="number"
+                    value={typeof filters[fieldKey] === 'number' ? filters[fieldKey] : definition.default}
+                    onChange={handleNumberFilterChange(fieldKey)}
+                    min={definition.min}
+                    max={definition.max}
+                    className="glass-input text-text-primary"
+                  />
+                </label>
+              )
+            }
+
+            return (
+              <label key={fieldKey} className="flex flex-col gap-2">
+                <span className="text-subhead text-text-secondary">{getInputLabel(definition)}</span>
+                <input
+                  type="text"
+                  value={typeof filters[fieldKey] === 'string' ? filters[fieldKey] : definition.default}
+                  onChange={handleStringFilterChange(fieldKey)}
+                  minLength={definition.minLength}
+                  maxLength={definition.maxLength}
+                  className="glass-input text-text-primary"
+                />
+              </label>
+            )
+          })}
+        </div>
+
+        <div className="mt-5 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => runMutation.mutate(filters)}
+            className="rounded-lg bg-black px-4 py-2 text-callout text-white transition hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={runMutation.isPending}
+          >
+            {runMutation.isPending ? 'Running…' : 'Run report'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const defaults = getDefaultFilterState(report.filterDefinitions)
+              setFilters(defaults)
+              syncQueryParams(defaults)
+            }}
+            className="rounded-lg border border-border-subtle px-4 py-2 text-callout text-text-secondary transition hover:bg-black/5"
+          >
+            Reset filters
+          </button>
         </div>
       </div>
 
       <div className="glass-panel p-6">
         <h2 className="text-headline text-text-primary">Run Output</h2>
-        <p className="mt-2 text-body text-text-secondary">
-          Report execution and output rendering will appear here after a run is requested.
-        </p>
+        {!run && <p className="mt-2 text-body text-text-secondary">No run yet. Configure filters and run this report.</p>}
+
+        {run && run.output.rows === 0 && (
+          <div className="mt-4">
+            <EmptyState
+              title="No rows returned"
+              subtitle="Try broadening your filters or resetting to defaults and running again."
+            />
+          </div>
+        )}
+
+        {run && run.output.rows > 0 && (
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-border-subtle p-4">
+              <p className="text-caption-1 text-text-tertiary">Rows</p>
+              <p className="text-title-3 text-text-primary">{run.output.rows}</p>
+            </div>
+            <div className="rounded-lg border border-border-subtle p-4 sm:col-span-2">
+              <p className="text-caption-1 text-text-tertiary">Summary</p>
+              <p className="text-body text-text-primary">{run.output.summary}</p>
+              <p className="mt-1 text-caption-1 text-text-tertiary">Generated {new Date(run.output.generatedAt).toLocaleString()}</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
