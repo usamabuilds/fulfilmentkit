@@ -1,7 +1,8 @@
 import { apiGet, apiGetList, apiPost } from '@/lib/api/client'
+import { connectionPlatforms, type ConnectionPlatform } from '@/lib/api/endpoints/connections'
 
 export type ReportKey = 'sales-summary' | 'inventory-aging' | 'order-fulfillment-health'
-export type ReportPlatform = 'shopify' | 'amazon' | 'woocommerce' | 'all'
+export type ReportPlatform = ConnectionPlatform | 'all'
 
 export type ReportFilterType = 'date-range' | 'select' | 'multi-select' | 'number' | 'text'
 
@@ -83,6 +84,8 @@ export interface ReportRunDto {
 export interface RunReportDto {
   filters?: Record<string, string | number | string[]>
 }
+
+export const normalizedReportPlatforms = ['all', ...connectionPlatforms] as const
 
 export const reportsApi = {
   list: () => apiGetList<ReportDefinitionDto>('/reports'),
