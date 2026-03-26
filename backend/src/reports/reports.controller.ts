@@ -18,14 +18,46 @@ function createFiltersSchema(definitions: ReportFilterDefinitionMap): z.ZodType<
 
     if (fieldDefinition.type === 'select') {
       const allowedValues = fieldDefinition.options.map((option) => option.value);
-      shape[fieldKey] = z.enum(allowedValues as [string, ...string[]]);
+      const enumSchema = z.enum(allowedValues as [string, ...string[]]);
+      const arraySchema = z
+        .array(z.string().transform((value) => value.toLowerCase()).pipe(enumSchema))
+        .min(1);
+      shape[fieldKey] = fieldKey === 'platform'
+        ? z.union([
+          z.string().transform((value) => value.toLowerCase()).pipe(enumSchema),
+          arraySchema,
+        ]).transform((value) => {
+          if (Array.isArray(value)) {
+            return value;
+          }
+          return value;
+        })
+        : enumSchema;
       return;
     }
 
     if (fieldDefinition.type === 'multi-select') {
       const allowedValues = fieldDefinition.options.map((option) => option.value);
-      const baseSchema = z.array(z.enum(allowedValues as [string, ...string[]])).min(1);
-      shape[fieldKey] = fieldDefinition.maxSelections ? baseSchema.max(fieldDefinition.maxSelections) : baseSchema;
+      const enumSchema = z.enum(allowedValues as [string, ...string[]]);
+      const baseSchema = z.array(enumSchema).min(1);
+      const multiSchema = fieldDefinition.maxSelections ? baseSchema.max(fieldDefinition.maxSelections) : baseSchema;
+      const normalizedArraySchema = fieldDefinition.maxSelections
+        ? z
+          .array(z.string().transform((value) => value.toLowerCase()).pipe(enumSchema))
+          .min(1)
+          .max(fieldDefinition.maxSelections)
+        : z.array(z.string().transform((value) => value.toLowerCase()).pipe(enumSchema)).min(1);
+      shape[fieldKey] = fieldKey === 'platform'
+        ? z.union([
+          z.string().transform((value) => value.toLowerCase()).pipe(enumSchema),
+          normalizedArraySchema,
+        ]).transform((value) => {
+          if (Array.isArray(value)) {
+            return value;
+          }
+          return value;
+        })
+        : multiSchema;
       return;
     }
 

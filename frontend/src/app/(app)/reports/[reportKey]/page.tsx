@@ -6,15 +6,19 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { EmptyState } from '@/components/ui/EmptyState'
 import {
+  type ReportPlatform,
+  normalizedReportPlatforms,
   reportsApi,
   type ReportDefinitionDto,
   type ReportFilterDefinitionMapDto,
   type ReportFilterDefinitionDto,
 } from '@/lib/api/endpoints/reports'
+import { connectionPlatforms, connectionsApi, type ConnectionPlatform } from '@/lib/api/endpoints/connections'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 
 type FilterValue = string | number | string[]
 type FilterState = Record<string, FilterValue>
+type PlatformSelection = ReportPlatform[]
 
 function getDefaultFilterState(definitions: ReportFilterDefinitionMapDto): FilterState {
   return Object.entries(definitions).reduce<FilterState>((acc, [fieldKey, definition]) => {
@@ -88,6 +92,17 @@ function getInputLabel(definition: ReportFilterDefinitionDto): string {
   return definition.description ? `${definition.label} (${definition.description})` : definition.label
 }
 
+function normalizePlatformValues(value: FilterValue | undefined): PlatformSelection {
+  const values = Array.isArray(value) ? value : typeof value === 'string' ? [value] : ['all']
+  const normalized = values
+    .map((item) => item.toLowerCase())
+    .filter((item): item is ReportPlatform => normalizedReportPlatforms.includes(item as ReportPlatform))
+  if (normalized.includes('all') || normalized.length === 0) {
+    return ['all']
+  }
+  return Array.from(new Set(normalized))
+}
+
 export default function ReportDetailPage() {
   const router = useRouter()
   const params = useParams<{ reportKey: string }>()
@@ -97,6 +112,11 @@ export default function ReportDetailPage() {
   const reportsQuery = useQuery({
     queryKey: ['reports', workspaceId],
     queryFn: () => reportsApi.list(),
+    enabled: Boolean(workspaceId),
+  })
+  const connectionsQuery = useQuery({
+    queryKey: ['connections', workspaceId],
+    queryFn: () => connectionsApi.list(),
     enabled: Boolean(workspaceId),
   })
 
@@ -125,7 +145,13 @@ export default function ReportDetailPage() {
       if (!report) {
         throw new Error('Report is missing')
       }
-      return reportsApi.run(report.key, { filters: nextFilters })
+      const normalizedPlatform = normalizePlatformValues(nextFilters.platform)
+      return reportsApi.run(report.key, {
+        filters: {
+          ...nextFilters,
+          platform: normalizedPlatform,
+        },
+      })
     },
   })
 
@@ -140,6 +166,16 @@ export default function ReportDetailPage() {
       </div>
     )
   }
+
+  const activeConnectionPlatforms = (connectionsQuery.data?.data.items ?? [])
+    .filter((connection) => connection.status === 'active')
+    .map((connection) => connection.platform.toLowerCase())
+    .filter((platform): platform is ConnectionPlatform => connectionPlatforms.includes(platform as ConnectionPlatform))
+  const availablePlatforms: PlatformSelection =
+    report.supportedPlatforms.includes('all')
+      ? ['all', ...Array.from(new Set(activeConnectionPlatforms))]
+      : ['all', ...report.supportedPlatforms.filter((platform) => platform !== 'all')]
+  const selectedPlatforms = normalizePlatformValues(filters.platform)
 
   const syncQueryParams = (nextFilters: FilterState) => {
     const queryString = toQueryString(report.filterDefinitions, nextFilters)
@@ -174,6 +210,15 @@ export default function ReportDetailPage() {
       return next
     })
   }
+  const handlePlatformChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const values = Array.from(event.target.selectedOptions).map((option) => option.value)
+    const normalized = normalizePlatformValues(values)
+    setFilters((current) => {
+      const next = { ...current, platform: normalized }
+      syncQueryParams(next)
+      return next
+    })
+  }
 
   const run = runMutation.data?.data
 
@@ -194,8 +239,27 @@ export default function ReportDetailPage() {
 
       <div className="glass-panel p-6">
         <h2 className="text-headline text-text-primary">Execution Filters</h2>
+        <div className="mt-4">
+          <label className="flex flex-col gap-2">
+            <span className="text-subhead text-text-secondary">Platform (one or many)</span>
+            <select
+              multiple
+              value={selectedPlatforms}
+              onChange={handlePlatformChange}
+              className="glass-input min-h-[120px] text-text-primary"
+            >
+              {availablePlatforms.map((platform) => (
+                <option key={platform} value={platform}>
+                  {platform === 'all' ? 'All platforms' : platform.charAt(0).toUpperCase() + platform.slice(1)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {Object.entries(report.filterDefinitions).map(([fieldKey, definition]) => {
+          {Object.entries(report.filterDefinitions)
+            .filter(([fieldKey]) => fieldKey !== 'platform')
+            .map(([fieldKey, definition]) => {
             if (definition.type === 'date-range' || definition.type === 'select') {
               return (
                 <label key={fieldKey} className="flex flex-col gap-2">
@@ -271,7 +335,7 @@ export default function ReportDetailPage() {
                 />
               </label>
             )
-          })}
+            })}
         </div>
 
         <div className="mt-5 flex items-center gap-3">
@@ -299,6 +363,19 @@ export default function ReportDetailPage() {
 
       <div className="glass-panel p-6">
         <h2 className="text-headline text-text-primary">Run Output</h2>
+        {run && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-caption-1 text-text-tertiary">Platforms</span>
+            {normalizePlatformValues(run.filters.platform).map((platform) => (
+              <span
+                key={platform}
+                className="rounded-full border border-border-subtle bg-black/5 px-3 py-1 text-caption-1 text-text-secondary"
+              >
+                {platform === 'all' ? 'All platforms' : platform.charAt(0).toUpperCase() + platform.slice(1)}
+              </span>
+            ))}
+          </div>
+        )}
         {!run && <p className="mt-2 text-body text-text-secondary">No run yet. Configure filters and run this report.</p>}
 
         {run && run.output.rows === 0 && (
