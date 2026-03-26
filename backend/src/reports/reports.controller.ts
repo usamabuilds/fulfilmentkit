@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Req, Res } from '@nestjs/common';
 import { z } from 'zod';
 import { ReportsService, type ReportFilterDefinitionMap, type ReportKey } from './reports.service';
 import { apiResponse } from '../common/utils/api-response';
@@ -128,6 +128,56 @@ export class ReportsController {
     });
 
     return apiResponse(run);
+  }
+
+  @Post(':key/export')
+  async exportReport(
+    @Req() req: any,
+    @Res({ passthrough: true }) res: { setHeader: (name: string, value: string) => void },
+    @Param('key') key: string,
+    @Body() body: unknown,
+  ) {
+    const workspaceId = requireWorkspaceId(req);
+    const parsedKey = reportKeySchema.safeParse(key);
+
+    if (!parsedKey.success || !this.reportsService.hasReportKey(parsedKey.data)) {
+      throw new BadRequestException('Invalid report key');
+    }
+
+    const filtersSchema = createFiltersSchema(this.reportsService.getFilterDefinitionMap(parsedKey.data));
+    const exportBodySchema = z
+      .object({
+        filters: filtersSchema.optional(),
+        formatting: z
+          .object({
+            reportSheetName: z.string().min(1).max(31).optional(),
+            metadataSheetName: z.string().min(1).max(31).optional(),
+            includeMetadataSheet: z.boolean().optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict();
+    const parsedBody = exportBodySchema.parse(body);
+
+    const exported = await this.reportsService.exportReport({
+      workspaceId,
+      key: parsedKey.data as ReportKey,
+      filters: parsedBody.filters,
+      formatting: parsedBody.formatting,
+    });
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${exported.filename}"`);
+    res.setHeader('Content-Length', String(exported.file.length));
+    res.setHeader('X-Report-Run-Id', exported.runId);
+    res.setHeader('X-Report-Export-Empty', exported.isEmpty ? 'true' : 'false');
+    res.setHeader('X-Report-Export-Message', exported.message);
+
+    return exported.file;
   }
 
   @Get(':key/runs/:runId')
