@@ -21,6 +21,7 @@ import { PlanningModule } from './planning/planning.module';
 import { SettingsModule } from './settings/settings.module';
 import { AuthModule } from './auth/auth.module';
 import { RolesModule } from './roles/roles.module';
+import { ReportsModule } from './reports/reports.module';
 
 import { JwtAuthMiddleware } from './common/auth/jwt-auth.middleware';
 
@@ -40,6 +41,7 @@ import { JwtAuthMiddleware } from './common/auth/jwt-auth.middleware';
     PlanningModule,
     SettingsModule,
     RolesModule,
+    ReportsModule,
     AuthModule,
   ],
   controllers: [ListDemoController, MeController],

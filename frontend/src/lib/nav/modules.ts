@@ -1,4 +1,4 @@
-export type ModuleId = 'dashboard' | 'orders' | 'inventory' | 'connections' | 'forecast' | 'planning' | 'metrics' | 'ai' | 'settings'
+export type ModuleId = 'dashboard' | 'orders' | 'inventory' | 'connections' | 'forecast' | 'planning' | 'metrics' | 'reports' | 'ai' | 'settings'
 
 export interface NavPage {
   label: string
@@ -90,6 +90,19 @@ export const modules: NavModule[] = [
       { label: 'Compute', href: '/metrics/compute' },
     ],
   },
+
+  {
+    id: 'reports',
+    label: 'Reports',
+    basePath: '/reports',
+    pages: [
+      { label: 'Overview', href: '/reports' },
+      { label: 'Sales Summary', href: '/reports/sales-summary' },
+      { label: 'Inventory Aging', href: '/reports/inventory-aging' },
+      { label: 'Fulfillment Health', href: '/reports/order-fulfillment-health' },
+    ],
+  },
+
   {
     id: 'ai',
     label: 'AI',
