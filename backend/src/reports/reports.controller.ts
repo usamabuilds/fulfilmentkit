@@ -1,21 +1,58 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { z } from 'zod';
-import { ReportsService } from './reports.service';
+import { ReportsService, type ReportFilterDefinitionMap, type ReportKey } from './reports.service';
 import { apiResponse } from '../common/utils/api-response';
 import { toListResponse } from '../common/utils/list-response';
 import { requireWorkspaceId } from '../common/workspace/workspace.utils';
 
-const RunReportBodySchema = z
-  .object({
-    filters: z
-      .object({
-        dateRange: z.string().min(1).optional(),
-        region: z.string().min(1).optional(),
-        status: z.string().min(1).optional(),
-      })
-      .optional(),
-  })
-  .strict();
+const reportKeySchema = z.enum(['sales-summary', 'inventory-aging', 'order-fulfillment-health']);
+
+function createFiltersSchema(definitions: ReportFilterDefinitionMap): z.ZodType<Record<string, unknown>> {
+  const shape: Record<string, z.ZodTypeAny> = {};
+
+  Object.entries(definitions).forEach(([fieldKey, fieldDefinition]) => {
+    if (fieldDefinition.type === 'date-range') {
+      shape[fieldKey] = z.enum(fieldDefinition.presets as [string, ...string[]]);
+      return;
+    }
+
+    if (fieldDefinition.type === 'select') {
+      const allowedValues = fieldDefinition.options.map((option) => option.value);
+      shape[fieldKey] = z.enum(allowedValues as [string, ...string[]]);
+      return;
+    }
+
+    if (fieldDefinition.type === 'multi-select') {
+      const allowedValues = fieldDefinition.options.map((option) => option.value);
+      const baseSchema = z.array(z.enum(allowedValues as [string, ...string[]])).min(1);
+      shape[fieldKey] = fieldDefinition.maxSelections ? baseSchema.max(fieldDefinition.maxSelections) : baseSchema;
+      return;
+    }
+
+    if (fieldDefinition.type === 'number') {
+      let schema = z.number();
+      if (typeof fieldDefinition.min === 'number') {
+        schema = schema.min(fieldDefinition.min);
+      }
+      if (typeof fieldDefinition.max === 'number') {
+        schema = schema.max(fieldDefinition.max);
+      }
+      shape[fieldKey] = schema;
+      return;
+    }
+
+    let textSchema = z.string();
+    if (typeof fieldDefinition.minLength === 'number') {
+      textSchema = textSchema.min(fieldDefinition.minLength);
+    }
+    if (typeof fieldDefinition.maxLength === 'number') {
+      textSchema = textSchema.max(fieldDefinition.maxLength);
+    }
+    shape[fieldKey] = textSchema;
+  });
+
+  return z.object(shape).strict().partial();
+}
 
 @Controller('reports')
 export class ReportsController {
@@ -38,11 +75,23 @@ export class ReportsController {
   @Post(':key/run')
   async runReport(@Req() req: any, @Param('key') key: string, @Body() body: unknown) {
     const workspaceId = requireWorkspaceId(req);
-    const parsedBody = RunReportBodySchema.parse(body);
+    const parsedKey = reportKeySchema.safeParse(key);
+
+    if (!parsedKey.success || !this.reportsService.hasReportKey(parsedKey.data)) {
+      throw new BadRequestException('Invalid report key');
+    }
+
+    const filtersSchema = createFiltersSchema(this.reportsService.getFilterDefinitionMap(parsedKey.data));
+    const runBodySchema = z
+      .object({
+        filters: filtersSchema.optional(),
+      })
+      .strict();
+    const parsedBody = runBodySchema.parse(body);
 
     const run = this.reportsService.runReport({
       workspaceId,
-      key,
+      key: parsedKey.data as ReportKey,
       filters: parsedBody.filters,
     });
 
