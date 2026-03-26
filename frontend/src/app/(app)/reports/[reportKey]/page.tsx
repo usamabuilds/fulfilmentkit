@@ -103,6 +103,53 @@ function normalizePlatformValues(value: FilterValue | undefined): PlatformSelect
   return Array.from(new Set(normalized))
 }
 
+function validateFilters(filters: FilterState, definitions: ReportFilterDefinitionMapDto): string | null {
+  const fieldEntries = Object.entries(definitions)
+
+  for (const [fieldKey, definition] of fieldEntries) {
+    const value = filters[fieldKey]
+
+    if (definition.type === 'number') {
+      if (typeof value !== 'number' || Number.isNaN(value)) {
+        return `${definition.label} must be a valid number.`
+      }
+      if (typeof definition.min === 'number' && value < definition.min) {
+        return `${definition.label} must be at least ${definition.min}.`
+      }
+      if (typeof definition.max === 'number' && value > definition.max) {
+        return `${definition.label} must be at most ${definition.max}.`
+      }
+      continue
+    }
+
+    if (definition.type === 'multi-select') {
+      if (!Array.isArray(value) || value.length === 0) {
+        return `${definition.label} requires at least one selection.`
+      }
+      if (typeof definition.maxSelections === 'number' && value.length > definition.maxSelections) {
+        return `${definition.label} allows up to ${definition.maxSelections} selections.`
+      }
+      continue
+    }
+
+    if (typeof value !== 'string') {
+      return `${definition.label} is invalid.`
+    }
+
+    if (definition.type === 'text') {
+      const trimmedValue = value.trim()
+      if (typeof definition.minLength === 'number' && trimmedValue.length < definition.minLength) {
+        return `${definition.label} must be at least ${definition.minLength} characters.`
+      }
+      if (typeof definition.maxLength === 'number' && trimmedValue.length > definition.maxLength) {
+        return `${definition.label} must be at most ${definition.maxLength} characters.`
+      }
+    }
+  }
+
+  return null
+}
+
 export default function ReportDetailPage() {
   const router = useRouter()
   const params = useParams<{ reportKey: string }>()
@@ -133,6 +180,7 @@ export default function ReportDetailPage() {
   }, [report, searchParams])
 
   const [filters, setFilters] = useState<FilterState>(initialFilters ?? {})
+  const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   useEffect(() => {
     if (initialFilters) {
@@ -151,6 +199,55 @@ export default function ReportDetailPage() {
           ...nextFilters,
           platform: normalizedPlatform,
         },
+      })
+    },
+  })
+  const exportMutation = useMutation({
+    mutationFn: (nextFilters: FilterState) => {
+      if (!report) {
+        throw new Error('Report is missing')
+      }
+      const validationMessage = validateFilters(nextFilters, report.filterDefinitions)
+      if (validationMessage) {
+        throw new Error(validationMessage)
+      }
+
+      const normalizedPlatform = normalizePlatformValues(nextFilters.platform)
+      return reportsApi.exportExcel(report.key, {
+        filters: {
+          ...nextFilters,
+          platform: normalizedPlatform,
+        },
+      })
+    },
+    onSuccess: (result) => {
+      const downloadUrl = window.URL.createObjectURL(result.blob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = result.filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+
+      if (result.isEmpty) {
+        setFeedbackMessage({
+          type: 'success',
+          message:
+            result.message ?? 'Excel export downloaded with metadata only because no rows matched your selected filters.',
+        })
+        return
+      }
+
+      setFeedbackMessage({
+        type: 'success',
+        message: result.message ?? 'Excel export downloaded successfully.',
+      })
+    },
+    onError: (error) => {
+      setFeedbackMessage({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to export Excel file.',
       })
     },
   })
@@ -347,6 +444,16 @@ export default function ReportDetailPage() {
           >
             {runMutation.isPending ? 'Running…' : 'Run report'}
           </button>
+          {report.supportsExport && (
+            <button
+              type="button"
+              onClick={() => exportMutation.mutate(filters)}
+              className="rounded-lg border border-border-subtle px-4 py-2 text-callout text-text-secondary transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={exportMutation.isPending}
+            >
+              {exportMutation.isPending ? 'Exporting…' : 'Export Excel'}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -359,6 +466,11 @@ export default function ReportDetailPage() {
             Reset filters
           </button>
         </div>
+        {feedbackMessage && (
+          <p className={`mt-3 text-footnote ${feedbackMessage.type === 'success' ? 'text-success' : 'text-destructive'}`}>
+            {feedbackMessage.message}
+          </p>
+        )}
       </div>
 
       <div className="glass-panel p-6">
