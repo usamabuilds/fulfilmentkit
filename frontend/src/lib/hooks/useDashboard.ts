@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   dashboardApi,
   type DashboardBreakdownParams,
+  type DashboardRepeatPurchaseParams,
   type DashboardStatsParams,
   type DashboardTopSkusParams,
   type DashboardTrendsParams,
@@ -76,6 +77,23 @@ export function useDashboardTopSkus(params: DashboardTopSkusParams, enabled = tr
       params.to ?? null,
     ],
     queryFn: () => dashboardApi.getTopSkus(params),
+    enabled: !!workspaceId && enabled,
+  })
+}
+
+export function useDashboardRepeatPurchase(params?: DashboardRepeatPurchaseParams, enabled = true) {
+  const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
+
+  return useQuery({
+    queryKey: [
+      'dashboard',
+      'repeat-purchase',
+      workspaceId,
+      params?.groupBy ?? 'day',
+      params?.from ?? null,
+      params?.to ?? null,
+    ],
+    queryFn: () => dashboardApi.getRepeatPurchase(params),
     enabled: !!workspaceId && enabled,
   })
 }
