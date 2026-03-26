@@ -35,6 +35,12 @@ const dashboardTopSkusQuerySchema = z.object({
   sortBy: z.enum(['revenue', 'units', 'refunds', 'margin']).default('revenue'),
 });
 
+const dashboardRepeatPurchaseQuerySchema = z.object({
+  from: z.string().optional(),
+  to: z.string().optional(),
+  groupBy: z.enum(['day', 'week']).optional(),
+});
+
 @Controller('dashboard')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
@@ -114,6 +120,22 @@ export class DashboardController {
       to,
       limit: q.limit,
       sortBy: q.sortBy,
+    });
+
+    return apiResponse(result);
+  }
+
+  @Get('repeat-purchase')
+  async repeatPurchase(@Req() req: any, @Query() query: any) {
+    const workspaceId = req.workspaceId;
+    const q = validateQuery(dashboardRepeatPurchaseQuerySchema, query);
+    const { from, to } = parseDateRange(q);
+
+    const result = await this.dashboardService.repeatPurchase({
+      workspaceId,
+      from,
+      to,
+      groupBy: q.groupBy,
     });
 
     return apiResponse(result);

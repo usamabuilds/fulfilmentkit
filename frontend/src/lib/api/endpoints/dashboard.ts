@@ -76,6 +76,30 @@ export interface DashboardTopSkus {
   rows: DashboardTopSkuRow[]
 }
 
+export type DashboardRepeatPurchaseGroupBy = 'day' | 'week'
+
+export interface DashboardRepeatPurchaseParams {
+  from?: string
+  to?: string
+  groupBy?: DashboardRepeatPurchaseGroupBy
+}
+
+export interface DashboardRepeatPurchasePoint {
+  date: string
+  repeatPurchaseRatePercent: string
+  repeatCustomers: number
+  newCustomers: number
+  totalCustomers: number
+}
+
+export interface DashboardRepeatPurchaseResponse {
+  repeatPurchaseRatePercent: string
+  repeatCustomers: number
+  newCustomers: number
+  totalCustomers: number
+  points?: DashboardRepeatPurchasePoint[]
+}
+
 export type DashboardAlertType = 'stockouts' | 'low_stock' | 'margin_leakage' | 'refund_spikes'
 
 export type DashboardAlertLevel = 'critical' | 'warning' | 'info'
@@ -144,5 +168,15 @@ export const dashboardApi = {
     const queryString = query.toString()
     const path = queryString ? `/dashboard/top-skus?${queryString}` : '/dashboard/top-skus'
     return apiGet<DashboardTopSkus>(path)
+  },
+  getRepeatPurchase: (params?: DashboardRepeatPurchaseParams) => {
+    const query = new URLSearchParams()
+    if (params?.groupBy) query.set('groupBy', params.groupBy)
+    if (params?.from) query.set('from', params.from)
+    if (params?.to) query.set('to', params.to)
+
+    const queryString = query.toString()
+    const path = queryString ? `/dashboard/repeat-purchase?${queryString}` : '/dashboard/repeat-purchase'
+    return apiGet<DashboardRepeatPurchaseResponse>(path)
   },
 }

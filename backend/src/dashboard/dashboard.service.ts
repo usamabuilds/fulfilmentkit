@@ -44,6 +44,15 @@ type DashboardTopSkusArgs = {
   sortBy: TopSkusSortBy;
 };
 
+type RepeatPurchaseGroupBy = 'day' | 'week';
+
+type DashboardRepeatPurchaseArgs = {
+  workspaceId: string;
+  from?: Date;
+  to?: Date;
+  groupBy?: RepeatPurchaseGroupBy;
+};
+
 type AlertType = 'stockouts' | 'low_stock' | 'margin_leakage' | 'refund_spikes';
 type AlertLevel = 'critical' | 'warning' | 'info';
 
@@ -105,9 +114,147 @@ function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
+function normalizeCustomerIdentity(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? '';
+}
+
 @Injectable()
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async repeatPurchase(args: DashboardRepeatPurchaseArgs) {
+    const { workspaceId } = args;
+    const groupBy: RepeatPurchaseGroupBy = args.groupBy ?? 'day';
+    const rangeFrom = args.from ? startOfDayUtc(args.from) : startOfDayUtc(new Date());
+    const rangeTo = args.to ? toEndOfDayUtc(args.to) : toEndOfDayUtc(new Date());
+    const bucketStart = groupBy === 'week' ? startOfWeekUtc(rangeFrom) : startOfDayUtc(rangeFrom);
+
+    const orders = await this.prisma.order.findMany({
+      where: {
+        workspaceId,
+        orderedAt: {
+          gte: rangeFrom,
+          lte: rangeTo,
+        },
+      },
+      select: {
+        id: true,
+        externalRef: true,
+        orderNumber: true,
+        orderedAt: true,
+      },
+      orderBy: {
+        orderedAt: 'asc',
+      },
+    });
+
+    const points: Array<{
+      date: string;
+      repeatPurchaseRatePercent: string;
+      repeatCustomers: number;
+      newCustomers: number;
+      totalCustomers: number;
+    }> = [];
+
+    if (groupBy === 'day') {
+      for (let d = bucketStart; d <= rangeTo; d = addDaysUtc(d, 1)) {
+        points.push({
+          date: isoDate(d),
+          repeatPurchaseRatePercent: '0',
+          repeatCustomers: 0,
+          newCustomers: 0,
+          totalCustomers: 0,
+        });
+      }
+    } else {
+      for (let d = bucketStart; d <= rangeTo; d = addWeeksUtc(d, 1)) {
+        points.push({
+          date: isoDate(d),
+          repeatPurchaseRatePercent: '0',
+          repeatCustomers: 0,
+          newCustomers: 0,
+          totalCustomers: 0,
+        });
+      }
+    }
+
+    const firstSeenOrderByCustomer = new Map<string, Date>();
+    for (const order of orders) {
+      if (!order.orderedAt) continue;
+      const identity =
+        normalizeCustomerIdentity(order.orderNumber) ||
+        normalizeCustomerIdentity(order.externalRef) ||
+        `order:${order.id}`;
+
+      const knownFirstSeen = firstSeenOrderByCustomer.get(identity);
+      if (!knownFirstSeen || order.orderedAt < knownFirstSeen) {
+        firstSeenOrderByCustomer.set(identity, order.orderedAt);
+      }
+    }
+
+    const totalCustomers = firstSeenOrderByCustomer.size;
+    let repeatCustomers = 0;
+    let newCustomers = 0;
+    for (const identity of firstSeenOrderByCustomer.keys()) {
+      const orderCount = orders.filter((order) => {
+        const orderIdentity =
+          normalizeCustomerIdentity(order.orderNumber) ||
+          normalizeCustomerIdentity(order.externalRef) ||
+          `order:${order.id}`;
+        return orderIdentity === identity;
+      }).length;
+      if (orderCount > 1) repeatCustomers += 1;
+      else newCustomers += 1;
+    }
+
+    const pointByDate = new Map<string, { repeatIdentities: Set<string>; newIdentities: Set<string> }>();
+    for (const point of points) {
+      pointByDate.set(point.date, { repeatIdentities: new Set<string>(), newIdentities: new Set<string>() });
+    }
+
+    for (const order of orders) {
+      if (!order.orderedAt) continue;
+      const identity =
+        normalizeCustomerIdentity(order.orderNumber) ||
+        normalizeCustomerIdentity(order.externalRef) ||
+        `order:${order.id}`;
+      const firstSeen = firstSeenOrderByCustomer.get(identity);
+      if (!firstSeen) continue;
+
+      const pointDate =
+        groupBy === 'week' ? isoDate(startOfWeekUtc(order.orderedAt)) : isoDate(startOfDayUtc(order.orderedAt));
+      const bucket = pointByDate.get(pointDate);
+      if (!bucket) continue;
+
+      if (order.orderedAt.getTime() === firstSeen.getTime()) {
+        bucket.newIdentities.add(identity);
+      } else {
+        bucket.repeatIdentities.add(identity);
+      }
+    }
+
+    for (const point of points) {
+      const bucket = pointByDate.get(point.date);
+      if (!bucket) continue;
+      const totalBucketCustomers = bucket.newIdentities.size + bucket.repeatIdentities.size;
+      const ratePercent =
+        totalBucketCustomers > 0 ? (bucket.repeatIdentities.size / totalBucketCustomers) * 100 : 0;
+      point.newCustomers = bucket.newIdentities.size;
+      point.repeatCustomers = bucket.repeatIdentities.size;
+      point.totalCustomers = totalBucketCustomers;
+      point.repeatPurchaseRatePercent = String(ratePercent);
+    }
+
+    const repeatPurchaseRatePercent = totalCustomers > 0 ? (repeatCustomers / totalCustomers) * 100 : 0;
+
+    return {
+      repeatPurchaseRatePercent: String(repeatPurchaseRatePercent),
+      repeatCustomers,
+      newCustomers,
+      totalCustomers,
+      points,
+    };
+  }
 
   async topSkus(args: DashboardTopSkusArgs) {
     const { workspaceId, sortBy, limit } = args;
