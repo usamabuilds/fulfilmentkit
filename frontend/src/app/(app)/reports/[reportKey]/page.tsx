@@ -20,6 +20,8 @@ type FilterValue = string | number | string[]
 type FilterState = Record<string, FilterValue>
 type PlatformSelection = ReportPlatform[]
 
+const reportsBasePath = '/reports'
+
 function getDefaultFilterState(definitions: ReportFilterDefinitionMapDto): FilterState {
   return Object.entries(definitions).reduce<FilterState>((acc, [fieldKey, definition]) => {
     acc[fieldKey] = definition.default
@@ -276,7 +278,8 @@ export default function ReportDetailPage() {
 
   const syncQueryParams = (nextFilters: FilterState) => {
     const queryString = toQueryString(report.filterDefinitions, nextFilters)
-    router.replace(queryString.length > 0 ? `/reports/${report.key}?${queryString}` : `/reports/${report.key}`)
+    const reportDetailPath = `${reportsBasePath}/${report.key}`
+    router.replace(queryString.length > 0 ? `${reportDetailPath}?${queryString}` : reportDetailPath)
   }
 
   const handleStringFilterChange = (fieldKey: string) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -327,7 +330,7 @@ export default function ReportDetailPage() {
           <p className="mt-1 text-body text-text-secondary">Configure filters and run your report on demand.</p>
         </div>
         <Link
-          href="/reports"
+          href={reportsBasePath}
           className="rounded-[8px] bg-black/5 px-4 py-2 text-callout text-text-secondary transition-colors hover:bg-black/10"
         >
           Back to Reports
