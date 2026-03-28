@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { reportCatalog } from '@/lib/reports/report-catalog'
 
+const reportsBasePath = '/reports'
+
 export default function ReportsPage() {
   return (
     <div className="flex flex-col gap-6">
@@ -15,7 +17,7 @@ export default function ReportsPage() {
         {reportCatalog.map((report) => (
           <Link
             key={report.key}
-            href={`/reports/${report.key}`}
+            href={`${reportsBasePath}/${report.key}`}
             className="glass-card flex h-full flex-col gap-3 p-5 transition-colors hover:bg-white/10"
           >
             <div>
