@@ -1,0 +1,75 @@
+CATEGORY: Inventory
+
+Report                     Purpose                            Data Source                    Key Metrics & Fields                       Filters & Dimensions               How It Runs                       Calculation Logic               Limitations / Caveats
+
+
+Month‑end inventory        Shows quantity of each product     Inventory counts in Shopify    Product title; variant title; SKU;         Month; filter by location or       Generates snapshot after          Ending quantity equals          Overselling or untracked
+snapshot                   variant in stock at month‑end      (available stock excluding     ending quantity (can be negative if        product type.                      month‑end; available for last     available inventory at end of   inventory can cause
+                           【129737202224484†L150-             committed and incoming         overselling)                                                                  two years.                        month (stock on hand –          negative values
+                           L170】. Used for month‑end          units).                        【129737202224484†L150-L170】.                                                                                    committed + incoming).          【129737202224484†L15
+                           accounting and inventory                                                                                                                                                                                          0-L170】.
+                           reconciliation.
+
+
+Month‑end inventory        Calculates value of inventory at   Same as above plus cost per    Product title; variant title; SKU; cost;   Month; filter by location or       Available after month‑end; uses   Total value = ending quantity   Requires cost fields to be
+value                      month‑end (ending quantity ×       item.                          ending quantity; total inventory value     product type.                      cost at time of snapshot.         × cost.                         set; overselling can
+                           cost per item)                                                    (cost × quantity).                                                                                                                              produce negative values.
+                           【129737202224484†L150-
+                           L170】.
+
+
+Inventory sold daily by    Shows average number of            Order data and inventory       Product title; variant title; SKU;         Date range; filter by product or   Real‑time; uses orders for sold   Quantity sold per day = total   Negative ending inventory
+product                    items sold per day and             counts.                        quantity sold; ending quantity;            location.                          quantities.                       quantity sold ÷ number of       may appear due to
+                           remaining inventory                                               quantity sold per day                                                                                           days in period.                 overselling.
+                           【129737202224484†L150-                                            【129737202224484†L150-L170】.
+                           L170】.
+
+
+Products by percentage     Shows percentage of starting       Inventory counts and sales     Product title; variant title; SKU;         Date range; filter by location.    Real‑time; may have 2–3‑day       Percent sold = (quantity sold   Delay of 2–3 days;
+sold                       inventory sold during selected     data.                          quantity sold; starting quantity;                                             delay for sell‑through rate       ÷ starting quantity) × 100;     negative starting quantity
+                           period                                                            percent sold                                                                  updates                           values may be >100 % or         due to overselling can
+                           【129737202224484†L260-                                            【129737202224484†L216-L256】.                                                  【129737202224484†L260-            negative if overselling         cause out‑of‑range
+                           L276】. Helps identify                                                                                                                           L276】.                            【129737202224484†L260-          percentages
+                           fast‑moving and slow‑moving                                                                                                                                                       L276】.                          【129737202224484†L26
+                           products.                                                                                                                                                                                                         0-L276】.
+
+
+ABC product analysis       Grades product variants into A,    Sales revenue and inventory.   Product title; variant title; SKU;                                                                              Grades assigned based on
+                           B, C categories based on                                          product grade (A: top 80 % revenue;                                                                             cumulative revenue share
+
+
+[PAGE BREAK]
+
+Report                    Purpose                              Data Source                  Key Metrics & Fields                      Filters & Dimensions                  How It Runs                        Calculation Logic               Limitations / Caveats
+
+                          revenue contribution over last                                    B: next 15 %; C: bottom 5 %); ending      Last 28 days (fixed); filter by       Updates daily; uses last           thresholds (Pareto principle)   Not a predictive metric;
+                          28 days                                                           quantity; total value cost; total value   location or product type.             28 days of sales.                  【129737202224484†L216-          categories shift over time.
+                          【129737202224484†L216-                                            price【129737202224484†L216-                                                                                        L256】.
+                          L256】.                                                            L256】.
+
+
+Products by               Shows percentage of total            Inventory counts and sales   Product title; variant title; SKU;        Date range; filter by location or     Real‑time but has 2–3‑day data     Sell‑through rate = quantity    Negative ending inventory
+sell‑through rate         inventory sold during the period     data.                        starting quantity; ending quantity;       product type.                         processing delay                   sold ÷ (quantity sold +         or overselling can produce
+                          【129737202224484†L260-                                            quantity sold; sell‑through rate                                                【129737202224484†L260-             ending quantity)                unusual rates; delay
+                          L276】.                                                            【129737202224484†L260-L276】.                                                    L276】.                             【129737202224484†L260-          applies.
+                                                                                                                                                                                                               L276】.
+
+
+Inventory remaining per   Estimates days of inventory          Inventory counts and sales   Product title; variant title; SKU;        Date range; filter by location or     Real‑time; but uses average        Days remaining = ending         Predictions may be
+product                   remaining based on average           velocity.                    ending quantity; quantity sold per        product.                              daily sales; delays if no sales.   quantity ÷ quantity sold per    inaccurate for products
+                          sales per day                                                     day; days of inventory remaining                                                                                   day; returns N/A if no sales    with irregular sales.
+                          【129737202224484†L328-                                            【129737202224484†L328-L355】.                                                                                       or negative inventory
+                          L355】.                                                                                                                                                                               【129737202224484†L328-
+                                                                                                                                                                                                               L355】.
+
+
+Inventory adjustment      Shows inventory adjustments          Inventory adjustment logs.   Date; adjustment type (available vs       Date range; filter by location or     Real‑time; uses logs of            N/A; lists events.              None.
+changes                   and state changes, including                                      committed); location; quantity            adjustment reason.                    adjustments.
+                          manual adjustments, apps,                                         change; staff/app responsible;
+                          transfers, and order fulfillments.                                reason.
+
+
+Inventory adjustments     Shows the number of                  Inventory adjustment logs.   Number of adjustments; breakdown          Date range; filter by reason or       Real‑time.                         N/A.                            None.
+by count                  adjustments (not quantity)                                        by staff, location or reason.             staff.
+                          grouped by staff, location or
+                          app.

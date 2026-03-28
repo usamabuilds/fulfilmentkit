@@ -1,0 +1,76 @@
+CATEGORY: Customers
+
+Report                  Purpose                             Data Source                    Key Metrics & Fields                   Filters & Dimensions                How It Runs                        Calculation Logic               Limitations / Caveats
+
+
+New customers over      Tracks the number of new            Order and customer records.    New customers; orders by new           Date range; time grouping.          Near‑real‑time; updates within     Counts each customer only       Customers with multiple
+time                    customers placing their first                                      customers; total spend by new                                              ~1 minute.                         once when they place their      email addresses may be
+                        order during a specified period                                    customers.                                                                                                    first order.                    counted separately.
+                        【483427677669002†L65-
+                        L140】.
+
+
+New vs returning        Compares first‑time purchasers      Customer records and           Number of new customers; number        Date range; group by day/           Real‑time.                         AOV = (gross sales –            Doesn’t consider
+customers               to returning customers over         orders.                        of returning customers; orders;        week/month; filter by customer                                         discounts) / orders (for the    customers with multiple
+                        time【483427677669002†L65-                                          average order value (AOV).             segment.                                                               respective group).              accounts.
+                        L140】.
+
+
+Customers by location   Shows geographic distribution       Shipping addresses from        Customer count; orders; total spend    Date range; group by country/       Real‑time.                         Same as sessions location       Plan localized marketing
+                        of new customers based on           orders.                        by location.                           region or city.                                                        limitations; shipping address   or new shipping zones.
+                        shipping address                                                                                                                                                                 may not reflect actual
+                        【483427677669002†L65-                                                                                                                                                            residence.
+                        L140】.
+
+
+Returning customers     Lists customers who placed at       Customer records and           Customer information (name, email,     Date range; filters for number of   Real‑time.                         Average spend = total spent     None.
+                        least two orders                    orders.                        marketing acceptance); first order     orders, total spent, or marketing                                      ÷ number of orders.
+                        【483427677669002†L175-                                             date; most recent order date;          acceptance.
+                        L235】.                                                             number of orders; average spend;
+                                                                                           total spent
+                                                                                           【483427677669002†L175-L235】.
+
+
+One‑time customers      Lists customers with exactly        Same as above.                 Customer info; order date; total       Date range.                         Real‑time.                         N/A.                            Convert one‑time buyers
+                        one order                                                          spent.                                                                                                                                        into repeat customers
+                        【483427677669002†L175-                                                                                                                                                                                           through targeted
+                        L235】.                                                                                                                                                                                                           promotions.
+
+
+Customer cohort         Groups customers based on           Order and customer data.       Cohort first order date; number of     Cohort grouping; date range;        Real‑time but aggregated by        Repeat purchase rate =          Complex for small
+analysis                the date of their first order and                                  customers in cohort; repeat            filters for sales channel,          cohort; uses cohort analysis       customers with repeat orders    cohorts; sensitive to date
+                        shows how cohorts repeat                                           purchase rate; total sales; AOV;       marketing channel, predicted        table and heatmap.                 ÷ total customers in cohort.    range selection.
+                        purchases over time                                                marketing channel; sales channel;      spend tier.
+                        【483427677669002†L175-                                             predicted spend tier; ratio of
+                        L235】.                                                             subscription vs one‑time purchase
+                                                                                           【483427677669002†L175-L235】.
+
+
+Predicted spend tier    Uses machine learning to            Historical order and           Customer name; email; marketing        Date range; filters by spend        Predictions update periodically;   Predicted spend tiers are       Predictions may not be
+                        predict a customer’s future         customer data processed by     status; last order date; number of     tier; sort by total spent or        not real‑time.                     based on historical spend       available for new
+                        lifetime spend and categorizes      Shopify’s prediction models.   orders; total spent; predicted spend   orders.                                                                patterns; not a guarantee.      customers or those with
+                        them into tiers (e.g., Low,                                        tier.                                                                                                                                         insufficient data.
+                        Medium, High)
+
+
+[PAGE BREAK]
+
+Report                  Purpose                             Data Source                   Key Metrics & Fields                   Filters & Dimensions               How It Runs                      Calculation Logic               Limitations / Caveats
+
+                        【483427677669002†L175-
+                        L235】.
+
+
+RFM customer analysis   Scores customers based on           Order history and customer    RFM scores; segment names;             Date range; filter by specific     Real‑time.                       Recency score based on          Requires multiple orders
+                        Recency, Frequency and              data.                         percent of total customers; average    segment or score threshold.                                         days since last order;          to generate reliable
+                        Monetary value (spend).                                           days since last order; total orders;                                                                       frequency score based on        scores.
+                        Groups them into segments                                         total spend.                                                                                               order count; monetary score
+                        such as Champions, Loyal, At                                                                                                                                                 based on total spend.
+                        Risk, etc.
+                        【483427677669002†L175-
+                        L235】.
+
+
+RFM customer list       Detailed list of customers with     Same as above.                Customer information; recency          Filters by score, segment or       Real‑time.                       Same scoring logic as RFM       None.
+                        their recency, frequency and                                      score; frequency score; monetary       spend.                                                              analysis.
+                        monetary scores and values.                                       score; total spend; last order date.

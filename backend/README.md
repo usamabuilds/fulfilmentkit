@@ -1,56 +1,42 @@
-# FulfilmentKit Backend
+# Shopify Analytics Reports - Codex Input Package
 
-## Requirements
-- Node.js LTS (v20.x)
-- Docker Desktop
-- Git
+This folder contains a repo-ready conversion of the uploaded PDF into both Markdown and plain-text files.
 
-## Local setup
-1) Install dependencies
-```bash
-npm install
-## Deployment (Render)
+## What is included
 
-Target: Render Web Service + Render PostgreSQL
+- `00_front_matter.md` and `00_front_matter.txt`
+- `FULL_REPORT_EXTRACTED.md` and `FULL_REPORT_EXTRACTED.txt`
+- one `.md` file and one `.txt` file for each Shopify report category
 
-### Required environment variables (Render)
-Set these in Render for the Web Service:
+## Category file order
 
-- NODE_ENV=production
-- PORT=3000
-- DATABASE_URL=<render postgres internal url>
-- REDIS_URL=<your redis url>
-- AUTH_SECRET=<set a value, even if unused now>
-- LOG_LEVEL=info
+- `01_acquisition.md` and `01_acquisition.txt`
+- `02_behavior.md` and `02_behavior.txt`
+- `03_customers.md` and `03_customers.txt`
+- `04_finances.md` and `04_finances.txt`
+- `05_fraud.md` and `05_fraud.txt`
+- `06_inventory.md` and `06_inventory.txt`
+- `07_marketing.md` and `07_marketing.txt`
+- `08_orders.md` and `08_orders.txt`
+- `09_performance.md` and `09_performance.txt`
+- `10_profit_margin.md` and `10_profit_margin.txt`
+- `11_retail_sales.md` and `11_retail_sales.txt`
+- `12_sales.md` and `12_sales.txt`
+- `13_store.md` and `13_store.txt`
 
-AI keys are optional for now:
-- AI_PROVIDER=openai
-- OPENAI_API_KEY=
-- AI_MODEL=gpt-4o-mini
-- AI_DATA_SCOPE=internal_only
-- AI_ALLOW_RAW_DB=false
+## Notes
 
-### Build and start commands (Render)
-Use these settings on Render:
+- The extraction used a layout-preserving PDF-to-text method to keep table alignment as intact as possible.
+- Content has been split by the same category structure shown in the PDF.
+- Inline source markers from the PDF were preserved.
+- The Store section is included exactly as stated in the PDF, including the note that no confirmed default Shopify Store reports were documented.
 
-Build Command:
-- pnpm install --frozen-lockfile
-- pnpm run build
+## Best way to give this to Codex
 
-Start Command:
-- pnpm run start
+Place this folder inside your repo, for example:
 
-### Database migrations (Render)
-Production deployments must run:
+```text
+docs/shopify-reports/
+```
 
-- pnpm exec prisma migrate deploy
-
-Important:
-- Do NOT use prisma migrate dev in production
-- Migrations live in prisma/migrations and must be committed
-
-### Local parity (recommended checks)
-Before deploying:
-- npm run build
-- set NODE_ENV=production and boot locally
-- ensure DATABASE_URL and REDIS_URL point to reachable services
+Then ask Codex to read all files in that folder and use them as the source of truth.

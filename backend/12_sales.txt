@@ -1,0 +1,112 @@
+CATEGORY: Sales
+
+Sales reports encompass a wide range of analyses on order data. Shopify distinguishes between Total sales reports (which include taxes, duties, shipping and fees) and Net sales reports (which exclude returns and discounts). The key
+reports include:
+
+
+ Report                      Purpose                            Data Source               Key Metrics & Fields                     Filters & Dimensions             How It Runs                 Calculation Logic                Limitations / Caveats
+
+
+ Total sales by product      Breaks down total sales            Order line items.         Product title; product vendor; product   Date range; filter by product    Real‑time.                  Net sales = gross sales –        Product data may display
+                             (excluding shipping) by product                              type; net quantity; gross sales;         type or vendor; group by                                     discounts – returns; total       as dash when changed
+                             【728304705354781†L377-                                       discounts; returns; net sales; taxes;    product.                                                     sales excludes shipping          after the order
+                             L386】. Useful for                                            total sales                                                                                           because shipping can’t be        【728304705354781†L40
+                             understanding product                                        【728304705354781†L377-L408】.                                                                          apportioned                      1-L408】.
+                             performance.                                                                                                                                                       【728304705354781†L377-
+                                                                                                                                                                                                L386】.
+
+
+[PAGE BREAK]
+
+Report                    Purpose                           Data Source                     Key Metrics & Fields                      Filters & Dimensions               How It Runs                      Calculation Logic               Limitations / Caveats
+
+
+Total sales by product    More granular breakdown of        Order line items.               Product title; variant title; variant     Date range; filter by variant.     Real‑time.                       Same as above.                  Data may be duplicated if
+variant                   gross sales (excluding                                            SKU; net quantity; gross sales;                                                                                                               product details change
+                          shipping) by variant                                              discounts; returns; net sales; taxes;                                                                                                         over time.
+                          【728304705354781†L410-                                            total sales
+                          L418】.                                                            【728304705354781†L410-L428】.
+
+
+Total sales by vendor     Displays vendors and products     Order items and vendor field.   Vendor name; net quantity; gross          Filter by vendor.                  Real‑time.                       Same formulas.                  Only products with vendor
+                          they supply                                                       sales; discounts; returns; net sales;                                                                                                         field populated.
+                          【728304705354781†L430-                                            total sales
+                          L442】.                                                            【728304705354781†L430-L442】.
+
+
+Sales by discount codes   Shows sales grouped by            Orders and discount codes.      Discount name; discount ID;               Date range; filter by discount     Real‑time; includes data since   Total sales for discount code   Orders with multiple
+                          discount code name, including                                     discount class (shipping, product,        code.                              May 1 2017                       includes only sales affected    discounts show multiple
+                          automatic discounts                                               order, unknown); discount method;                                            【728304705354781†L444-           by that discount.               rows; may double‑count if
+                          【728304705354781†L444-                                            discount type (percentage, fixed                                             L459】.                                                           combinable discounts
+                          L456】.                                                            amount, free shipping, buy X get Y,                                                                                                           used
+                                                                                            App); discount code; discount                                                                                                                 【728304705354781†L45
+                                                                                            amount; other discounts;                                                                                                                      2-L481】.
+                                                                                            non‑shipping discounts; shipping
+                                                                                            discounts; script discounts (Shopify
+                                                                                            Plus); orders; total sales; shipping
+                                                                                            【728304705354781†L444-L500】.
+
+
+Total sales by referrer   Displays sales based on the       Orders with referrer            Referrer source; traffic referrer host;   Date range; filter by referrer     Real‑time.                       Same formulas; uses last        Many visits show as
+                          referrer site (direct, search,    information.                    gross sales; discounts; returns; net      source.                                                             interaction referrer            Unknown due to blocked
+                          email, social, unknown)                                           sales; taxes; total sales                                                                                     【728304705354781†L537-          referrer data or privacy
+                          【728304705354781†L503-                                            【728304705354781†L503-L526】.                                                                                  L539】.                          settings
+                          L521】.                                                                                                                                                                                                          【728304705354781†L52
+                                                                                                                                                                                                                                          8-L536】.
+
+
+Total sales by billing    Shows sales by country/region     Orders’ billing addresses.      Billing location; net quantity; gross     Date range; filter by country or   Real‑time.                       Same formulas.                  None.
+location                  of the billing address                                            sales; discounts; returns; net sales;     region.
+                          【728304705354781†L541-                                            taxes; total sales
+                          L552】.                                                            【728304705354781†L541-L552】.
+
+
+Total sales by currency   Available only for stores using   Multi‑currency orders.          Order checkout currency; number of        Date range; filter by currency.    Real‑time.                       N/A.                            Only available with
+                          Shopify Payments; displays                                        orders; total sales in local currency                                                                                                         Shopify Payments; not all
+                          breakdown of sales by                                             【728304705354781†L553-L569】.                                                                                                                  currencies supported.
+                          customer currency
+                          【728304705354781†L553-
+                          L569】.
+
+
+Total sales by sales      Shows amount of sales for         Order records with sales        Sales channel; gross sales;               Date range; filter by channel.     Real‑time.                       Same formulas.                  Orders from unnamed
+channel / Net sales by    each sales channel (Online        channel tag.                    discounts; returns; net sales; taxes;                                                                                                         apps display as Other;
+channel                   Store, Buy Button, Draft                                          total sales                                                                                                                                   draft orders appear
+                          Orders, etc.)                                                     【728304705354781†L571-L580】.                                                                                                                  separately.
+                          【728304705354781†L571-
+                          L580】.
+
+
+Sales by customer name    Breaks down orders by             Orders and customer data.       Customer name; customer email; net        Date range; filter by customer     Real‑time.                       Same formulas.                  Customers with multiple
+                          customer over time                                                quantity; gross sales; discounts;         segment.                                                                                            email addresses may
+                          【728304705354781†L583-                                            returns; net sales; taxes; total sales                                                                                                        appear separately.
+                          L595】.                                                            【728304705354781†L583-L595】.
+
+
+Average order value       Shows how AOV changes over        Order data.                     Average order value per time unit;        Date range; group by hour/day/     Real‑time.                       AOV = (gross sales –            Excludes post‑order
+(AOV) over time           time                                                              orders; gross sales; discounts.           week/month/quarter/year;                                            discounts) ÷ orders             adjustments; low order
+                          【728304705354781†L596-                                                                                      compare date ranges                                                 【728304705354781†L608-          volume may skew results.
+                          L610】.                                                                                                      【728304705354781†L596-                                              L617】.
+                                                                                                                                      L604】.
+
+
+[PAGE BREAK]
+
+ Report                      Purpose                         Data Source                   Key Metrics & Fields                    Filters & Dimensions              How It Runs                       Calculation Logic           Limitations / Caveats
+
+
+ Bundle total sales over     Present sales of product        Orders involving product      Orders; net quantity; total sales;      Date range; default period last   Real‑time; available when using   Same formulas; bundle       Data appears only for
+ time / Total sales by       bundles and components          bundles using the Shopify     AOV; for comparison report – split by   30 days; group by time.           Bundles app.                      component comparison        merchants using product
+ bundle / Total sales by     【728304705354781†L632-          Bundles app.                  Is bundle (Yes/No)                                                                                          splits sales of bundle vs   bundles.
+ bundle component /          L671】.                                                        【728304705354781†L632-L671】.                                                                                individual components
+ Bundle component and                                                                                                                                                                                  【728304705354781†L664-
+ product comparison                                                                                                                                                                                    L671】.
+
+
+ Active / Canceled / New     Track subscription orders       Subscription orders and       Number of active subscriptions,         Date range; default last 30       Real‑time; available when using   Simple counts and sums;     Only available when using
+ subscriptions over time;    created through Shopify         subscription events.          canceled subscriptions, new             days.                             Shopify Subscriptions.            e.g., subscription sales    the Subscriptions app.
+ Subscription sales over     Subscriptions app                                             subscriptions; total sales from                                                                             include taxes, shipping,
+ time; Subscription vs       【728304705354781†L672-                                        subscriptions; number of                                                                                    duties and fees
+ one‑time sales              L720】.                                                        subscription orders; comparison of                                                                          【728304705354781†L710-
+                                                                                           subscription vs one‑time orders                                                                             L713】.
+                                                                                           【728304705354781†L690-L722】.

@@ -1,0 +1,16 @@
+CATEGORY: Performance
+
+This category focuses on web performance metrics based on Google’s Core Web Vitals. See Behavior – Web performance reports above for detailed breakdowns of each report. The performance category includes the following reports:
+
+    1. Largest Contentful Paint: Over Time – displays LCP values and trends over time for the online store【822950260754957†L153-L170】.
+    2. Interaction to Next Paint: Over Time – displays INP values over time【822950260754957†L153-L170】.
+    3. Cumulative Layout Shift: Over Time – displays CLS values over time【822950260754957†L153-L170】.
+    4. Largest Contentful Paint: Page URL – shows LCP values by specific page URLs【822950260754957†L191-L210】.
+    5. Interaction to Next Paint: Page URL – shows INP values by page URL【822950260754957†L191-L210】.
+    6. Cumulative Layout Shift: Page URL – shows CLS values by page URL【822950260754957†L191-L210】.
+    7. Largest Contentful Paint: Page Type – shows LCP performance by template type (home, product page, collection page)【822950260754957†L213-L232】.
+    8. Interaction to Next Paint: Page Type – shows INP performance by page type【822950260754957†L213-L232】.
+    9. Cumulative Layout Shift: Page Type – shows CLS performance by page type【822950260754957†L213-L232】.
+
+Each of these reports shares the same data source (real user metrics captured from visitor sessions), supports filters for date range, device type, and grouping by time or page attributes, and has a delay of up to 36 hours before data is
+available【822950260754957†L20-L21】. They help store owners identify slow pages or templates and measure the impact of changes on Core Web Vitals.
