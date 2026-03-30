@@ -1,4 +1,4 @@
-export type ModuleId = 'dashboard' | 'orders' | 'inventory' | 'connections' | 'forecast' | 'planning' | 'metrics' | 'reports' | 'ai' | 'settings'
+export type ModuleId = 'dashboard' | 'orders' | 'inventory' | 'connections' | 'forecast' | 'planning' | 'metrics' | 'ai' | 'settings'
 
 export interface NavPage {
   label: string
@@ -35,6 +35,10 @@ export const modules: NavModule[] = [
       { label: 'Pending', href: '/orders/pending' },
       { label: 'Fulfilled', href: '/orders/fulfilled' },
       { label: 'Cancelled', href: '/orders/cancelled' },
+      { label: 'Reports', href: '/orders/reports' },
+      { label: 'Sales Summary', href: '/orders/reports/sales-summary' },
+      { label: 'Inventory Aging', href: '/orders/reports/inventory-aging' },
+      { label: 'Fulfillment Health', href: '/orders/reports/order-fulfillment-health' },
     ],
   },
   {
@@ -88,18 +92,6 @@ export const modules: NavModule[] = [
     pages: [
       { label: 'Daily Metrics', href: '/metrics' },
       { label: 'Compute', href: '/metrics/compute' },
-    ],
-  },
-
-  {
-    id: 'reports',
-    label: 'Reports',
-    basePath: '/reports',
-    pages: [
-      { label: 'Overview', href: '/reports' },
-      { label: 'Sales Summary', href: '/reports/sales-summary' },
-      { label: 'Inventory Aging', href: '/reports/inventory-aging' },
-      { label: 'Fulfillment Health', href: '/reports/order-fulfillment-health' },
     ],
   },
 
