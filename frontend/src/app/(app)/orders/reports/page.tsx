@@ -7,9 +7,9 @@ export default function ReportsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-title-1 text-text-primary">Reports Center</h1>
+        <h1 className="text-title-1 text-text-primary">Orders Reports Center</h1>
         <p className="mt-1 text-body text-text-secondary">
-          Run operational and performance reports across your fulfilment workspace.
+          Run operational and performance reports for your orders workflow across the fulfilment workspace.
         </p>
       </div>
 

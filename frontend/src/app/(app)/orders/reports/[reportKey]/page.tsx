@@ -327,13 +327,13 @@ export default function ReportDetailPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-title-1 text-text-primary">{report.label}</h1>
-          <p className="mt-1 text-body text-text-secondary">Configure filters and run your report on demand.</p>
+          <p className="mt-1 text-body text-text-secondary">Configure filters and run this orders report on demand.</p>
         </div>
         <Link
           href={reportsBasePath}
           className="rounded-[8px] bg-black/5 px-4 py-2 text-callout text-text-secondary transition-colors hover:bg-black/10"
         >
-          Back to Reports
+          Back to Orders Reports
         </Link>
       </div>
 
