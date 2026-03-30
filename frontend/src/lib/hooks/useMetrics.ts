@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { metricsApi } from '@/lib/api/endpoints/metrics'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 
-export function useMetrics(_params?: { page?: number; pageSize?: number }) {
+export function useMetrics(params?: { page?: number; pageSize?: number }) {
+  void params
   const workspaceId = useWorkspaceStore((s) => s.workspace?.id)
 
   const today = new Date()
