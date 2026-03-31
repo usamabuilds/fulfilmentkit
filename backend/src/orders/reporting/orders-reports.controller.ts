@@ -12,7 +12,7 @@ function createFiltersSchema(definitions: ReportFilterDefinitionMap): z.ZodType<
   return createReportFiltersSchema(definitions);
 }
 
-@Controller('reports')
+@Controller('orders/reports')
 export class OrdersReportsController {
   constructor(private readonly reportsService: OrdersReportsService) {}
 
