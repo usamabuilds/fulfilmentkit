@@ -36,6 +36,8 @@ export type TimeGroupingOption = 'hour' | 'day' | 'week' | 'month';
 export type OrderStatusOption = 'all' | 'open' | 'fulfilled' | 'cancelled';
 export type RegionOption = 'all' | 'na' | 'eu' | 'apac';
 export type AgingBucketOption = 'all' | '0_30' | '31_60' | '61_90' | '90_plus';
+export type CombinationSizeOption = '2' | '3';
+export type ItemGroupingLevelOption = 'product' | 'variant';
 
 export type ReportFilterValueType = 'date-range' | 'select' | 'multi-select' | 'number' | 'text';
 
@@ -567,6 +569,31 @@ export const reportFilterDefinitionsByKey: Record<ReportKey, ReportFilterDefinit
         { value: 'apac', label: 'APAC' },
       ],
     },
+    combinationSize: {
+      label: 'Combination size',
+      type: 'select',
+      default: '2',
+      options: [
+        { value: '2', label: 'Pairs (2 items)' },
+        { value: '3', label: 'Triples (3 items)' },
+      ],
+    },
+    itemGroupingLevel: {
+      label: 'Grouping level',
+      type: 'select',
+      default: 'product',
+      options: [
+        { value: 'product', label: 'Product' },
+        { value: 'variant', label: 'Variant (unsupported)' },
+      ],
+    },
+    topN: {
+      label: 'Top combinations',
+      type: 'number',
+      default: 10,
+      min: 1,
+      max: 100,
+    },
   },
 };
 
@@ -632,6 +659,9 @@ export type ReportFiltersByKey = {
     platform: ReportPlatform[];
     dateRange: Extract<DateRangePreset, 'last_30_days' | 'last_90_days'>;
     region: RegionOption;
+    combinationSize: CombinationSizeOption;
+    itemGroupingLevel: ItemGroupingLevelOption;
+    topN: number;
   };
 };
 
@@ -830,6 +860,9 @@ export class OrdersReportsService {
         platform: ['all'],
         dateRange: 'last_90_days',
         region: 'all',
+        combinationSize: '2',
+        itemGroupingLevel: 'product',
+        topN: 10,
       },
       filterDefinitions: reportFilterDefinitionsByKey['items-bought-together'],
       supportedPlatforms: ['all'],
@@ -1241,6 +1274,17 @@ export class OrdersReportsService {
     workspaceId: string,
     filters: ReportFiltersByKey['items-bought-together'],
   ): Promise<ReportOutput> {
+    if (filters.itemGroupingLevel === 'variant') {
+      return {
+        rows: 0,
+        summary:
+          'Variant mode is currently unsupported/disabled because OrderItem variant identifiers are unavailable in the current schema.',
+        caveat:
+          'Using product-level identifiers only. Variant-level combinations cannot be calculated with the current OrderItem fields.',
+        chartRows: [],
+      };
+    }
+
     const where = this.buildOrderWhereInput(workspaceId, filters);
     const orders = await this.prisma.order.findMany({
       where,
@@ -1252,21 +1296,63 @@ export class OrdersReportsService {
       },
     });
 
-    const pairCounts = new Map<string, number>();
+    const combinationSize = Number(filters.combinationSize);
+    const topN = Math.max(1, Math.min(100, Math.floor(filters.topN)));
+    const combinationCounts = new Map<string, number>();
+    let qualifyingOrders = 0;
+
     for (const order of orders) {
       const productIds = order.items.map((item) => item.productId).sort();
-      for (let i = 0; i < productIds.length; i += 1) {
-        for (let j = i + 1; j < productIds.length; j += 1) {
-          const pairKey = `${productIds[i]}:${productIds[j]}`;
-          pairCounts.set(pairKey, (pairCounts.get(pairKey) ?? 0) + 1);
-        }
+      if (productIds.length < combinationSize) {
+        continue;
+      }
+
+      qualifyingOrders += 1;
+      for (const combination of this.buildCombinations(productIds, combinationSize)) {
+        const combinationKey = combination.join(':');
+        combinationCounts.set(combinationKey, (combinationCounts.get(combinationKey) ?? 0) + 1);
       }
     }
 
+    const sortedRows = Array.from(combinationCounts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, topN)
+      .map(([combination, ordersContaining]) => {
+        const percentageOverQualifyingOrders =
+          qualifyingOrders > 0 ? Number(((ordersContaining / qualifyingOrders) * 100).toFixed(2)) : 0;
+        return {
+          combination,
+          ordersContaining,
+          percentageOverQualifyingOrders,
+        };
+      });
+
     return {
-      rows: pairCounts.size,
-      summary: `${pairCounts.size} product pairs found across ${orders.length} orders in ${filters.dateRange}.`,
+      rows: sortedRows.length,
+      chartRows: sortedRows,
+      summary: `${sortedRows.length} top product ${combinationSize === 2 ? 'pairs' : 'triples'} returned from ${combinationCounts.size} combinations across ${qualifyingOrders} qualifying orders in ${filters.dateRange}.`,
     };
+  }
+
+  private buildCombinations(items: string[], combinationSize: number): string[][] {
+    const combinations: string[][] = [];
+    const current: string[] = [];
+
+    const visit = (startIndex: number) => {
+      if (current.length === combinationSize) {
+        combinations.push([...current]);
+        return;
+      }
+
+      for (let index = startIndex; index < items.length; index += 1) {
+        current.push(items[index]);
+        visit(index + 1);
+        current.pop();
+      }
+    };
+
+    visit(0);
+    return combinations;
   }
 
   private buildOrderWhereInput(
