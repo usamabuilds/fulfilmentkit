@@ -56,6 +56,8 @@ model Workspace {
   orders          Order[]
   fulfillmentStatusEvents OrderFulfillmentStatusEvent[]
   shippingLabelPurchases  OrderShippingLabelPurchase[]
+  sessionEvents           SessionEvent[]
+  attributionTouches      AttributionTouch[]
   products        Product[]
   customers       Customer[]
   refunds         Refund[]
@@ -303,6 +305,8 @@ model Order {
   refunds     Refund[]
   fulfillmentStatusEvents OrderFulfillmentStatusEvent[]
   shippingLabelPurchases  OrderShippingLabelPurchase[]
+  sessionEvents           SessionEvent[]
+  attributionTouches      AttributionTouch[]
 
   @@unique([workspaceId, externalRef])
   @@index([workspaceId, customerId])
@@ -322,6 +326,66 @@ model Customer {
   @@unique([workspaceId, externalId])
   @@unique([workspaceId, emailCanonical])
   @@index([workspaceId, createdAt])
+}
+
+model AttributionTouch {
+  id                  String    @id @default(uuid())
+  workspaceId         String
+  orderId             String?
+  sessionEventId      String?
+  source              String
+  medium              String?
+  campaign            String?
+  content             String?
+  term                String?
+  referrerUrl         String?
+  landingPageUrl      String?
+  touchpointAt        DateTime
+  provenanceConnector String
+  provenanceRef       String?
+  provenancePayload   Json?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order               Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  sessionEvent        SessionEvent? @relation(fields: [sessionEventId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([workspaceId, touchpointAt])
+  @@index([workspaceId, source, touchpointAt])
+  @@index([orderId])
+  @@index([sessionEventId])
+}
+
+model SessionEvent {
+  id                  String    @id @default(uuid())
+  workspaceId         String
+  orderId             String?
+  externalSessionId   String?
+  eventName           String
+  occurredAt          DateTime
+  source              String
+  channel             String?
+  referrerUrl         String?
+  landingPageUrl      String?
+  userAgent           String?
+  ipAddress           String?
+  countryCode         String?
+  deviceType          String?
+  provenanceConnector String
+  provenanceRef       String?
+  provenancePayload   Json?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order               Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  attributionTouches  AttributionTouch[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, occurredAt])
+  @@index([workspaceId, source, occurredAt])
+  @@index([workspaceId, externalSessionId])
+  @@index([orderId])
 }
 
 model OrderFulfillmentStatusEvent {

@@ -1209,70 +1209,140 @@ export class OrdersReportsService {
     });
 
     switch (key) {
-      case 'sales-summary':
+      case 'sales-summary': {
+        const financeReportsService = this.financeReportsService;
+        if (!financeReportsService) {
+          return this.buildMissingConnectorOutput(report, 'finance connector');
+        }
         return withSupportMetadata(
-          this.financeReportsService!.runSalesSummary(filters as ReportFiltersByKey['sales-summary']),
+          financeReportsService.runSalesSummary(filters as ReportFiltersByKey['sales-summary']),
         );
-      case 'inventory-aging':
+      }
+      case 'inventory-aging': {
+        const inventoryReportsService = this.inventoryReportsService;
+        if (!inventoryReportsService) {
+          return this.buildMissingConnectorOutput(report, 'inventory connector');
+        }
         return withSupportMetadata(
-          this.inventoryReportsService!.runInventoryAging(filters as ReportFiltersByKey['inventory-aging']),
+          inventoryReportsService.runInventoryAging(filters as ReportFiltersByKey['inventory-aging']),
         );
-      case 'order-fulfillment-health':
+      }
+      case 'order-fulfillment-health': {
+        const fulfillmentReportsService = this.fulfillmentReportsService;
+        if (!fulfillmentReportsService) {
+          return this.buildMissingConnectorOutput(report, 'fulfillment connector');
+        }
         return withSupportMetadata(
-          await this.fulfillmentReportsService!.runOrderFulfillmentHealth(
+          await fulfillmentReportsService.runOrderFulfillmentHealth(
             filters as ReportFiltersByKey['order-fulfillment-health'],
           ),
         );
-      case 'orders-reversals-by-product':
+      }
+      case 'orders-reversals-by-product': {
+        const ordersTransactionalReportsService = this.ordersTransactionalReportsService;
+        if (!ordersTransactionalReportsService) {
+          return this.buildMissingConnectorOutput(report, 'orders transactional connector');
+        }
         return withSupportMetadata(
-          await this.ordersTransactionalReportsService!.runOrdersReversalsByProduct(
+          await ordersTransactionalReportsService.runOrdersReversalsByProduct(
             workspaceId,
             filters as ReportFiltersByKey['orders-reversals-by-product'],
           ),
         );
-      case 'orders-over-time':
+      }
+      case 'orders-over-time': {
+        const ordersTransactionalReportsService = this.ordersTransactionalReportsService;
+        if (!ordersTransactionalReportsService) {
+          return this.buildMissingConnectorOutput(report, 'orders transactional connector');
+        }
         return withSupportMetadata(
-          await this.ordersTransactionalReportsService!.runOrdersOverTime(
+          await ordersTransactionalReportsService.runOrdersOverTime(
             workspaceId,
             filters as ReportFiltersByKey['orders-over-time'],
           ),
         );
-      case 'shipping-delivery-performance':
+      }
+      case 'shipping-delivery-performance': {
+        const fulfillmentReportsService = this.fulfillmentReportsService;
+        if (!fulfillmentReportsService) {
+          return this.buildMissingConnectorOutput(report, 'fulfillment connector');
+        }
         return withSupportMetadata(
-          await this.fulfillmentReportsService!.runShippingDeliveryPerformance(
+          await fulfillmentReportsService.runShippingDeliveryPerformance(
             workspaceId,
             filters as ReportFiltersByKey['shipping-delivery-performance'],
           ),
         );
-      case 'orders-fulfilled-over-time':
+      }
+      case 'orders-fulfilled-over-time': {
+        const fulfillmentReportsService = this.fulfillmentReportsService;
+        if (!fulfillmentReportsService) {
+          return this.buildMissingConnectorOutput(report, 'fulfillment connector');
+        }
         return withSupportMetadata(
-          await this.fulfillmentReportsService!.runOrdersFulfilledOverTime(
+          await fulfillmentReportsService.runOrdersFulfilledOverTime(
             workspaceId,
             filters as ReportFiltersByKey['orders-fulfilled-over-time'],
           ),
         );
-      case 'shipping-labels-over-time':
+      }
+      case 'shipping-labels-over-time': {
+        const fulfillmentReportsService = this.fulfillmentReportsService;
+        if (!fulfillmentReportsService) {
+          return this.buildMissingConnectorOutput(report, 'fulfillment connector');
+        }
         return withSupportMetadata(
-          await this.fulfillmentReportsService!.runShippingLabelsOverTime(
+          await fulfillmentReportsService.runShippingLabelsOverTime(
             workspaceId,
             filters as ReportFiltersByKey['shipping-labels-over-time'],
           ),
         );
-      case 'shipping-labels-by-order':
+      }
+      case 'shipping-labels-by-order': {
+        const fulfillmentReportsService = this.fulfillmentReportsService;
+        if (!fulfillmentReportsService) {
+          return this.buildMissingConnectorOutput(report, 'fulfillment connector');
+        }
         return withSupportMetadata(
-          await this.fulfillmentReportsService!.runShippingLabelsByOrder(
+          await fulfillmentReportsService.runShippingLabelsByOrder(
             workspaceId,
             filters as ReportFiltersByKey['shipping-labels-by-order'],
           ),
         );
-      case 'items-bought-together':
+      }
+      case 'items-bought-together': {
+        const ordersTransactionalReportsService = this.ordersTransactionalReportsService;
+        if (!ordersTransactionalReportsService) {
+          return this.buildMissingConnectorOutput(report, 'orders transactional connector');
+        }
         return withSupportMetadata(
-          await this.ordersTransactionalReportsService!.runItemsBoughtTogether(
+          await ordersTransactionalReportsService.runItemsBoughtTogether(
             workspaceId,
             filters as ReportFiltersByKey['items-bought-together'],
           ),
         );
+      }
     }
+  }
+
+  private buildMissingConnectorOutput(
+    report: ReportDefinition,
+    connectorName: string,
+  ): ReportOutput {
+    const degradedSupportStatus = report.supportStatus === 'supported' ? 'partial' : 'unsupported';
+    const supportReason =
+      degradedSupportStatus === 'partial'
+        ? `Partial support: ${connectorName} is unavailable for this workspace, so this report cannot load optional attribution/session domains.`
+        : `Unsupported: ${connectorName} is unavailable for this workspace.`;
+
+    return {
+      rows: 0,
+      chartRows: [],
+      warnings: [supportReason],
+      summary: `No rows produced because ${connectorName} is unavailable for this workspace.`,
+      supportStatus: degradedSupportStatus,
+      supportReason,
+    };
   }
 
   private generateRowsForExport(
