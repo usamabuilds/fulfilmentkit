@@ -16,6 +16,7 @@ type MetadataEntriesInput = {
   generatedAt: Date;
   isEmpty: boolean;
   rowCount: number;
+  extraEntries?: Array<[string, string]>;
 };
 
 export function buildMetadataEntries(input: MetadataEntriesInput): Array<[string, string]> {
@@ -24,7 +25,7 @@ export function buildMetadataEntries(input: MetadataEntriesInput): Array<[string
     ? input.filters.platform.join(', ')
     : String(input.filters.platform);
 
-  return [
+  const baseEntries: Array<[string, string]> = [
     ['workspaceId', input.workspaceId],
     ['reportKey', input.reportKey],
     ['runId', input.runId],
@@ -40,6 +41,8 @@ export function buildMetadataEntries(input: MetadataEntriesInput): Array<[string
         : 'Report rows generated.',
     ],
   ];
+
+  return [...baseEntries, ...(input.extraEntries ?? [])];
 }
 
 export function formatFileNameTimestamp(value: Date): string {

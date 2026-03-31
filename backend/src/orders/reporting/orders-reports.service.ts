@@ -794,6 +794,7 @@ type ReportRunRecord = {
     caveat?: string;
     warnings?: string[];
     chartRows?: Array<Record<string, string | number | null>>;
+    metadataEntries?: Array<[string, string]>;
     supportStatus: 'supported' | 'partial' | 'unsupported';
     supportReason?: string;
     generatedAt: string;
@@ -840,8 +841,11 @@ type ReportOutput = {
   caveat?: string;
   warnings?: string[];
   chartRows?: Array<Record<string, string | number | null>>;
+  metadataEntries?: Array<[string, string]>;
   supportStatus: 'supported' | 'partial' | 'unsupported';
   supportReason?: string;
+  supportStatusOverride?: 'supported' | 'partial' | 'unsupported';
+  supportReasonOverride?: string;
 };
 
 export type ReportComputationOutput = Omit<ReportOutput, 'supportStatus' | 'supportReason'>;
@@ -857,7 +861,15 @@ const reportCapabilityRequirementsByKey: Partial<Record<ReportKey, readonly Capa
 
 const reportExportHeadersByKey: Record<ReportKey, string[]> = {
   'sales-summary': [],
-  'inventory-aging': [],
+  'inventory-aging': [
+    'calendarBoundary',
+    'agingBucket',
+    'snapshotAgeDays',
+    'totalOnHand',
+    'totalReserved',
+    'totalAvailable',
+    'skuCount',
+  ],
   'order-fulfillment-health': [],
   'orders-reversals-by-product': [
     'productId',
@@ -927,9 +939,7 @@ export class OrdersReportsService {
     {
       key: 'inventory-aging',
       label: 'Inventory Aging',
-      supportStatus: 'unsupported',
-      supportReason:
-        'Execution is not implemented yet; this key currently returns a placeholder summary with no computed rows.',
+      supportStatus: 'supported',
       requiredFeatures: ['inventory-aging-report-runner'],
       defaultFilters: {
         platform: ['all'],
@@ -1199,6 +1209,7 @@ export class OrdersReportsService {
       generatedAt: exportedAt,
       isEmpty: reportRows.length === 0,
       rowCount: reportRows.length,
+      extraEntries: run.output.metadataEntries,
     });
 
     const workbook = this.buildWorkbookXml({
@@ -1232,11 +1243,19 @@ export class OrdersReportsService {
       throw new NotFoundException('Report not found');
     }
 
-    const withSupportMetadata = (output: ReportComputationOutput): ReportOutput => ({
-      ...output,
-      supportStatus: report.supportStatus,
-      supportReason: report.supportReason,
-    });
+    const withSupportMetadata = (output: ReportComputationOutput): ReportOutput => {
+      const outputWithOverrides = output as ReportComputationOutput & {
+        supportStatusOverride?: 'supported' | 'partial' | 'unsupported';
+        supportReasonOverride?: string;
+      };
+      const { supportStatusOverride, supportReasonOverride, ...baseOutput } = outputWithOverrides;
+
+      return {
+        ...baseOutput,
+        supportStatus: supportStatusOverride ?? report.supportStatus,
+        supportReason: supportReasonOverride ?? report.supportReason,
+      };
+    };
 
     switch (key) {
       case 'sales-summary': {
@@ -1254,7 +1273,8 @@ export class OrdersReportsService {
           return this.buildMissingConnectorOutput(report, 'inventory connector');
         }
         return withSupportMetadata(
-          inventoryReportsService.runInventoryAging(
+          await inventoryReportsService.runInventoryAging(
+            workspaceId,
             filters as ReportFiltersByKey['inventory-aging'],
           ),
         );
@@ -1414,6 +1434,7 @@ export class OrdersReportsService {
     generatedAt: Date;
     isEmpty: boolean;
     rowCount: number;
+    extraEntries?: Array<[string, string]>;
   }): Array<[string, string]> {
     return buildReportMetadataEntries(input);
   }
