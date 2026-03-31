@@ -7,6 +7,43 @@ import { toListResponse } from '../../common/utils/list-response';
 import { requireWorkspaceId } from '../../common/workspace/workspace.utils';
 
 const reportKeySchema = z.string().min(1);
+const reportSupportStatusSchema = z.enum(['supported', 'partial', 'unsupported']);
+
+const reportDefinitionResponseSchema = z
+  .object({
+    key: reportKeySchema,
+    label: z.string().min(1),
+    supportStatus: reportSupportStatusSchema,
+    supportReason: z.string().min(1).optional(),
+    requiredFeatures: z.array(z.string().min(1)).optional(),
+    defaultFilters: z.record(z.union([z.string(), z.number(), z.array(z.string())])),
+    filterDefinitions: z.record(z.unknown()),
+    supportedPlatforms: z.array(z.string().min(1)),
+    supportsExport: z.boolean(),
+  })
+  .strict();
+
+const reportRunResponseSchema = z
+  .object({
+    id: z.string().min(1),
+    reportKey: reportKeySchema,
+    status: z.literal('completed'),
+    filters: z.record(z.union([z.string(), z.number(), z.array(z.string())])),
+    output: z
+      .object({
+        rows: z.number(),
+        summary: z.string(),
+        caveat: z.string().optional(),
+        warnings: z.array(z.string()).optional(),
+        chartRows: z.array(z.record(z.union([z.string(), z.number(), z.null()]))).optional(),
+        supportStatus: reportSupportStatusSchema,
+        supportReason: z.string().optional(),
+        generatedAt: z.string(),
+      })
+      .strict(),
+    createdAt: z.string(),
+  })
+  .strict();
 
 function createFiltersSchema(definitions: ReportFilterDefinitionMap): z.ZodType<Record<string, unknown>> {
   return createReportFiltersSchema(definitions);
@@ -18,7 +55,7 @@ export class OrdersReportsController {
 
   @Get()
   async listReports() {
-    const items = this.reportsService.listReports();
+    const items = z.array(reportDefinitionResponseSchema).parse(this.reportsService.listReports());
 
     return apiResponse(
       toListResponse({
@@ -47,11 +84,13 @@ export class OrdersReportsController {
       .strict();
     const parsedBody = runBodySchema.parse(body);
 
-    const run = this.reportsService.runReport({
-      workspaceId,
-      key: parsedKey.data as ReportKey,
-      filters: parsedBody.filters,
-    });
+    const run = reportRunResponseSchema.parse(
+      await this.reportsService.runReport({
+        workspaceId,
+        key: parsedKey.data as ReportKey,
+        filters: parsedBody.filters,
+      }),
+    );
 
     return apiResponse(run);
   }
@@ -110,11 +149,13 @@ export class OrdersReportsController {
   async getReportRun(@Req() req: any, @Param('key') key: string, @Param('runId') runId: string) {
     const workspaceId = requireWorkspaceId(req);
 
-    const run = this.reportsService.getRun({
-      workspaceId,
-      key,
-      runId,
-    });
+    const run = reportRunResponseSchema.parse(
+      this.reportsService.getRun({
+        workspaceId,
+        key,
+        runId,
+      }),
+    );
 
     return apiResponse(run);
   }

@@ -74,6 +74,9 @@ export type ReportFilterDefinitionMapDto = Record<string, ReportFilterDefinition
 export interface ReportDefinitionDto {
   key: ReportKey
   label: string
+  supportStatus: 'supported' | 'partial' | 'unsupported'
+  supportReason?: string
+  requiredFeatures?: string[]
   defaultFilters: Record<string, string | number | string[]>
   filterDefinitions: ReportFilterDefinitionMapDto
   supportedPlatforms: ReportPlatform[]
@@ -89,6 +92,10 @@ export interface ReportRunDto {
     rows: number
     summary: string
     caveat?: string
+    warnings?: string[]
+    chartRows?: Array<Record<string, string | number | null>>
+    supportStatus: 'supported' | 'partial' | 'unsupported'
+    supportReason?: string
     generatedAt: string
   }
   createdAt: string
