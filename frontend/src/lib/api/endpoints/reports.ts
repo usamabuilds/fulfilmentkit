@@ -136,17 +136,25 @@ function getExportHeaders(): HeadersInit {
 
 export const normalizedReportPlatforms = ['all', ...connectionPlatforms] as const
 
+
+export const reportsApiPaths = {
+  list: '/orders/reports',
+  run: (reportKey: ReportKey) => `/orders/reports/${reportKey}/run`,
+  getRun: (reportKey: ReportKey, runId: string) => `/orders/reports/${reportKey}/runs/${runId}`,
+  exportExcel: (reportKey: ReportKey) => `/orders/reports/${reportKey}/export`,
+}
+
 export const reportsApi = {
-  list: () => apiGetList<ReportDefinitionDto>('/orders/reports'),
-  run: (reportKey: ReportKey, dto: RunReportDto) => apiPost<ReportRunDto>(`/orders/reports/${reportKey}/run`, dto),
-  getRun: (reportKey: ReportKey, runId: string) => apiGet<ReportRunDto>(`/orders/reports/${reportKey}/runs/${runId}`),
+  list: () => apiGetList<ReportDefinitionDto>(reportsApiPaths.list),
+  run: (reportKey: ReportKey, dto: RunReportDto) => apiPost<ReportRunDto>(reportsApiPaths.run(reportKey), dto),
+  getRun: (reportKey: ReportKey, runId: string) => apiGet<ReportRunDto>(reportsApiPaths.getRun(reportKey, runId)),
   exportExcel: async (reportKey: ReportKey, dto: ExportReportDto): Promise<ReportExportResult> => {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL
     if (!baseUrl) {
       throw new Error('NEXT_PUBLIC_API_URL is not set')
     }
 
-    const res = await fetch(`${baseUrl}/orders/reports/${reportKey}/export`, {
+    const res = await fetch(`${baseUrl}${reportsApiPaths.exportExcel(reportKey)}`, {
       method: 'POST',
       headers: getExportHeaders(),
       body: JSON.stringify(dto),
