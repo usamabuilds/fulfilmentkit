@@ -8,6 +8,7 @@ import { normalizePlatformFilter as normalizeReportPlatformFilter } from './repo
 import { FinanceReportsService } from '../../reports/finance/finance-reports.service';
 import { FulfillmentReportsService } from '../../reports/fulfillment/fulfillment-reports.service';
 import { InventoryReportsService } from '../../reports/inventory/inventory-reports.service';
+import { CustomerReportsService } from '../../reports/customers/customer-reports.service';
 import { OrdersTransactionalReportsService } from '../../reports/orders/orders-transactional-reports.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
@@ -26,7 +27,12 @@ export type ReportKey =
   | 'orders-fulfilled-over-time'
   | 'shipping-labels-over-time'
   | 'shipping-labels-by-order'
-  | 'items-bought-together';
+  | 'items-bought-together'
+  | 'new-vs-returning-customers'
+  | 'customer-cohort-analysis'
+  | 'rfm-customer-analysis'
+  | 'rfm-customer-list'
+  | 'predicted-spend-tier';
 export const reportPlatforms = [
   'shopify',
   'woocommerce',
@@ -42,6 +48,7 @@ export type ReportPlatform = (typeof reportPlatforms)[number] | 'all';
 
 export type DateRangePreset = 'last_7_days' | 'last_14_days' | 'last_30_days' | 'last_90_days';
 export type TimeGroupingOption = 'hour' | 'day' | 'week' | 'month';
+export type CohortGroupingOption = 'week' | 'month';
 export type OrderStatusOption = 'all' | 'open' | 'fulfilled' | 'cancelled';
 export type RegionOption = 'all' | 'na' | 'eu' | 'apac';
 export type AgingBucketOption = 'all' | '0_30' | '31_60' | '61_90' | '90_plus';
@@ -688,6 +695,190 @@ export const reportFilterDefinitionsByKey: Record<ReportKey, ReportFilterDefinit
       max: 100,
     },
   },
+  'new-vs-returning-customers': {
+    platform: {
+      label: 'Platform',
+      type: 'multi-select',
+      description: 'Select one or more commerce platforms.',
+      default: ['all'],
+      options: [
+        { value: 'all', label: 'All platforms' },
+        { value: 'shopify', label: 'Shopify' },
+        { value: 'woocommerce', label: 'WooCommerce' },
+        { value: 'amazon', label: 'Amazon' },
+      ],
+    },
+    dateRange: {
+      label: 'Date Range',
+      type: 'date-range',
+      default: 'last_90_days',
+      presets: ['last_30_days', 'last_90_days'],
+    },
+    region: {
+      label: 'Region',
+      type: 'select',
+      default: 'all',
+      options: [
+        { value: 'all', label: 'All regions' },
+        { value: 'na', label: 'North America' },
+        { value: 'eu', label: 'Europe' },
+        { value: 'apac', label: 'APAC' },
+      ],
+    },
+    groupBy: {
+      label: 'Group by',
+      type: 'select',
+      default: 'week',
+      options: [
+        { value: 'day', label: 'Day' },
+        { value: 'week', label: 'Week' },
+        { value: 'month', label: 'Month' },
+      ],
+    },
+  },
+  'customer-cohort-analysis': {
+    platform: {
+      label: 'Platform',
+      type: 'multi-select',
+      default: ['all'],
+      options: [
+        { value: 'all', label: 'All platforms' },
+        { value: 'shopify', label: 'Shopify' },
+        { value: 'woocommerce', label: 'WooCommerce' },
+        { value: 'amazon', label: 'Amazon' },
+      ],
+    },
+    dateRange: {
+      label: 'Date Range',
+      type: 'date-range',
+      default: 'last_90_days',
+      presets: ['last_30_days', 'last_90_days'],
+    },
+    region: {
+      label: 'Region',
+      type: 'select',
+      default: 'all',
+      options: [
+        { value: 'all', label: 'All regions' },
+        { value: 'na', label: 'North America' },
+        { value: 'eu', label: 'Europe' },
+        { value: 'apac', label: 'APAC' },
+      ],
+    },
+    cohortBy: {
+      label: 'Cohort by',
+      type: 'select',
+      default: 'month',
+      options: [
+        { value: 'week', label: 'Week' },
+        { value: 'month', label: 'Month' },
+      ],
+    },
+    maxPeriods: {
+      label: 'Retention periods',
+      type: 'number',
+      default: 6,
+      min: 1,
+      max: 24,
+    },
+  },
+  'rfm-customer-analysis': {
+    platform: {
+      label: 'Platform',
+      type: 'multi-select',
+      default: ['all'],
+      options: [
+        { value: 'all', label: 'All platforms' },
+        { value: 'shopify', label: 'Shopify' },
+        { value: 'woocommerce', label: 'WooCommerce' },
+        { value: 'amazon', label: 'Amazon' },
+      ],
+    },
+    dateRange: {
+      label: 'Date Range',
+      type: 'date-range',
+      default: 'last_90_days',
+      presets: ['last_30_days', 'last_90_days'],
+    },
+    region: {
+      label: 'Region',
+      type: 'select',
+      default: 'all',
+      options: [
+        { value: 'all', label: 'All regions' },
+        { value: 'na', label: 'North America' },
+        { value: 'eu', label: 'Europe' },
+        { value: 'apac', label: 'APAC' },
+      ],
+    },
+  },
+  'rfm-customer-list': {
+    platform: {
+      label: 'Platform',
+      type: 'multi-select',
+      default: ['all'],
+      options: [
+        { value: 'all', label: 'All platforms' },
+        { value: 'shopify', label: 'Shopify' },
+        { value: 'woocommerce', label: 'WooCommerce' },
+        { value: 'amazon', label: 'Amazon' },
+      ],
+    },
+    dateRange: {
+      label: 'Date Range',
+      type: 'date-range',
+      default: 'last_90_days',
+      presets: ['last_30_days', 'last_90_days'],
+    },
+    region: {
+      label: 'Region',
+      type: 'select',
+      default: 'all',
+      options: [
+        { value: 'all', label: 'All regions' },
+        { value: 'na', label: 'North America' },
+        { value: 'eu', label: 'Europe' },
+        { value: 'apac', label: 'APAC' },
+      ],
+    },
+    limit: {
+      label: 'Max customers',
+      type: 'number',
+      default: 100,
+      min: 1,
+      max: 1000,
+    },
+  },
+  'predicted-spend-tier': {
+    platform: {
+      label: 'Platform',
+      type: 'multi-select',
+      default: ['all'],
+      options: [
+        { value: 'all', label: 'All platforms' },
+        { value: 'shopify', label: 'Shopify' },
+        { value: 'woocommerce', label: 'WooCommerce' },
+        { value: 'amazon', label: 'Amazon' },
+      ],
+    },
+    dateRange: {
+      label: 'Date Range',
+      type: 'date-range',
+      default: 'last_90_days',
+      presets: ['last_30_days', 'last_90_days'],
+    },
+    region: {
+      label: 'Region',
+      type: 'select',
+      default: 'all',
+      options: [
+        { value: 'all', label: 'All regions' },
+        { value: 'na', label: 'North America' },
+        { value: 'eu', label: 'Europe' },
+        { value: 'apac', label: 'APAC' },
+      ],
+    },
+  },
 };
 
 export type ReportFiltersByKey = {
@@ -767,6 +958,35 @@ export type ReportFiltersByKey = {
     combinationSize: CombinationSizeOption;
     itemGroupingLevel: ItemGroupingLevelOption;
     topN: number;
+  };
+  'new-vs-returning-customers': {
+    platform: ReportPlatform[];
+    dateRange: Extract<DateRangePreset, 'last_30_days' | 'last_90_days'>;
+    region: RegionOption;
+    groupBy: Extract<TimeGroupingOption, 'day' | 'week' | 'month'>;
+  };
+  'customer-cohort-analysis': {
+    platform: ReportPlatform[];
+    dateRange: Extract<DateRangePreset, 'last_30_days' | 'last_90_days'>;
+    region: RegionOption;
+    cohortBy: CohortGroupingOption;
+    maxPeriods: number;
+  };
+  'rfm-customer-analysis': {
+    platform: ReportPlatform[];
+    dateRange: Extract<DateRangePreset, 'last_30_days' | 'last_90_days'>;
+    region: RegionOption;
+  };
+  'rfm-customer-list': {
+    platform: ReportPlatform[];
+    dateRange: Extract<DateRangePreset, 'last_30_days' | 'last_90_days'>;
+    region: RegionOption;
+    limit: number;
+  };
+  'predicted-spend-tier': {
+    platform: ReportPlatform[];
+    dateRange: Extract<DateRangePreset, 'last_30_days' | 'last_90_days'>;
+    region: RegionOption;
   };
 };
 
@@ -912,6 +1132,21 @@ const reportExportHeadersByKey: Record<ReportKey, string[]> = {
     'firstLabelPurchasedAt',
   ],
   'items-bought-together': ['combination', 'ordersContaining', 'percentageOverQualifyingOrders'],
+  'new-vs-returning-customers': ['periodStart', 'periodLabel', 'newCustomers', 'returningCustomers'],
+  'customer-cohort-analysis': [],
+  'rfm-customer-analysis': ['segment', 'customers', 'averageSpend'],
+  'rfm-customer-list': [
+    'customerId',
+    'recencyDays',
+    'frequency',
+    'monetary',
+    'recencyScore',
+    'frequencyScore',
+    'monetaryScore',
+    'rfmScore',
+    'segment',
+  ],
+  'predicted-spend-tier': [],
 };
 
 @Injectable()
@@ -1090,6 +1325,82 @@ export class OrdersReportsService {
       supportedPlatforms: ['all'],
       supportsExport: true,
     },
+    {
+      key: 'new-vs-returning-customers',
+      label: 'New vs Returning Customers',
+      supportStatus: 'supported',
+      requiredFeatures: ['new-vs-returning-customers-report-runner'],
+      defaultFilters: {
+        platform: ['all'],
+        dateRange: 'last_90_days',
+        region: 'all',
+        groupBy: 'week',
+      },
+      filterDefinitions: reportFilterDefinitionsByKey['new-vs-returning-customers'],
+      supportedPlatforms: ['all'],
+      supportsExport: true,
+    },
+    {
+      key: 'customer-cohort-analysis',
+      label: 'Customer Cohort Analysis',
+      supportStatus: 'supported',
+      requiredFeatures: ['customer-cohort-analysis-report-runner'],
+      defaultFilters: {
+        platform: ['all'],
+        dateRange: 'last_90_days',
+        region: 'all',
+        cohortBy: 'month',
+        maxPeriods: 6,
+      },
+      filterDefinitions: reportFilterDefinitionsByKey['customer-cohort-analysis'],
+      supportedPlatforms: ['all'],
+      supportsExport: true,
+    },
+    {
+      key: 'rfm-customer-analysis',
+      label: 'RFM Customer Analysis',
+      supportStatus: 'supported',
+      requiredFeatures: ['rfm-customer-analysis-report-runner'],
+      defaultFilters: {
+        platform: ['all'],
+        dateRange: 'last_90_days',
+        region: 'all',
+      },
+      filterDefinitions: reportFilterDefinitionsByKey['rfm-customer-analysis'],
+      supportedPlatforms: ['all'],
+      supportsExport: true,
+    },
+    {
+      key: 'rfm-customer-list',
+      label: 'RFM Customer List',
+      supportStatus: 'supported',
+      requiredFeatures: ['rfm-customer-list-report-runner'],
+      defaultFilters: {
+        platform: ['all'],
+        dateRange: 'last_90_days',
+        region: 'all',
+        limit: 100,
+      },
+      filterDefinitions: reportFilterDefinitionsByKey['rfm-customer-list'],
+      supportedPlatforms: ['all'],
+      supportsExport: true,
+    },
+    {
+      key: 'predicted-spend-tier',
+      label: 'Predicted Spend Tier',
+      supportStatus: 'unsupported',
+      supportReason:
+        'Predicted spend requires an ML inference model and feature pipeline, which are not available yet.',
+      requiredFeatures: ['predicted-spend-tier-ml-model'],
+      defaultFilters: {
+        platform: ['all'],
+        dateRange: 'last_90_days',
+        region: 'all',
+      },
+      filterDefinitions: reportFilterDefinitionsByKey['predicted-spend-tier'],
+      supportedPlatforms: ['all'],
+      supportsExport: true,
+    },
   ];
 
   private readonly runsByWorkspace = new Map<string, ReportRunRecord[]>();
@@ -1100,6 +1411,7 @@ export class OrdersReportsService {
     private readonly fulfillmentReportsService?: FulfillmentReportsService,
     private readonly inventoryReportsService?: InventoryReportsService,
     private readonly financeReportsService?: FinanceReportsService,
+    private readonly customerReportsService?: CustomerReportsService,
   ) {}
 
   async listReports(workspaceId: string) {
@@ -1374,6 +1686,60 @@ export class OrdersReportsService {
           ),
         );
       }
+      case 'new-vs-returning-customers': {
+        const customerReportsService = this.customerReportsService;
+        if (!customerReportsService) {
+          return this.buildMissingConnectorOutput(report, 'customer analytics connector');
+        }
+        return withSupportMetadata(
+          await customerReportsService.runNewVsReturningCustomers(
+            workspaceId,
+            filters as ReportFiltersByKey['new-vs-returning-customers'],
+          ),
+        );
+      }
+      case 'customer-cohort-analysis': {
+        const customerReportsService = this.customerReportsService;
+        if (!customerReportsService) {
+          return this.buildMissingConnectorOutput(report, 'customer analytics connector');
+        }
+        return withSupportMetadata(
+          await customerReportsService.runCustomerCohortAnalysis(
+            workspaceId,
+            filters as ReportFiltersByKey['customer-cohort-analysis'],
+          ),
+        );
+      }
+      case 'rfm-customer-analysis': {
+        const customerReportsService = this.customerReportsService;
+        if (!customerReportsService) {
+          return this.buildMissingConnectorOutput(report, 'customer analytics connector');
+        }
+        return withSupportMetadata(
+          await customerReportsService.runRfmCustomerAnalysis(
+            workspaceId,
+            filters as ReportFiltersByKey['rfm-customer-analysis'],
+          ),
+        );
+      }
+      case 'rfm-customer-list': {
+        const customerReportsService = this.customerReportsService;
+        if (!customerReportsService) {
+          return this.buildMissingConnectorOutput(report, 'customer analytics connector');
+        }
+        return withSupportMetadata(
+          await customerReportsService.runRfmCustomerList(
+            workspaceId,
+            filters as ReportFiltersByKey['rfm-customer-list'],
+          ),
+        );
+      }
+      case 'predicted-spend-tier':
+        return withSupportMetadata({
+          rows: 0,
+          chartRows: [],
+          summary: 'Predicted spend tiers are unsupported until an ML model is deployed.',
+        });
     }
   }
 

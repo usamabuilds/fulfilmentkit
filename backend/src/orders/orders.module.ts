@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { CustomerReportsService } from '../reports/customers/customer-reports.service';
 import { FinanceReportsService } from '../reports/finance/finance-reports.service';
 import { FulfillmentReportsService } from '../reports/fulfillment/fulfillment-reports.service';
 import { InventoryReportsService } from '../reports/inventory/inventory-reports.service';
@@ -16,6 +17,7 @@ import { OrdersService } from './orders.service';
     OrdersService,
     OrdersReportsService,
     OrdersTransactionalReportsService,
+    CustomerReportsService,
     FulfillmentReportsService,
     InventoryReportsService,
     FinanceReportsService,
