@@ -9,7 +9,17 @@ import {
   normalizePlatformFilter as normalizeReportPlatformFilter,
 } from './report-platform.utils';
 
-export type ReportKey = 'sales-summary' | 'inventory-aging' | 'order-fulfillment-health';
+export type ReportKey =
+  | 'sales-summary'
+  | 'inventory-aging'
+  | 'order-fulfillment-health'
+  | 'orders-reversals-by-product'
+  | 'orders-over-time'
+  | 'shipping-delivery-performance'
+  | 'orders-fulfilled-over-time'
+  | 'shipping-labels-over-time'
+  | 'shipping-labels-by-order'
+  | 'items-bought-together';
 export const reportPlatforms = [
   'shopify',
   'woocommerce',
@@ -272,6 +282,282 @@ export const reportFilterDefinitionsByKey: Record<ReportKey, ReportFilterDefinit
       maxLength: 40,
     },
   },
+  'orders-reversals-by-product': {
+    platform: {
+      label: 'Platform',
+      type: 'multi-select',
+      description: 'Select one or more commerce platforms.',
+      default: ['all'],
+      options: [
+        { value: 'all', label: 'All platforms' },
+        { value: 'shopify', label: 'Shopify' },
+        { value: 'woocommerce', label: 'WooCommerce' },
+        { value: 'amazon', label: 'Amazon' },
+        { value: 'zoho', label: 'Zoho' },
+        { value: 'xero', label: 'Xero' },
+        { value: 'sage', label: 'Sage' },
+        { value: 'odoo', label: 'Odoo' },
+        { value: 'quickbooks', label: 'QuickBooks' },
+      ],
+    },
+    dateRange: {
+      label: 'Date Range',
+      type: 'date-range',
+      default: 'last_30_days',
+      presets: ['last_7_days', 'last_14_days', 'last_30_days', 'last_90_days'],
+    },
+    region: {
+      label: 'Region',
+      type: 'select',
+      default: 'all',
+      options: [
+        { value: 'all', label: 'All regions' },
+        { value: 'na', label: 'North America' },
+        { value: 'eu', label: 'Europe' },
+        { value: 'apac', label: 'APAC' },
+      ],
+    },
+    statuses: {
+      label: 'Statuses',
+      type: 'multi-select',
+      default: ['cancelled'],
+      options: [
+        { value: 'all', label: 'All statuses' },
+        { value: 'open', label: 'Open' },
+        { value: 'fulfilled', label: 'Fulfilled' },
+        { value: 'cancelled', label: 'Cancelled' },
+      ],
+      maxSelections: 4,
+    },
+  },
+  'orders-over-time': {
+    platform: {
+      label: 'Platform',
+      type: 'multi-select',
+      description: 'Select one or more commerce platforms.',
+      default: ['all'],
+      options: [
+        { value: 'all', label: 'All platforms' },
+        { value: 'shopify', label: 'Shopify' },
+        { value: 'woocommerce', label: 'WooCommerce' },
+        { value: 'amazon', label: 'Amazon' },
+        { value: 'zoho', label: 'Zoho' },
+        { value: 'xero', label: 'Xero' },
+        { value: 'sage', label: 'Sage' },
+        { value: 'odoo', label: 'Odoo' },
+        { value: 'quickbooks', label: 'QuickBooks' },
+      ],
+    },
+    dateRange: {
+      label: 'Date Range',
+      type: 'date-range',
+      default: 'last_30_days',
+      presets: ['last_7_days', 'last_14_days', 'last_30_days', 'last_90_days'],
+    },
+    region: {
+      label: 'Region',
+      type: 'select',
+      default: 'all',
+      options: [
+        { value: 'all', label: 'All regions' },
+        { value: 'na', label: 'North America' },
+        { value: 'eu', label: 'Europe' },
+        { value: 'apac', label: 'APAC' },
+      ],
+    },
+  },
+  'shipping-delivery-performance': {
+    platform: {
+      label: 'Platform',
+      type: 'multi-select',
+      description: 'Select one or more commerce platforms.',
+      default: ['all'],
+      options: [
+        { value: 'all', label: 'All platforms' },
+        { value: 'shopify', label: 'Shopify' },
+        { value: 'woocommerce', label: 'WooCommerce' },
+        { value: 'amazon', label: 'Amazon' },
+        { value: 'zoho', label: 'Zoho' },
+        { value: 'xero', label: 'Xero' },
+        { value: 'sage', label: 'Sage' },
+        { value: 'odoo', label: 'Odoo' },
+        { value: 'quickbooks', label: 'QuickBooks' },
+      ],
+    },
+    dateRange: {
+      label: 'Date Range',
+      type: 'date-range',
+      default: 'last_14_days',
+      presets: ['last_7_days', 'last_14_days', 'last_30_days', 'last_90_days'],
+    },
+    region: {
+      label: 'Region',
+      type: 'select',
+      default: 'all',
+      options: [
+        { value: 'all', label: 'All regions' },
+        { value: 'na', label: 'North America' },
+        { value: 'eu', label: 'Europe' },
+        { value: 'apac', label: 'APAC' },
+      ],
+    },
+  },
+  'orders-fulfilled-over-time': {
+    platform: {
+      label: 'Platform',
+      type: 'multi-select',
+      description: 'Select one or more commerce platforms.',
+      default: ['all'],
+      options: [
+        { value: 'all', label: 'All platforms' },
+        { value: 'shopify', label: 'Shopify' },
+        { value: 'woocommerce', label: 'WooCommerce' },
+        { value: 'amazon', label: 'Amazon' },
+        { value: 'zoho', label: 'Zoho' },
+        { value: 'xero', label: 'Xero' },
+        { value: 'sage', label: 'Sage' },
+        { value: 'odoo', label: 'Odoo' },
+        { value: 'quickbooks', label: 'QuickBooks' },
+      ],
+    },
+    dateRange: {
+      label: 'Date Range',
+      type: 'date-range',
+      default: 'last_30_days',
+      presets: ['last_7_days', 'last_14_days', 'last_30_days', 'last_90_days'],
+    },
+    region: {
+      label: 'Region',
+      type: 'select',
+      default: 'all',
+      options: [
+        { value: 'all', label: 'All regions' },
+        { value: 'na', label: 'North America' },
+        { value: 'eu', label: 'Europe' },
+        { value: 'apac', label: 'APAC' },
+      ],
+    },
+    statuses: {
+      label: 'Statuses',
+      type: 'multi-select',
+      default: ['fulfilled'],
+      options: [
+        { value: 'all', label: 'All statuses' },
+        { value: 'open', label: 'Open' },
+        { value: 'fulfilled', label: 'Fulfilled' },
+        { value: 'cancelled', label: 'Cancelled' },
+      ],
+      maxSelections: 4,
+    },
+  },
+  'shipping-labels-over-time': {
+    platform: {
+      label: 'Platform',
+      type: 'multi-select',
+      description: 'Select one or more commerce platforms.',
+      default: ['all'],
+      options: [
+        { value: 'all', label: 'All platforms' },
+        { value: 'shopify', label: 'Shopify' },
+        { value: 'woocommerce', label: 'WooCommerce' },
+        { value: 'amazon', label: 'Amazon' },
+        { value: 'zoho', label: 'Zoho' },
+        { value: 'xero', label: 'Xero' },
+        { value: 'sage', label: 'Sage' },
+        { value: 'odoo', label: 'Odoo' },
+        { value: 'quickbooks', label: 'QuickBooks' },
+      ],
+    },
+    dateRange: {
+      label: 'Date Range',
+      type: 'date-range',
+      default: 'last_30_days',
+      presets: ['last_7_days', 'last_14_days', 'last_30_days', 'last_90_days'],
+    },
+    region: {
+      label: 'Region',
+      type: 'select',
+      default: 'all',
+      options: [
+        { value: 'all', label: 'All regions' },
+        { value: 'na', label: 'North America' },
+        { value: 'eu', label: 'Europe' },
+        { value: 'apac', label: 'APAC' },
+      ],
+    },
+  },
+  'shipping-labels-by-order': {
+    platform: {
+      label: 'Platform',
+      type: 'multi-select',
+      description: 'Select one or more commerce platforms.',
+      default: ['all'],
+      options: [
+        { value: 'all', label: 'All platforms' },
+        { value: 'shopify', label: 'Shopify' },
+        { value: 'woocommerce', label: 'WooCommerce' },
+        { value: 'amazon', label: 'Amazon' },
+        { value: 'zoho', label: 'Zoho' },
+        { value: 'xero', label: 'Xero' },
+        { value: 'sage', label: 'Sage' },
+        { value: 'odoo', label: 'Odoo' },
+        { value: 'quickbooks', label: 'QuickBooks' },
+      ],
+    },
+    dateRange: {
+      label: 'Date Range',
+      type: 'date-range',
+      default: 'last_30_days',
+      presets: ['last_7_days', 'last_14_days', 'last_30_days', 'last_90_days'],
+    },
+    region: {
+      label: 'Region',
+      type: 'select',
+      default: 'all',
+      options: [
+        { value: 'all', label: 'All regions' },
+        { value: 'na', label: 'North America' },
+        { value: 'eu', label: 'Europe' },
+        { value: 'apac', label: 'APAC' },
+      ],
+    },
+  },
+  'items-bought-together': {
+    platform: {
+      label: 'Platform',
+      type: 'multi-select',
+      description: 'Select one or more commerce platforms.',
+      default: ['all'],
+      options: [
+        { value: 'all', label: 'All platforms' },
+        { value: 'shopify', label: 'Shopify' },
+        { value: 'woocommerce', label: 'WooCommerce' },
+        { value: 'amazon', label: 'Amazon' },
+        { value: 'zoho', label: 'Zoho' },
+        { value: 'xero', label: 'Xero' },
+        { value: 'sage', label: 'Sage' },
+        { value: 'odoo', label: 'Odoo' },
+        { value: 'quickbooks', label: 'QuickBooks' },
+      ],
+    },
+    dateRange: {
+      label: 'Date Range',
+      type: 'date-range',
+      default: 'last_90_days',
+      presets: ['last_30_days', 'last_90_days'],
+    },
+    region: {
+      label: 'Region',
+      type: 'select',
+      default: 'all',
+      options: [
+        { value: 'all', label: 'All regions' },
+        { value: 'na', label: 'North America' },
+        { value: 'eu', label: 'Europe' },
+        { value: 'apac', label: 'APAC' },
+      ],
+    },
+  },
 };
 
 export type ReportFiltersByKey = {
@@ -298,6 +584,43 @@ export type ReportFiltersByKey = {
     statuses: OrderStatusOption[];
     maxLateShipRate: number;
     carrierQuery: string;
+  };
+  'orders-reversals-by-product': {
+    platform: ReportPlatform[];
+    dateRange: DateRangePreset;
+    region: RegionOption;
+    statuses: OrderStatusOption[];
+  };
+  'orders-over-time': {
+    platform: ReportPlatform[];
+    dateRange: DateRangePreset;
+    region: RegionOption;
+  };
+  'shipping-delivery-performance': {
+    platform: ReportPlatform[];
+    dateRange: DateRangePreset;
+    region: RegionOption;
+  };
+  'orders-fulfilled-over-time': {
+    platform: ReportPlatform[];
+    dateRange: DateRangePreset;
+    region: RegionOption;
+    statuses: OrderStatusOption[];
+  };
+  'shipping-labels-over-time': {
+    platform: ReportPlatform[];
+    dateRange: DateRangePreset;
+    region: RegionOption;
+  };
+  'shipping-labels-by-order': {
+    platform: ReportPlatform[];
+    dateRange: DateRangePreset;
+    region: RegionOption;
+  };
+  'items-bought-together': {
+    platform: ReportPlatform[];
+    dateRange: Extract<DateRangePreset, 'last_30_days' | 'last_90_days'>;
+    region: RegionOption;
   };
 };
 
@@ -404,6 +727,92 @@ export class OrdersReportsService {
       filterDefinitions: reportFilterDefinitionsByKey['order-fulfillment-health'],
       supportedPlatforms: ['all'],
       supportsExport: false,
+    },
+    {
+      key: 'orders-reversals-by-product',
+      label: 'Orders Reversals by Product',
+      defaultFilters: {
+        platform: ['all'],
+        dateRange: 'last_30_days',
+        region: 'all',
+        statuses: ['cancelled'],
+      },
+      filterDefinitions: reportFilterDefinitionsByKey['orders-reversals-by-product'],
+      supportedPlatforms: ['all'],
+      supportsExport: true,
+    },
+    {
+      key: 'orders-over-time',
+      label: 'Orders Over Time',
+      defaultFilters: {
+        platform: ['all'],
+        dateRange: 'last_30_days',
+        region: 'all',
+      },
+      filterDefinitions: reportFilterDefinitionsByKey['orders-over-time'],
+      supportedPlatforms: ['all'],
+      supportsExport: true,
+    },
+    {
+      key: 'shipping-delivery-performance',
+      label: 'Shipping Delivery Performance',
+      defaultFilters: {
+        platform: ['all'],
+        dateRange: 'last_14_days',
+        region: 'all',
+      },
+      filterDefinitions: reportFilterDefinitionsByKey['shipping-delivery-performance'],
+      supportedPlatforms: ['shopify', 'amazon', 'woocommerce'],
+      supportsExport: true,
+    },
+    {
+      key: 'orders-fulfilled-over-time',
+      label: 'Orders Fulfilled Over Time',
+      defaultFilters: {
+        platform: ['all'],
+        dateRange: 'last_30_days',
+        region: 'all',
+        statuses: ['fulfilled'],
+      },
+      filterDefinitions: reportFilterDefinitionsByKey['orders-fulfilled-over-time'],
+      supportedPlatforms: ['all'],
+      supportsExport: true,
+    },
+    {
+      key: 'shipping-labels-over-time',
+      label: 'Shipping Labels Over Time',
+      defaultFilters: {
+        platform: ['all'],
+        dateRange: 'last_30_days',
+        region: 'all',
+      },
+      filterDefinitions: reportFilterDefinitionsByKey['shipping-labels-over-time'],
+      supportedPlatforms: ['shopify', 'amazon', 'woocommerce'],
+      supportsExport: true,
+    },
+    {
+      key: 'shipping-labels-by-order',
+      label: 'Shipping Labels by Order',
+      defaultFilters: {
+        platform: ['all'],
+        dateRange: 'last_30_days',
+        region: 'all',
+      },
+      filterDefinitions: reportFilterDefinitionsByKey['shipping-labels-by-order'],
+      supportedPlatforms: ['shopify', 'amazon', 'woocommerce'],
+      supportsExport: true,
+    },
+    {
+      key: 'items-bought-together',
+      label: 'Items Bought Together',
+      defaultFilters: {
+        platform: ['all'],
+        dateRange: 'last_90_days',
+        region: 'all',
+      },
+      filterDefinitions: reportFilterDefinitionsByKey['items-bought-together'],
+      supportedPlatforms: ['all'],
+      supportsExport: true,
     },
   ];
 
