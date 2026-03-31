@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BadRequestException } from '@nestjs/common';
+import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { ZodError } from 'zod';
 import { OrdersReportsController } from './orders-reports.controller';
 
@@ -224,4 +225,23 @@ test('invalid report key handling remains unchanged for run and export', async (
 
   assert.equal(runReportCalls.length, 0);
   assert.equal(exportReportCalls.length, 0);
+});
+
+
+test('controller routes use the canonical /orders/reports base path', () => {
+  assert.equal(Reflect.getMetadata(PATH_METADATA, OrdersReportsController), 'orders/reports');
+
+  const prototype = OrdersReportsController.prototype;
+
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, prototype.listReports), 'GET');
+  assert.equal(Reflect.getMetadata(PATH_METADATA, prototype.listReports), undefined);
+
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, prototype.runReport), 'POST');
+  assert.equal(Reflect.getMetadata(PATH_METADATA, prototype.runReport), ':key/run');
+
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, prototype.exportReport), 'POST');
+  assert.equal(Reflect.getMetadata(PATH_METADATA, prototype.exportReport), ':key/export');
+
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, prototype.getReportRun), 'GET');
+  assert.equal(Reflect.getMetadata(PATH_METADATA, prototype.getReportRun), ':key/runs/:runId');
 });
