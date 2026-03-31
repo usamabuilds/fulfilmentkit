@@ -9,6 +9,11 @@ export type ReportKey =
   | 'shipping-labels-over-time'
   | 'shipping-labels-by-order'
   | 'items-bought-together'
+  | 'sessions-acquisition-overview'
+  | 'conversion-funnel-storefront-events'
+  | 'shopify-fraud-internals'
+  | 'shopify-protect-internals'
+  | 'core-web-vitals-without-rum-connector'
 
 export type ReportPlatform = 'shopify' | 'amazon' | 'woocommerce' | 'all'
 
@@ -29,6 +34,8 @@ export type ReportBlockerClassification =
   | 'none'
   | 'not-implemented'
   | 'missing-input-data'
+  | 'needs-separate-tracking-system'
+  | 'needs-additional-connector-expansion'
   | 'shopify-scope-only'
   | 'deprecated'
   | 'not-documented'
@@ -210,6 +217,86 @@ export const reportCatalog: ReportDefinition[] = [
     },
     supportedPlatforms: ['all'],
     supportsExport: true,
+  },
+  {
+    key: 'sessions-acquisition-overview',
+    label: 'Sessions Acquisition Overview',
+    description: 'Acquisition sessions trend report that requires dedicated session tracking infrastructure.',
+    domain: 'attribution',
+    supportStatus: 'unsupported',
+    requiredCapabilities: ['session_tracking'],
+    blockerClassification: 'needs-separate-tracking-system',
+    defaultFilters: {
+      dateRange: 'last_30_days',
+      region: 'all',
+      status: 'all',
+    },
+    supportedPlatforms: ['all'],
+    supportsExport: false,
+  },
+  {
+    key: 'conversion-funnel-storefront-events',
+    label: 'Conversion Funnel (Storefront Events)',
+    description: 'Storefront funnel stages from visit to checkout completion using storefront event streams.',
+    domain: 'behavior',
+    supportStatus: 'unsupported',
+    requiredCapabilities: ['storefront_events', 'checkout_events'],
+    blockerClassification: 'needs-additional-connector-expansion',
+    defaultFilters: {
+      dateRange: 'last_30_days',
+      region: 'all',
+      status: 'all',
+    },
+    supportedPlatforms: ['shopify'],
+    supportsExport: false,
+  },
+  {
+    key: 'shopify-fraud-internals',
+    label: 'Shopify Fraud Internals',
+    description: 'Internal Shopify fraud signal report that is not exposed through public connector APIs.',
+    domain: 'fraud',
+    supportStatus: 'unsupported',
+    requiredCapabilities: ['shopify_fraud_internals'],
+    blockerClassification: 'needs-additional-connector-expansion',
+    defaultFilters: {
+      dateRange: 'last_30_days',
+      region: 'all',
+      status: 'all',
+    },
+    supportedPlatforms: ['shopify'],
+    supportsExport: false,
+  },
+  {
+    key: 'shopify-protect-internals',
+    label: 'Shopify Protect Internals',
+    description: 'Internal Shopify Protect coverage report that is not exposed via current public APIs.',
+    domain: 'fraud',
+    supportStatus: 'unsupported',
+    requiredCapabilities: ['shopify_protect_internals'],
+    blockerClassification: 'needs-additional-connector-expansion',
+    defaultFilters: {
+      dateRange: 'last_30_days',
+      region: 'all',
+      status: 'all',
+    },
+    supportedPlatforms: ['shopify'],
+    supportsExport: false,
+  },
+  {
+    key: 'core-web-vitals-without-rum-connector',
+    label: 'Core Web Vitals (No RUM Connector)',
+    description: 'Core Web Vitals diagnostics require a Real User Monitoring connector that is not configured.',
+    domain: 'behavior',
+    supportStatus: 'unsupported',
+    requiredCapabilities: ['core_web_vitals_rum'],
+    blockerClassification: 'needs-separate-tracking-system',
+    defaultFilters: {
+      dateRange: 'last_30_days',
+      region: 'all',
+      status: 'all',
+    },
+    supportedPlatforms: ['all'],
+    supportsExport: false,
   },
 ]
 
