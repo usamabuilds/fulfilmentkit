@@ -3,7 +3,17 @@ import { connectionPlatforms, type ConnectionPlatform } from '@/lib/api/endpoint
 import { useAuthStore } from '@/lib/store/authStore'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 
-export type ReportKey = 'sales-summary' | 'inventory-aging' | 'order-fulfillment-health'
+export type ReportKey =
+  | 'sales-summary'
+  | 'inventory-aging'
+  | 'order-fulfillment-health'
+  | 'orders-reversals-by-product'
+  | 'orders-over-time'
+  | 'shipping-delivery-performance'
+  | 'orders-fulfilled-over-time'
+  | 'shipping-labels-over-time'
+  | 'shipping-labels-by-order'
+  | 'items-bought-together'
 export type ReportPlatform = ConnectionPlatform | 'all'
 
 export type ReportFilterType = 'date-range' | 'select' | 'multi-select' | 'number' | 'text'
