@@ -4,6 +4,13 @@ import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ConnectionPlatform, Prisma } from '../../generated/prisma';
 
+function startOfUtcDay(d: Date): Date {
+  return new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0),
+  );
+}
+
+
 type HistoricalOrderPayload = {
   id?: string | number;
   order_id?: string | number;
@@ -114,7 +121,7 @@ export class ConnectionSyncWorker extends WorkerHost {
     }
 
     if (externalId) {
-      const customer = await (this.prisma.customer as any).upsert({
+      const customer = await ((this.prisma as any).customer as any).upsert({
         where: {
           workspaceId_externalId: {
             workspaceId: args.workspaceId,
@@ -134,7 +141,7 @@ export class ConnectionSyncWorker extends WorkerHost {
       return customer.id;
     }
 
-    const customer = await (this.prisma.customer as any).upsert({
+    const customer = await ((this.prisma as any).customer as any).upsert({
       where: {
         workspaceId_emailCanonical: {
           workspaceId: args.workspaceId,
@@ -323,6 +330,67 @@ export class ConnectionSyncWorker extends WorkerHost {
     }
   }
 
+
+  private async upsertInventorySnapshotForDay(args: {
+    workspaceId: string;
+    dayUtc: Date;
+    snapshotAt: Date;
+  }): Promise<void> {
+    const day = startOfUtcDay(args.dayUtc);
+
+    const inventoryRows = await (this.prisma.inventory.findMany as any)({
+      where: { workspaceId: args.workspaceId },
+      select: {
+        locationId: true,
+        productId: true,
+        onHand: true,
+        reserved: true,
+      },
+    });
+
+    if (inventoryRows.length === 0) {
+      this.logger.log(
+        `No inventory rows to snapshot at sync completion: workspaceId=${args.workspaceId} day=${day.toISOString()}`,
+      );
+      return;
+    }
+
+    await this.prisma.$transaction(
+      inventoryRows.map((row: any) =>
+        (this.prisma as any).inventorySnapshot.upsert({
+          where: {
+            workspaceId_locationId_productId_day: {
+              workspaceId: args.workspaceId,
+              locationId: row.locationId,
+              productId: row.productId,
+              day,
+            },
+          },
+          update: {
+            onHand: row.onHand,
+            reserved: row.reserved ?? 0,
+            available: row.onHand - (row.reserved ?? 0),
+            snapshotAt: args.snapshotAt,
+          },
+          create: {
+            workspaceId: args.workspaceId,
+            locationId: row.locationId,
+            productId: row.productId,
+            day,
+            snapshotAt: args.snapshotAt,
+            onHand: row.onHand,
+            reserved: row.reserved ?? 0,
+            available: row.onHand - (row.reserved ?? 0),
+          },
+        }),
+      ),
+    );
+
+    this.logger.log(
+      `InventorySnapshot upserted at sync completion: workspaceId=${args.workspaceId} day=${day.toISOString()} rows=${inventoryRows.length}`,
+    );
+  }
+
   async process(job: Job): Promise<void> {
     if (job.name !== 'sync:run_connection') return;
 
@@ -387,6 +455,12 @@ export class ConnectionSyncWorker extends WorkerHost {
       }
 
       const finishedAt = new Date();
+
+      await this.upsertInventorySnapshotForDay({
+        workspaceId,
+        dayUtc: finishedAt,
+        snapshotAt: finishedAt,
+      });
 
       await this.prisma.syncRun.update({
         where: { id: syncRunId, workspaceId },
