@@ -164,6 +164,70 @@ export class MetricsService {
   }
 
 
+  async upsertInventorySnapshotForDay(params: {
+    workspaceId: string;
+    dayUtc: Date;
+    snapshotAt?: Date;
+  }) {
+    const { workspaceId } = params;
+    const day = startOfUtcDay(params.dayUtc);
+    const snapshotAt = params.snapshotAt ?? new Date();
+
+    const inventoryRows = await (this.prisma.inventory.findMany as any)({
+      where: { workspaceId },
+      select: {
+        locationId: true,
+        productId: true,
+        onHand: true,
+        reserved: true,
+      },
+    });
+
+    if (inventoryRows.length === 0) {
+      this.logger.log(
+        `No inventory rows to snapshot: workspaceId=${workspaceId} day=${day.toISOString()}`,
+      );
+      return { upserted: 0 };
+    }
+
+    await this.prisma.$transaction(
+      inventoryRows.map((row: any) =>
+        (this.prisma as any).inventorySnapshot.upsert({
+          where: {
+            workspaceId_locationId_productId_day: {
+              workspaceId,
+              locationId: row.locationId,
+              productId: row.productId,
+              day,
+            },
+          },
+          update: {
+            onHand: row.onHand,
+            reserved: row.reserved ?? 0,
+            available: row.onHand - (row.reserved ?? 0),
+            snapshotAt,
+          },
+          create: {
+            workspaceId,
+            locationId: row.locationId,
+            productId: row.productId,
+            day,
+            snapshotAt,
+            onHand: row.onHand,
+            reserved: row.reserved ?? 0,
+            available: row.onHand - (row.reserved ?? 0),
+          },
+        }),
+      ),
+    );
+
+    this.logger.log(
+      `InventorySnapshot upserted: workspaceId=${workspaceId} day=${day.toISOString()} rows=${inventoryRows.length}`,
+    );
+
+    return { upserted: inventoryRows.length };
+  }
+
   async listDailyMetrics(params: {
     workspaceId: string;
     fromDay: Date;
@@ -288,7 +352,7 @@ export class MetricsService {
     // StockEnd: current onHand across all locations for the product (stable v1)
     const productIds = Array.from(perProduct.keys());
 
-    const inventoryRows = await this.prisma.inventory.findMany({
+    const inventoryRows = await (this.prisma.inventory.findMany as any)({
       where: {
         workspaceId,
         productId: { in: productIds },

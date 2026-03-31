@@ -51,6 +51,7 @@ model Workspace {
   aiConversations AiConversation[]
   fees            Fee[]
   inventory       Inventory[]
+  inventorySnapshots InventorySnapshot[]
   locations       Location[]
   orders          Order[]
   fulfillmentStatusEvents OrderFulfillmentStatusEvent[]
@@ -218,6 +219,7 @@ model Location {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   inventory   Inventory[]
+  inventorySnapshots InventorySnapshot[]
   orderItems  OrderItem[]
   workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -232,6 +234,7 @@ model Product {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   inventory       Inventory[]
+  inventorySnapshots InventorySnapshot[]
   orderItems      OrderItem[]
   skuDailyMetrics SkuDailyMetric[]
   forecasts       Forecast[]
@@ -254,6 +257,26 @@ model Inventory {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, locationId, productId])
+}
+
+
+model InventorySnapshot {
+  id          String    @id @default(uuid())
+  workspaceId String
+  locationId  String
+  productId   String
+  day         DateTime
+  snapshotAt  DateTime  @default(now())
+  onHand      Int
+  reserved    Int       @default(0)
+  available   Int
+  location    Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, locationId, productId, day])
+  @@index([workspaceId, day])
+  @@index([workspaceId, productId, day])
 }
 
 model Order {

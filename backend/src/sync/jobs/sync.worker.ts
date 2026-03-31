@@ -22,9 +22,16 @@ export class MetricsWorker extends WorkerHost {
         `Starting metrics computation for workspace=${workspaceId} day=${dayUtc}`,
       );
 
+      const day = new Date(dayUtc);
+
       await this.metricsService.computeDailyMetric({
         workspaceId,
-        dayUtc: new Date(dayUtc),
+        dayUtc: day,
+      });
+
+      await this.metricsService.upsertInventorySnapshotForDay({
+        workspaceId,
+        dayUtc: day,
       });
 
       this.logger.log(
@@ -50,5 +57,22 @@ export class MetricsWorker extends WorkerHost {
 
       return;
     }
+    if (job.name === 'metrics:upsert_inventory_snapshot') {
+      this.logger.log(
+        `Starting inventory snapshot upsert for workspace=${workspaceId} day=${dayUtc}`,
+      );
+
+      await this.metricsService.upsertInventorySnapshotForDay({
+        workspaceId,
+        dayUtc: new Date(dayUtc),
+      });
+
+      this.logger.log(
+        `Completed inventory snapshot upsert for workspace=${workspaceId} day=${dayUtc}`,
+      );
+
+      return;
+    }
+
   }
 }
