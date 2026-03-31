@@ -30,6 +30,13 @@ type HistoricalOrderPayload = {
   fulfillment_events?: Array<Record<string, unknown>>;
   shipping_labels?: Array<Record<string, unknown>>;
   shipping_label_purchases?: Array<Record<string, unknown>>;
+  customer?: {
+    id?: string | number;
+    email?: string;
+  };
+  customer_id?: string | number;
+  customerId?: string | number;
+  email?: string;
 };
 
 @Processor('sync') // queue name (no colons)
@@ -86,6 +93,66 @@ export class ConnectionSyncWorker extends WorkerHost {
     return null;
   }
 
+  private normalizeEmailCanonical(value: unknown): string | null {
+    const email = this.asNonEmptyString(value);
+    return email ? email.toLowerCase() : null;
+  }
+
+  private async resolveCustomerId(args: {
+    workspaceId: string;
+    payload: HistoricalOrderPayload;
+  }): Promise<string | null> {
+    const externalId =
+      this.normalizeExternalIdentifier(args.payload.customer?.id) ??
+      this.normalizeExternalIdentifier(args.payload.customer_id) ??
+      this.normalizeExternalIdentifier(args.payload.customerId);
+    const emailCanonical =
+      this.normalizeEmailCanonical(args.payload.customer?.email) ?? this.normalizeEmailCanonical(args.payload.email);
+
+    if (!externalId && !emailCanonical) {
+      return null;
+    }
+
+    if (externalId) {
+      const customer = await (this.prisma.customer as any).upsert({
+        where: {
+          workspaceId_externalId: {
+            workspaceId: args.workspaceId,
+            externalId,
+          },
+        },
+        update: emailCanonical ? { emailCanonical } : {},
+        create: {
+          workspaceId: args.workspaceId,
+          externalId,
+          emailCanonical,
+        },
+        select: {
+          id: true,
+        },
+      });
+      return customer.id;
+    }
+
+    const customer = await (this.prisma.customer as any).upsert({
+      where: {
+        workspaceId_emailCanonical: {
+          workspaceId: args.workspaceId,
+          emailCanonical,
+        },
+      },
+      update: {},
+      create: {
+        workspaceId: args.workspaceId,
+        emailCanonical,
+      },
+      select: {
+        id: true,
+      },
+    });
+    return customer.id;
+  }
+
   private async createDataAvailabilityMarker(args: {
     workspaceId: string;
     platform: ConnectionPlatform;
@@ -130,6 +197,7 @@ export class ConnectionSyncWorker extends WorkerHost {
 
     const orderedAt = this.asDate(payload.created_at ?? payload.ordered_at ?? payload.orderedAt);
     const currency = this.asNonEmptyString(payload.currency) ?? 'USD';
+    const customerId = await this.resolveCustomerId({ workspaceId, payload });
 
     const order = await (this.prisma.order as any).upsert({
       where: {
@@ -142,6 +210,7 @@ export class ConnectionSyncWorker extends WorkerHost {
         orderNumber: this.asNonEmptyString(payload.order_number ?? payload.number ?? payload.name),
         status,
         channel: platform.toLowerCase(),
+        customerId,
         orderedAt,
         currency,
         subtotal: this.toDecimal(payload.subtotal_price ?? payload.subtotal ?? 0),
@@ -157,6 +226,7 @@ export class ConnectionSyncWorker extends WorkerHost {
         orderNumber: this.asNonEmptyString(payload.order_number ?? payload.number ?? payload.name),
         status,
         channel: platform.toLowerCase(),
+        customerId,
         orderedAt,
         currency,
         subtotal: this.toDecimal(payload.subtotal_price ?? payload.subtotal ?? 0),

@@ -56,6 +56,7 @@ model Workspace {
   fulfillmentStatusEvents OrderFulfillmentStatusEvent[]
   shippingLabelPurchases  OrderShippingLabelPurchase[]
   products        Product[]
+  customers       Customer[]
   refunds         Refund[]
   members         WorkspaceMember[]
   dailyMetrics    DailyMetric[]
@@ -258,6 +259,7 @@ model Inventory {
 model Order {
   id          String      @id @default(uuid())
   workspaceId String
+  customerId  String?
   externalRef String
   orderNumber String?
   status      String
@@ -273,12 +275,30 @@ model Order {
   updatedAt   DateTime    @updatedAt
   fees        Fee[]
   workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  customer    Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
   items       OrderItem[]
   refunds     Refund[]
   fulfillmentStatusEvents OrderFulfillmentStatusEvent[]
   shippingLabelPurchases  OrderShippingLabelPurchase[]
 
   @@unique([workspaceId, externalRef])
+  @@index([workspaceId, customerId])
+  @@index([workspaceId, customerId, orderedAt])
+}
+
+model Customer {
+  id             String    @id @default(uuid())
+  workspaceId    String
+  externalId     String?
+  emailCanonical String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  orders         Order[]
+
+  @@unique([workspaceId, externalId])
+  @@unique([workspaceId, emailCanonical])
+  @@index([workspaceId, createdAt])
 }
 
 model OrderFulfillmentStatusEvent {
