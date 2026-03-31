@@ -127,6 +127,47 @@ test('runReport executes each implemented report query method', async () => {
   }
 });
 
+test('runReport returns deterministic support metadata with zero rows for unsupported reports', async () => {
+  const service = createService();
+
+  const run = await service.runReport({
+    workspaceId: 'ws-1',
+    key: 'sales-summary',
+    filters: {},
+  });
+
+  assert.equal(run.status, 'completed');
+  assert.equal(run.output.rows, 0);
+  assert.deepEqual(run.output.chartRows, []);
+  assert.equal(
+    run.output.summary,
+    'Sales Summary is not currently implemented for last_30_days.',
+  );
+  assert.equal(run.output.supportStatus, 'unsupported');
+  assert.equal(
+    run.output.supportReason,
+    'Execution is not implemented yet; this key currently returns a placeholder summary with no computed rows.',
+  );
+});
+
+test('runReport returns caveat for partial reports when unsupported mode is requested', async () => {
+  const service = createService();
+
+  const run = await service.runReport({
+    workspaceId: 'ws-1',
+    key: 'items-bought-together',
+    filters: {
+      itemGroupingLevel: 'variant',
+    },
+  });
+
+  assert.equal(run.status, 'completed');
+  assert.equal(run.output.rows, 0);
+  assert.equal(run.output.supportStatus, 'partial');
+  assert.ok(typeof run.output.caveat === 'string' && run.output.caveat.length > 0);
+  assert.match(run.output.summary, /unsupported\/disabled/i);
+});
+
 test('exportReport returns metadata-only output when rows are empty', async () => {
   const service = createService();
 

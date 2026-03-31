@@ -9,15 +9,42 @@ function createController() {
   const listReportsResult = [
     {
       key: 'sales-summary',
-      title: 'Sales summary',
+      label: 'Sales Summary',
+      supportStatus: 'unsupported',
+      supportReason: 'Execution is not implemented yet.',
+      requiredFeatures: ['sales-summary-report-runner'],
+      defaultFilters: {
+        platform: ['all'],
+      },
+      filterDefinitions: {},
+      supportedPlatforms: ['all'],
+      supportsExport: true,
     },
     {
       key: 'orders-over-time',
-      title: 'Orders over time',
+      label: 'Orders Over Time',
+      supportStatus: 'supported',
+      requiredFeatures: ['orders-over-time-report-runner'],
+      defaultFilters: {
+        platform: ['all'],
+      },
+      filterDefinitions: {},
+      supportedPlatforms: ['all'],
+      supportsExport: true,
     },
     {
       key: 'items-bought-together',
-      title: 'Items bought together',
+      label: 'Items Bought Together',
+      supportStatus: 'partial',
+      supportReason: 'Variant grouping mode is currently unavailable.',
+      requiredFeatures: ['items-bought-together-report-runner', 'order-item-variant-identifiers'],
+      defaultFilters: {
+        platform: ['all'],
+        itemGroupingLevel: 'product',
+      },
+      filterDefinitions: {},
+      supportedPlatforms: ['all'],
+      supportsExport: true,
     },
   ];
 
@@ -26,9 +53,22 @@ function createController() {
   const getRunCalls: Array<Record<string, unknown>> = [];
 
   const runReportResult = {
-    runId: 'run-1',
-    key: 'sales-summary',
+    id: 'run-1',
+    reportKey: 'sales-summary',
     status: 'completed',
+    filters: {
+      platform: ['shopify'],
+      minRevenue: 10,
+    },
+    output: {
+      rows: 0,
+      summary: 'Sales Summary is not currently implemented for last_30_days.',
+      caveat: 'Execution is not implemented yet.',
+      supportStatus: 'unsupported',
+      supportReason: 'Execution is not implemented yet.',
+      generatedAt: '2026-03-31T00:00:00.000Z',
+    },
+    createdAt: '2026-03-31T00:00:00.000Z',
   };
 
   const exportResult = {
@@ -39,11 +79,7 @@ function createController() {
     message: 'ok',
   };
 
-  const getRunResult = {
-    runId: 'run-1',
-    key: 'sales-summary',
-    status: 'completed',
-  };
+  const getRunResult = runReportResult;
 
   const salesSummaryFilterDefinitionMap = {
     platform: {
@@ -128,6 +164,16 @@ test('listReports returns same report definitions in standard success envelope',
   assert.equal(response.data.total, listReportsResult.length);
   assert.equal(response.data.page, 1);
   assert.equal(response.data.pageSize, listReportsResult.length);
+  assert.deepEqual(
+    response.data.items.map((item) => ({ key: item.key, supportStatus: item.supportStatus })),
+    [
+      { key: 'sales-summary', supportStatus: 'unsupported' },
+      { key: 'orders-over-time', supportStatus: 'supported' },
+      { key: 'items-bought-together', supportStatus: 'partial' },
+    ],
+  );
+  assert.equal(response.data.items[0].supportReason, 'Execution is not implemented yet.');
+  assert.equal(response.data.items[2].supportReason, 'Variant grouping mode is currently unavailable.');
 });
 
 test('runReport validates payload and returns run payload in response envelope', async () => {
