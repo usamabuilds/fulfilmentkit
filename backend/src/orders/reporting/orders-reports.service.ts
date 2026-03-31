@@ -1,13 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   buildMetadataEntries as buildReportMetadataEntries,
   buildWorkbookXml as buildReportWorkbookXml,
   formatFileNameTimestamp as formatReportFileNameTimestamp,
 } from './report-export.builder';
-import {
-  getPlatformMatchRatio as getReportPlatformMatchRatio,
-  normalizePlatformFilter as normalizeReportPlatformFilter,
-} from './report-platform.utils';
+import { normalizePlatformFilter as normalizeReportPlatformFilter } from './report-platform.utils';
 
 export type ReportKey =
   | 'sales-summary'
@@ -818,6 +816,8 @@ export class OrdersReportsService {
 
   private readonly runsByWorkspace = new Map<string, ReportRunRecord[]>();
 
+  constructor(private readonly prisma: PrismaService) {}
+
   listReports() {
     return this.reports;
   }
@@ -830,7 +830,7 @@ export class OrdersReportsService {
     return reportFilterDefinitionsByKey[key];
   }
 
-  runReport<K extends ReportKey>(input: RunReportInput<K>) {
+  async runReport<K extends ReportKey>(input: RunReportInput<K>) {
     const report = this.reports.find((item) => item.key === input.key);
 
     if (!report) {
@@ -844,6 +844,8 @@ export class OrdersReportsService {
     const normalizedPlatformFilters = this.normalizePlatformFilter(report.key, normalizedFilters.platform);
     normalizedFilters.platform = normalizedPlatformFilters as ReportFiltersByKey[K]['platform'];
 
+    const reportOutput = await this.buildReportOutput(report.key, input.workspaceId, normalizedFilters);
+
     const run: ReportRunRecord = {
       id: `run_${Date.now().toString(36)}`,
       workspaceId: input.workspaceId,
@@ -851,8 +853,8 @@ export class OrdersReportsService {
       filters: normalizedFilters,
       status: 'completed',
       output: {
-        rows: this.estimateRowsForReport(report.key, normalizedFilters),
-        summary: `${report.label} generated for ${normalizedFilters.dateRange}`,
+        rows: reportOutput.rows,
+        summary: reportOutput.summary,
         generatedAt: new Date().toISOString(),
       },
       createdAt: new Date(),
@@ -897,7 +899,7 @@ export class OrdersReportsService {
   }
 
   async exportReport<K extends ReportKey>(input: ExportReportInput<K>): Promise<ExportedReport> {
-    const run = this.runReport(input);
+    const run = await this.runReport(input);
     const reportRows = this.generateRowsForExport(input.key, run.output.rows);
     const exportedAt = new Date();
     const metadataEntries = this.buildMetadataEntries({
@@ -931,37 +933,180 @@ export class OrdersReportsService {
     };
   }
 
-  private estimateRowsForReport(key: ReportKey, filters: ReportFiltersByKey[ReportKey]): number {
-    const platformMatchRatio = this.getPlatformMatchRatio(key, filters.platform);
-
+  private async buildReportOutput(
+    key: ReportKey,
+    workspaceId: string,
+    filters: ReportFiltersByKey[ReportKey],
+  ): Promise<{ rows: number; summary: string }> {
     switch (key) {
-      case 'sales-summary': {
-        const typedFilters = filters as ReportFiltersByKey['sales-summary'];
-        if (typedFilters.searchTerm.toLowerCase() === 'no-results') {
-          return 0;
-        }
-
-        return typedFilters.minRevenue > 100_000 ? 0 : Math.round(48 * platformMatchRatio);
+      case 'orders-reversals-by-product':
+        return this.runOrdersReversalsByProduct(
+          workspaceId,
+          filters as ReportFiltersByKey['orders-reversals-by-product'],
+        );
+      case 'orders-over-time':
+        return this.runOrdersOverTime(workspaceId, filters as ReportFiltersByKey['orders-over-time']);
+      case 'items-bought-together':
+        return this.runItemsBoughtTogether(
+          workspaceId,
+          filters as ReportFiltersByKey['items-bought-together'],
+        );
+      default: {
+        return {
+          rows: 0,
+          summary: `${key} generated for ${(filters as ReportFiltersByKey['sales-summary']).dateRange}`,
+        };
       }
-      case 'inventory-aging': {
-        const typedFilters = filters as ReportFiltersByKey['inventory-aging'];
-        if (typedFilters.skuContains.toLowerCase() === 'no-results') {
-          return 0;
-        }
-
-        return typedFilters.minOnHand > 25_000 ? 0 : Math.round(112 * platformMatchRatio);
-      }
-      case 'order-fulfillment-health': {
-        const typedFilters = filters as ReportFiltersByKey['order-fulfillment-health'];
-        if (typedFilters.carrierQuery.toLowerCase() === 'no-results') {
-          return 0;
-        }
-
-        return typedFilters.maxLateShipRate < 3 ? 0 : Math.round(32 * platformMatchRatio);
-      }
-      default:
-        return 0;
     }
+  }
+
+  private async runOrdersReversalsByProduct(
+    workspaceId: string,
+    filters: ReportFiltersByKey['orders-reversals-by-product'],
+  ): Promise<{ rows: number; summary: string }> {
+    const where = this.buildOrderWhereInput(workspaceId, filters);
+    const refundedOrderIds = await this.prisma.refund.findMany({
+      where: {
+        workspaceId,
+        order: where,
+      },
+      distinct: ['orderId'],
+      select: { orderId: true },
+    });
+
+    if (refundedOrderIds.length === 0) {
+      return { rows: 0, summary: 'No reversed products found for the selected filters.' };
+    }
+
+    const refundedOrderIdList = refundedOrderIds
+      .map((item) => item.orderId)
+      .filter((orderId): orderId is string => typeof orderId === 'string');
+
+    const grouped = await this.prisma.orderItem.groupBy({
+      by: ['productId'],
+      where: {
+        orderId: { in: refundedOrderIdList },
+        order: { workspaceId },
+      },
+      _sum: { quantity: true },
+    });
+
+    const reversedUnits = grouped.reduce((sum, item) => sum + (item._sum?.quantity ?? 0), 0);
+
+    return {
+      rows: grouped.length,
+      summary: `${grouped.length} products with ${reversedUnits} reversed units in ${filters.dateRange}.`,
+    };
+  }
+
+  private async runOrdersOverTime(
+    workspaceId: string,
+    filters: ReportFiltersByKey['orders-over-time'],
+  ): Promise<{ rows: number; summary: string }> {
+    const where = this.buildOrderWhereInput(workspaceId, filters);
+    const orders = await this.prisma.order.findMany({
+      where,
+      select: { orderedAt: true, createdAt: true },
+    });
+
+    const buckets = new Set<string>();
+    for (const order of orders) {
+      const sourceDate = order.orderedAt ?? order.createdAt;
+      const day = sourceDate.toISOString().slice(0, 10);
+      buckets.add(day);
+    }
+
+    return {
+      rows: buckets.size,
+      summary: `${orders.length} orders across ${buckets.size} time buckets in ${filters.dateRange}.`,
+    };
+  }
+
+  private async runItemsBoughtTogether(
+    workspaceId: string,
+    filters: ReportFiltersByKey['items-bought-together'],
+  ): Promise<{ rows: number; summary: string }> {
+    const where = this.buildOrderWhereInput(workspaceId, filters);
+    const orders = await this.prisma.order.findMany({
+      where,
+      select: {
+        items: {
+          select: { productId: true },
+          distinct: ['productId'],
+        },
+      },
+    });
+
+    const pairCounts = new Map<string, number>();
+    for (const order of orders) {
+      const productIds = order.items.map((item) => item.productId).sort();
+      for (let i = 0; i < productIds.length; i += 1) {
+        for (let j = i + 1; j < productIds.length; j += 1) {
+          const pairKey = `${productIds[i]}:${productIds[j]}`;
+          pairCounts.set(pairKey, (pairCounts.get(pairKey) ?? 0) + 1);
+        }
+      }
+    }
+
+    return {
+      rows: pairCounts.size,
+      summary: `${pairCounts.size} product pairs found across ${orders.length} orders in ${filters.dateRange}.`,
+    };
+  }
+
+  private buildOrderWhereInput(
+    workspaceId: string,
+    filters: {
+      platform: ReportPlatform[];
+      dateRange: DateRangePreset;
+      region: RegionOption;
+      statuses?: OrderStatusOption[];
+    },
+  ) {
+    const dateRange = this.getDateRangeStart(filters.dateRange);
+    const where: {
+      workspaceId: string;
+      OR: Array<{ orderedAt: { gte: Date } } | { orderedAt: null; createdAt: { gte: Date } }>;
+      channel?: { in: string[] };
+      shipCountryCode?: { in: string[] };
+      status?: { in: string[] };
+    } = {
+      workspaceId,
+      OR: [{ orderedAt: { gte: dateRange } }, { orderedAt: null, createdAt: { gte: dateRange } }],
+    };
+
+    const normalizedPlatforms = filters.platform.filter((platform) => platform !== 'all');
+    if (normalizedPlatforms.length > 0) {
+      where.channel = { in: normalizedPlatforms };
+    }
+
+    const regionCountryCodes: Record<Exclude<RegionOption, 'all'>, string[]> = {
+      na: ['US', 'CA', 'MX'],
+      eu: ['GB', 'DE', 'FR', 'ES', 'IT', 'NL'],
+      apac: ['AU', 'NZ', 'JP', 'SG'],
+    };
+    if (filters.region !== 'all') {
+      where.shipCountryCode = { in: regionCountryCodes[filters.region] };
+    }
+
+    if (filters.statuses && !filters.statuses.includes('all')) {
+      where.status = { in: filters.statuses };
+    }
+
+    return where;
+  }
+
+  private getDateRangeStart(dateRange: DateRangePreset): Date {
+    const now = new Date();
+    const daysBackByRange: Record<DateRangePreset, number> = {
+      last_7_days: 7,
+      last_14_days: 14,
+      last_30_days: 30,
+      last_90_days: 90,
+    };
+    const daysBack = daysBackByRange[dateRange];
+
+    return new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000);
   }
 
   private generateRowsForExport(reportKey: ReportKey, rowCount: number): Array<Record<string, string | number>> {
@@ -1008,7 +1153,4 @@ export class OrdersReportsService {
     return normalizeReportPlatformFilter(key, rawValue, this.reports, reportPlatforms);
   }
 
-  private getPlatformMatchRatio(key: ReportKey, selectedPlatforms: ReportPlatform[]): number {
-    return getReportPlatformMatchRatio(key, selectedPlatforms, this.reports, reportPlatforms);
-  }
 }
