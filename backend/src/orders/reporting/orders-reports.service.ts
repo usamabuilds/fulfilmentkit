@@ -32,6 +32,7 @@ export const reportPlatforms = [
 export type ReportPlatform = (typeof reportPlatforms)[number] | 'all';
 
 export type DateRangePreset = 'last_7_days' | 'last_14_days' | 'last_30_days' | 'last_90_days';
+export type TimeGroupingOption = 'hour' | 'day' | 'week' | 'month';
 export type OrderStatusOption = 'all' | 'open' | 'fulfilled' | 'cancelled';
 export type RegionOption = 'all' | 'na' | 'eu' | 'apac';
 export type AgingBucketOption = 'all' | '0_30' | '31_60' | '61_90' | '90_plus';
@@ -363,6 +364,17 @@ export const reportFilterDefinitionsByKey: Record<ReportKey, ReportFilterDefinit
         { value: 'apac', label: 'APAC' },
       ],
     },
+    groupBy: {
+      label: 'Group by',
+      type: 'select',
+      default: 'day',
+      options: [
+        { value: 'hour', label: 'Hour' },
+        { value: 'day', label: 'Day' },
+        { value: 'week', label: 'Week' },
+        { value: 'month', label: 'Month' },
+      ],
+    },
   },
   'shipping-delivery-performance': {
     platform: {
@@ -593,6 +605,7 @@ export type ReportFiltersByKey = {
     platform: ReportPlatform[];
     dateRange: DateRangePreset;
     region: RegionOption;
+    groupBy: TimeGroupingOption;
   };
   'shipping-delivery-performance': {
     platform: ReportPlatform[];
@@ -640,6 +653,7 @@ type ReportRunRecord = {
   output: {
     rows: number;
     summary: string;
+    chartRows?: Array<Record<string, string | number>>;
     generatedAt: string;
   };
   createdAt: Date;
@@ -746,6 +760,7 @@ export class OrdersReportsService {
         platform: ['all'],
         dateRange: 'last_30_days',
         region: 'all',
+        groupBy: 'day',
       },
       filterDefinitions: reportFilterDefinitionsByKey['orders-over-time'],
       supportedPlatforms: ['all'],
@@ -855,6 +870,7 @@ export class OrdersReportsService {
       output: {
         rows: reportOutput.rows,
         summary: reportOutput.summary,
+        chartRows: reportOutput.chartRows,
         generatedAt: new Date().toISOString(),
       },
       createdAt: new Date(),
@@ -900,7 +916,7 @@ export class OrdersReportsService {
 
   async exportReport<K extends ReportKey>(input: ExportReportInput<K>): Promise<ExportedReport> {
     const run = await this.runReport(input);
-    const reportRows = this.generateRowsForExport(input.key, run.output.rows);
+    const reportRows = this.generateRowsForExport(input.key, run.output.rows, run.output.chartRows);
     const exportedAt = new Date();
     const metadataEntries = this.buildMetadataEntries({
       workspaceId: input.workspaceId,
@@ -937,7 +953,7 @@ export class OrdersReportsService {
     key: ReportKey,
     workspaceId: string,
     filters: ReportFiltersByKey[ReportKey],
-  ): Promise<{ rows: number; summary: string }> {
+  ): Promise<{ rows: number; summary: string; chartRows?: Array<Record<string, string | number>> }> {
     switch (key) {
       case 'orders-reversals-by-product':
         return this.runOrdersReversalsByProduct(
@@ -963,7 +979,7 @@ export class OrdersReportsService {
   private async runOrdersReversalsByProduct(
     workspaceId: string,
     filters: ReportFiltersByKey['orders-reversals-by-product'],
-  ): Promise<{ rows: number; summary: string }> {
+  ): Promise<{ rows: number; summary: string; chartRows?: Array<Record<string, string | number>> }> {
     const where = this.buildOrderWhereInput(workspaceId, filters);
     const refundedOrderIds = await this.prisma.refund.findMany({
       where: {
@@ -1002,23 +1018,108 @@ export class OrdersReportsService {
   private async runOrdersOverTime(
     workspaceId: string,
     filters: ReportFiltersByKey['orders-over-time'],
-  ): Promise<{ rows: number; summary: string }> {
+  ): Promise<{ rows: number; summary: string; chartRows?: Array<Record<string, string | number>> }> {
     const where = this.buildOrderWhereInput(workspaceId, filters);
     const orders = await this.prisma.order.findMany({
       where,
-      select: { orderedAt: true, createdAt: true },
+      select: {
+        orderedAt: true,
+        createdAt: true,
+        total: true,
+        items: {
+          select: {
+            quantity: true,
+          },
+        },
+        refunds: {
+          select: {
+            amount: true,
+          },
+        },
+      },
     });
 
-    const buckets = new Set<string>();
-    for (const order of orders) {
-      const sourceDate = order.orderedAt ?? order.createdAt;
-      const day = sourceDate.toISOString().slice(0, 10);
-      buckets.add(day);
+    if (orders.length === 0) {
+      return {
+        rows: 0,
+        chartRows: [],
+        summary: `No orders found in ${filters.dateRange} (${filters.groupBy} grouping).`,
+      };
     }
 
+    const buckets = new Map<
+      string,
+      {
+        periodStart: Date;
+        ordersCount: number;
+        unitsTotal: number;
+        grossOrderValueTotal: number;
+        returnedUnits: number;
+        returnedAmount: number;
+      }
+    >();
+
+    for (const order of orders) {
+      const sourceDate = order.orderedAt ?? order.createdAt;
+      const periodStart = this.normalizeToPeriodStart(sourceDate, filters.groupBy);
+      const key = periodStart.toISOString();
+      const existing =
+        buckets.get(key) ??
+        ({
+          periodStart,
+          ordersCount: 0,
+          unitsTotal: 0,
+          grossOrderValueTotal: 0,
+          returnedUnits: 0,
+          returnedAmount: 0,
+        } satisfies {
+          periodStart: Date;
+          ordersCount: number;
+          unitsTotal: number;
+          grossOrderValueTotal: number;
+          returnedUnits: number;
+          returnedAmount: number;
+        });
+      existing.ordersCount += 1;
+      existing.unitsTotal += order.items.reduce((sum, item) => sum + item.quantity, 0);
+      existing.grossOrderValueTotal += Number(order.total);
+      const orderReturnedAmount = order.refunds.reduce((sum, refund) => sum + Number(refund.amount), 0);
+      existing.returnedAmount += orderReturnedAmount;
+      if (orderReturnedAmount > 0) {
+        existing.returnedUnits += order.items.reduce((sum, item) => sum + item.quantity, 0);
+      }
+      buckets.set(key, existing);
+    }
+
+    const chartRows = Array.from(buckets.values())
+      .sort((a, b) => a.periodStart.getTime() - b.periodStart.getTime())
+      .map((bucket) => ({
+        periodStart: bucket.periodStart.toISOString(),
+        periodLabel: this.formatPeriodLabel(bucket.periodStart, filters.groupBy),
+        ordersCount: bucket.ordersCount,
+        averageUnitsPerOrder:
+          bucket.ordersCount > 0 ? Number((bucket.unitsTotal / bucket.ordersCount).toFixed(2)) : 0,
+        averageOrderValue:
+          bucket.ordersCount > 0
+            ? Number((bucket.grossOrderValueTotal / bucket.ordersCount).toFixed(2))
+            : 0,
+        returnedUnits: bucket.returnedUnits,
+        returnedAmount: Number(bucket.returnedAmount.toFixed(2)),
+      }));
+
+    const refundedAmountTotal = chartRows.reduce(
+      (sum, row) => sum + (typeof row.returnedAmount === 'number' ? row.returnedAmount : 0),
+      0,
+    );
+    const returnedUnitsTotal = chartRows.reduce(
+      (sum, row) => sum + (typeof row.returnedUnits === 'number' ? row.returnedUnits : 0),
+      0,
+    );
+
     return {
-      rows: buckets.size,
-      summary: `${orders.length} orders across ${buckets.size} time buckets in ${filters.dateRange}.`,
+      rows: chartRows.length,
+      chartRows,
+      summary: `${orders.length} orders across ${chartRows.length} ${filters.groupBy} buckets in ${filters.dateRange}. Returned units: ${returnedUnitsTotal}. Refunded amount: ${refundedAmountTotal.toFixed(2)}.`,
     };
   }
 
@@ -1109,7 +1210,15 @@ export class OrdersReportsService {
     return new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000);
   }
 
-  private generateRowsForExport(reportKey: ReportKey, rowCount: number): Array<Record<string, string | number>> {
+  private generateRowsForExport(
+    reportKey: ReportKey,
+    rowCount: number,
+    chartRows?: Array<Record<string, string | number>>,
+  ): Array<Record<string, string | number>> {
+    if (chartRows && chartRows.length > 0) {
+      return chartRows;
+    }
+
     if (rowCount <= 0) {
       return [];
     }
@@ -1151,6 +1260,41 @@ export class OrdersReportsService {
 
   private normalizePlatformFilter(key: ReportKey, rawValue: ReportPlatform[] | ReportPlatform): ReportPlatform[] {
     return normalizeReportPlatformFilter(key, rawValue, this.reports, reportPlatforms);
+  }
+
+  private normalizeToPeriodStart(value: Date, groupBy: TimeGroupingOption): Date {
+    const year = value.getUTCFullYear();
+    const month = value.getUTCMonth();
+    const day = value.getUTCDate();
+    const hour = value.getUTCHours();
+
+    if (groupBy === 'hour') {
+      return new Date(Date.UTC(year, month, day, hour));
+    }
+    if (groupBy === 'day') {
+      return new Date(Date.UTC(year, month, day));
+    }
+    if (groupBy === 'month') {
+      return new Date(Date.UTC(year, month, 1));
+    }
+
+    const dayOfWeek = value.getUTCDay();
+    const daysFromMonday = (dayOfWeek + 6) % 7;
+    return new Date(Date.UTC(year, month, day - daysFromMonday));
+  }
+
+  private formatPeriodLabel(value: Date, groupBy: TimeGroupingOption): string {
+    const iso = value.toISOString();
+    if (groupBy === 'hour') {
+      return iso.slice(0, 13) + ':00';
+    }
+    if (groupBy === 'day') {
+      return iso.slice(0, 10);
+    }
+    if (groupBy === 'month') {
+      return iso.slice(0, 7);
+    }
+    return `week_of_${iso.slice(0, 10)}`;
   }
 
 }
