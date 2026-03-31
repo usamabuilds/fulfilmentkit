@@ -1,0 +1,57 @@
+# Fraud
+
+```text
+CATEGORY: Fraud
+
+Report                        Purpose                             Data Source                      Key Metrics & Fields                      Filters & Dimensions                 How It Runs                   Calculation Logic               Limitations / Caveats
+
+
+Acceptance rate               Percentage of total orders not      Orders with fraud analysis       Acceptance rate (% of orders not          No filters (fraud reports can’t be   Data updates regularly when   Acceptance rate = accepted      Requires use of fraud
+                              flagged as high‑risk                (Shopify or third‑party).        flagged high risk); number of             customized)                          new orders processed.         orders ÷ total orders.          analysis; high‑risk orders
+                              【699502019967685†L76-                                                accepted orders; number of high‑risk      【699502019967685†L76-                                                                              flagged by Shopify or
+                              L92】. Measures how many                                              orders.                                   L92】.                                                                                              apps.
+                              orders pass fraud checks.
+
+
+Chargeback rate (fraud)       Percentage of total payments        Payment transactions and         Chargeback rate (fraud); number of        None (no customization).             Updates when chargebacks      Chargeback rate =               Only includes
+                              where the chargeback reason         chargeback records.              fraudulent chargebacks; total                                                  occur.                        fraudulent chargebacks ÷        chargebacks classified as
+                              is Fraudulent                                                        payments.                                                                                                    total payments.                 fraud.
+                              【699502019967685†L76-
+                              L92】.
+
+
+                              Total value of payments with        Payment transactions.                                                      None.
+                              fraud‑related chargebacks
+
+
+[PAGE BREAK]
+
+Report                     Purpose                            Data Source                    Key Metrics & Fields                       Filters & Dimensions               How It Runs                       Calculation Logic               Limitations / Caveats
+
+Chargeback amount          【699502019967685†L76-                                             Amount of fraudulent chargebacks;                                             Real‑time when chargebacks        Sum of amounts disputed as      Excludes non‑fraud
+(fraud)                    L92】.                                                             average chargeback amount.                                                    processed.                        fraud.                          chargebacks.
+
+
+High risk orders rate      Percentage of orders flagged       Order risk assessments.        High‑risk order rate; number of            None.                              Real‑time.                        Rate = high‑risk orders ÷       Depends on Shopify’s risk
+                           as high‑risk by Shopify’s fraud                                   high‑risk orders; total orders.                                                                                 total orders.                   algorithm; may change.
+                           analysis
+                           【699502019967685†L76-
+                           L92】.
+
+
+Canceled due to fraud      Value of total orders cancelled    Cancelled orders flagged as    Total value of cancelled orders;           None.                              Updates when orders are           Sum of order values where       Only cancellations flagged
+                           due to suspected fraud             high‑risk.                     number of cancelled orders.                                                   cancelled.                        cancellations were due to       as fraud counted.
+                           【699502019967685†L76-                                                                                                                                                             fraud.
+                           L92】.
+
+
+Chargeback rate            Overall chargeback rate across     Payment transactions.          Chargeback rate; number of                 None.                              Real‑time.                        Rate = total chargebacks ÷      Doesn’t distinguish fraud
+(overall)                  all reasons.                                                      chargebacks; total payments.                                                                                    total payments.                 vs other reasons.
+
+
+
+Orders covered by          Shows orders eligible and          Orders processed through       Number of protected orders; total          None.                              Real‑time.                        N/A (reporting counts           Only available for
+Shopify Protect / Orders   covered by Shopify Protect;        Shopify Payments and           value; number of orders declined                                                                                orders).                        merchants using Shopify
+protected by Shopify       helps merchants using Shopify      meeting protection criteria.   coverage.                                                                                                                                       Protect.
+Protect                    Protect.
+```

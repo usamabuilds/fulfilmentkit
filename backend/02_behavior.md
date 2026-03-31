@@ -1,0 +1,104 @@
+# Behavior
+
+```text
+CATEGORY: Behavior
+
+  Report                      Purpose                             Data Source                    Key Metrics & Fields                     Filters & Dimensions                 How It Runs                        Calculation Logic               Limitations / Caveats
+
+
+  Conversion rate             Visual funnel of sessions with      Online store sessions and      Sessions; sessions with cart             Filters: date range, device type,    Updates every minute. Relies       Conversion rate = (sessions     Excludes sessions without
+  breakdown                   cart additions, sessions            checkout events collected      additions; sessions reaching             sales channel; can view data         on cookie‑based session            completing checkout ÷ total     cookie consent; bots can
+                              reaching checkout, and              via Shopify’s tracking         checkout; sessions completing            for human traffic vs bot traffic.    tracking and checkout events;      sessions)                       lower conversion rate;
+                              sessions completing checkout                                       checkout; conversion rate (sessions                                           cross‑device reporting available                                   multi‑buy sessions
+
+
+[PAGE BREAK]
+
+Report                       Purpose                            Data Source                    Key Metrics & Fields                    Filters & Dimensions                 How It Runs                       Calculation Logic               Limitations / Caveats
+
+                             【151414418696600†L95-              (cookies and checkout          completing checkout ÷ sessions)                                              only from Oct 1 2022 onward       【151414418696600†L95-           counted once for each
+                             L120】. Helps diagnose where        events).                       【151414418696600†L95-L120】.                                                  【151414418696600†L95-             L120】.                          purchase.
+                             visitors drop off during the                                                                                                                   L120】.
+                             purchase journey.
+
+
+Conversion rate over         Displays conversion rate trends    Same data sources as           Time‑based metrics: sessions,           Time grouping (hour/day/week/        Data updates within ~1 minute.    Conversion rate formula         Data may have spikes if
+time                         over time with metrics:            Conversion rate breakdown.     sessions with cart additions,           month) and filters for sales         Uses cookie and checkout          same as above.                  low volume; not back‑filled
+                             sessions, sessions with cart                                      sessions reaching checkout,             channel, device type, human vs       events; cross‑device data from                                    before Oct 1 2022
+                             additions, sessions reaching                                      sessions completing checkout,           bot traffic.                         Oct 1 2022.                                                       【151414418696600†L95
+                             checkout, sessions completing                                     conversion rate                                                                                                                                -L120】.
+                             checkout                                                          【151414418696600†L142-L160】.
+                             【151414418696600†L142-
+                             L160】.
+
+
+Web performance              Assess how the online store        Real user metrics collected    For each Core Web Vital: 75th           Filters: date range (today, last 7   Data can be delayed up to         Metrics are 75th percentile     Requires enough traffic;
+reports (Largest             meets Google’s Core Web            from customer devices          percentile LCP/INP/CLS values,          days, last 30 days), time            36 hours                          times; performance is           new or
+Contentful Paint,            Vitals for loading speed (LCP),    (RUM) after the storefront     distribution across performance         grouping; device type; page          【822950260754957†L20-             categorised into Good,          password‑protected
+Interaction to Next Paint,   interactivity (INP) and visual     password is removed            categories (Good/Moderate/Poor)         URL; page type                       L21】 because metrics rely on      Moderate or Poor based on       stores may have no data
+Cumulative Layout Shift –    stability (CLS)                    【822950260754957†L36-          【822950260754957†L119-L140】;            【822950260754957†L153-               aggregated RUM. Reports           thresholds (LCP ≤2.5 s, INP     【822950260754957†L14
+over time, by page URL,      【822950260754957†L14-              L44】. Data for LCP, INP,       event annotations marking theme or      L170】                                update after enough traffic.      ≤200 ms, CLS ≤0.1)              9-L152】. Not real‑time
+by page type)                L16】. Over‑time reports show       CLS is aggregated using the    app changes                             【822950260754957†L193-                                                 【822950260754957†L119-          (up to 36‑hour delay).
+                             trends; URL and page‑type          75th percentile of user        【822950260754957†L168-L179】;            L232】.                                                                 L140】.
+                             reports highlight specific pages   experiences                    sessions by device type.
+                             causing performance issues         【822950260754957†L95-
+                             【822950260754957†L153-             L140】.
+                             L170】.
+
+
+Product                      Shows conversion performance       Online store sessions,         Sessions with recommendations,          Date range; group by time; filter    Data updated daily; relies on     Conversion rate calculated      Dependent on
+recommendation               of Shopify’s product               product recommendation         products recommended, products          by recommendation location.          Shopify’s product                 as orders from                  recommendation
+conversions over time        recommendations – number of        interactions and orders.       added to cart from                                                           recommendation algorithm and      recommendations ÷ sessions      placement and algorithm;
+                             sessions that saw a                                               recommendations, conversion rate,                                            session tracking.                 with recommendations.           not available if
+                             recommendation and how                                            total sales from recommendations.                                                                                                              recommendations are not
+                             many converted (products                                                                                                                                                                                         enabled.
+                             purchased).
+
+
+Product                      Identifies products that are       Same sources as above.         Products recommended; number of         Date range; filter by                Updates daily.                    Click‑through rate = clicks ÷   Low sample sizes may
+recommendations with         recommended often but rarely                                      recommendation views; number of         recommendation placement.                                              recommendation views.           cause volatile rates.
+low engagement               clicked or purchased.                                             clicks; click‑through rate; number of
+                                                                                               purchases.
+
+
+Searches by search           Lists the most common search       Search queries captured        Search query text; number of times      Date range; group by day/            Updates daily; relies on search   Search conversion rate =        Only captures searches
+query                        terms used in the store’s          from the online store search   searched; number of results; number     week/month; filter by device         events recorded in the            orders resulting from           via Shopify’s search bar;
+                             search bar.                        function.                      of clicks; search conversion rate.      type.                                storefront.                       searches ÷ number of            may not track third‑party
+                                                                                                                                                                                                              searches.                       search apps.
+
+
+Searches with no clicks      Identifies search queries where    Same search data.              Search query; number of searches        Date range.                          Daily update.                     N/A.                            Limited data if search is
+                             customers didn’t click any                                        with zero clicks.                                                                                                                              seldom used.
+                             results.
+
+
+Searches with no             Lists queries that returned zero   Search data.                   Search query; number of searches        Date range.                          Daily update.                     N/A.                            N/A.
+results                      results.                                                          producing no results.
+
+
+
+Search conversions           Shows conversion metrics for       Search events and orders.      Number of searches; search              Date range; group by time.           Daily update.                     Conversion rate = orders        None.
+over time                    searches over time (orders,                                       add‑to‑cart events; search orders;                                                                             from search ÷ number of
+                             conversion rate).                                                 search conversion rate.                                                                                        searches.
+
+
+Sessions by landing          Displays sessions based on the     Online store session data.     Landing page URL; sessions;             Date range; group by landing         Real‑time within ~1 minute;
+page                         first page visited (landing                                       conversion metrics; bounce rate.        page; filter by device type.         uses cookie sessions.
+                             page). Useful for evaluating
+
+
+[PAGE BREAK]
+
+Report                  Purpose                             Data Source                    Key Metrics & Fields                   Filters & Dimensions                How It Runs                        Calculation Logic               Limitations / Caveats
+
+                        marketing landing pages and                                                                                                                                                      Bounce rate = sessions with     Same limitations as
+                        home page performance.                                                                                                                                                           single page view ÷ total        sessions metrics (cookie
+                                                                                                                                                                                                         sessions.                       consent, cross‑device).
+
+
+Sessions by device      Shows breakdown of sessions         Session data with device       Device category; sessions; orders;     Date range; filter by sales         Real‑time with minimal delay;      Conversion rate formula as      ‘Other’ devices may
+                        by device type (desktop,            detection.                     conversion rate; average order         channel; group by time.             uses user agent detection.         above.                          include consoles or
+                        mobile, tablet).                                                   value.                                                                                                                                        unknown devices; data
+                                                                                                                                                                                                                                         accuracy depends on user
+                                                                                                                                                                                                                                         agent strings.
+```

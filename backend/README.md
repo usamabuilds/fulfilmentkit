@@ -1,104 +1,42 @@
-# FulfilmentKit Backend
+# Shopify Analytics Reports - Codex Input Package
 
-## Requirements
-- Node.js LTS (v20.x)
-- Docker Desktop
-- Git
+This folder contains a repo-ready conversion of the uploaded PDF into both Markdown and plain-text files.
 
-## Authentication modes (`AUTH_MODE`)
-The backend supports three authentication modes, with `AUTH_MODE` as the single source of truth:
+## What is included
 
-- `local` (default)
-- `supabase`
-- `hybrid`
+- `00_front_matter.md` and `00_front_matter.txt`
+- `FULL_REPORT_EXTRACTED.md` and `FULL_REPORT_EXTRACTED.txt`
+- one `.md` file and one `.txt` file for each Shopify report category
 
-### Required auth variables by mode
-- `AUTH_MODE=local`
-  - Required: `JWT_SECRET`
-- `AUTH_MODE=supabase`
-  - Required: `SUPABASE_JWT_SECRET`, `SUPABASE_JWT_ISSUER`
-- `AUTH_MODE=hybrid`
-  - Required: `JWT_SECRET`, `SUPABASE_JWT_SECRET`, `SUPABASE_JWT_ISSUER`
+## Category file order
 
-### Issuer and secret routing
-- Local tokens are signed and verified with:
-  - `iss = fulfilmentkit-local`
-  - `JWT_SECRET`
-- Supabase tokens are verified with:
-  - `iss = SUPABASE_JWT_ISSUER`
-  - `SUPABASE_JWT_SECRET`
-- In `hybrid` mode, verification is routed strictly by the JWT `iss` claim:
-  - `iss=fulfilmentkit-local` → local secret
-  - `iss=SUPABASE_JWT_ISSUER` → supabase secret
-  - unknown or missing issuer is rejected
+- `01_acquisition.md` and `01_acquisition.txt`
+- `02_behavior.md` and `02_behavior.txt`
+- `03_customers.md` and `03_customers.txt`
+- `04_finances.md` and `04_finances.txt`
+- `05_fraud.md` and `05_fraud.txt`
+- `06_inventory.md` and `06_inventory.txt`
+- `07_marketing.md` and `07_marketing.txt`
+- `08_orders.md` and `08_orders.txt`
+- `09_performance.md` and `09_performance.txt`
+- `10_profit_margin.md` and `10_profit_margin.txt`
+- `11_retail_sales.md` and `11_retail_sales.txt`
+- `12_sales.md` and `12_sales.txt`
+- `13_store.md` and `13_store.txt`
 
-## Prisma client generation
-- Canonical generated Prisma client path: `src/generated/prisma` (from `prisma/schema.prisma`).
-- Generate client: `pnpm run prisma:generate`
-- CI/static guard for generated sync: `pnpm run prisma:check-generated`
+## Notes
 
-## Local setup
-1) Install dependencies
-```bash
-npm install
+- The extraction used a layout-preserving PDF-to-text method to keep table alignment as intact as possible.
+- Content has been split by the same category structure shown in the PDF.
+- Inline source markers from the PDF were preserved.
+- The Store section is included exactly as stated in the PDF, including the note that no confirmed default Shopify Store reports were documented.
+
+## Best way to give this to Codex
+
+Place this folder inside your repo, for example:
+
+```text
+docs/shopify-reports/
 ```
 
-## Deployment (Render)
-
-Target: Render Web Service + Render PostgreSQL
-
-### Required environment variables (Render)
-Set these in Render for the Web Service:
-
-- NODE_ENV=production
-- PORT=3000
-- DATABASE_URL=<render postgres internal url>
-- REDIS_URL=<your redis url>
-- AUTH_SECRET=<set a value, even if unused now>
-- LOG_LEVEL=info
-
-AI keys are optional for now:
-- AI_PROVIDER=openai
-- OPENAI_API_KEY=
-- AI_MODEL=gpt-4o-mini
-- AI_DATA_SCOPE=internal_only
-- AI_ALLOW_RAW_DB=false
-
-OAuth app credentials are required:
-- SHOPIFY_CLIENT_ID=<shopify client id>
-- SHOPIFY_CLIENT_SECRET=<shopify client secret>
-- SHOPIFY_SCOPES=<comma-separated shopify scopes>
-- SHOPIFY_REDIRECT_URI=<https redirect uri>
-- XERO_CLIENT_ID=<xero client id>
-- XERO_CLIENT_SECRET=<xero client secret>
-- XERO_SCOPES=<space-separated xero scopes>
-- XERO_REDIRECT_URI=<https redirect uri>
-- ZOHO_CLIENT_ID=<zoho client id>
-- ZOHO_CLIENT_SECRET=<zoho client secret>
-- ZOHO_SCOPES=<comma-separated zoho scopes>
-- ZOHO_REDIRECT_URI=<https redirect uri>
-
-### Build and start commands (Render)
-Use these settings on Render:
-
-Build Command:
-- pnpm install --frozen-lockfile
-- pnpm run build
-
-Start Command:
-- pnpm run start
-
-### Database migrations (Render)
-Production deployments must run:
-
-- pnpm exec prisma migrate deploy
-
-Important:
-- Do NOT use prisma migrate dev in production
-- Migrations live in prisma/migrations and must be committed
-
-### Local parity (recommended checks)
-Before deploying:
-- npm run build
-- set NODE_ENV=production and boot locally
-- ensure DATABASE_URL and REDIS_URL point to reachable services
+Then ask Codex to read all files in that folder and use them as the source of truth.

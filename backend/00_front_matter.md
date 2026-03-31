@@ -1,0 +1,45 @@
+# Front Matter
+
+```text
+S H O P I F Y A N A LY T I C S D O C U M E N TAT I O N R E P O R T
+
+
+Shopify Analytics Reports Deep Extraction
+Complete inventory of Shopify Analytics default reports, organized by category and documented with purpose, data source, metrics, filters, execution
+behavior, calculation logic, limitations, and operational use cases.
+
+
+
+   COVERAGE                                                                              METHOD
+     • Acquisition                                                                       This PDF packages the full report content into a print-ready format. The
+     • Behavior                                                                          wording and detail are preserved from the compiled report so nothing
+     • Customers                                                                         substantive is omitted.
+     • Finances
+     • Fraud
+     • Inventory
+     • Marketing
+     • Orders
+     • Performance
+     • Profit Margin
+     • Retail Sales
+     • Sales
+     • Store
+
+
+
+
+PREPARED                                                   FORMAT                                          SOURCE BASIS
+2026-03-26                                                 Landscape PDF Report                            Shopify Help Center documentation
+
+
+[PAGE BREAK]
+
+   Packaging note. This PDF includes the full report content from the original markdown report. Inline source markers from the compiled working draft are preserved where they appeared in that report.
+
+
+
+
+Shopify Analytics Reports – Detailed Inventory
+This document compiles all default reports in Shopify Analytics → Reports. Reports are organized under the categories defined by Shopify. Each report section details the purpose, underlying data sources, metrics and fields, available filters/
+dimensions, report behaviour, calculation logic, limitations and sample use cases. All information is based on Shopify’s documentation and is strictly focused on Shopify’s reporting features without any third‑party tools or assumptions.
+```
