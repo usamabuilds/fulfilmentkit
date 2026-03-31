@@ -70,6 +70,12 @@ export interface OrdersListParams {
   search?: string
 }
 
+
+export const ordersApiPaths = {
+  list: (queryString: string) => `/orders?${queryString}`,
+  getOne: (orderId: string) => `/orders/${orderId}`,
+}
+
 function toOrder(raw: RawOrder): Order {
   return {
     ...raw,
@@ -89,7 +95,7 @@ export const ordersApi = {
     if (params?.channel) query.set('channel', params.channel)
     if (params?.search) query.set('search', params.search)
 
-    const response = await apiGetList<RawOrder>(`/orders?${query.toString()}`)
+    const response = await apiGetList<RawOrder>(ordersApiPaths.list(query.toString()))
     return {
       ...response,
       data: {
@@ -100,7 +106,7 @@ export const ordersApi = {
   },
 
   getOne: async (orderId: string): Promise<ApiResponse<OrderDetail>> => {
-    const response = await apiGet<RawOrderDetail>(`/orders/${orderId}`)
+    const response = await apiGet<RawOrderDetail>(ordersApiPaths.getOne(orderId))
     return {
       ...response,
       data: {

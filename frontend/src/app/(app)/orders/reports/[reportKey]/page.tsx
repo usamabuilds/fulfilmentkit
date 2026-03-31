@@ -15,11 +15,11 @@ import {
 } from '@/lib/api/endpoints/reports'
 import { connectionPlatforms, connectionsApi, type ConnectionPlatform } from '@/lib/api/endpoints/connections'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
+import { resolveReportDetailViewState, type ReportSupportStatus } from './report-detail-view-state'
 
 type FilterValue = string | number | string[]
 type FilterState = Record<string, FilterValue>
 type PlatformSelection = ReportPlatform[]
-type ReportSupportStatus = 'supported' | 'partial' | 'unsupported'
 
 const reportsBasePath = '/orders/reports'
 
@@ -310,6 +310,7 @@ export default function ReportDetailPage() {
     )
   }
 
+
   const activeConnectionPlatforms = (connectionsQuery.data?.data.items ?? [])
     .filter((connection) => connection.status === 'active')
     .map((connection) => connection.platform.toLowerCase())
@@ -385,8 +386,14 @@ export default function ReportDetailPage() {
     getStringValue(runOutputRecord?.caveat) ??
     getStringValue(reportRecord.partialCaveat) ??
     getStringValue(reportRecord.caveat)
-  const isUnsupported = reportSupportStatus === 'unsupported'
-  const isPartial = reportSupportStatus === 'partial'
+  const viewState = resolveReportDetailViewState({
+    reportsLoading: false,
+    reportExists: true,
+    reportSupportStatus,
+  })
+
+  const isUnsupported = viewState === 'unsupported'
+  const isPartial = viewState === 'partial'
   const executionDisabledReason =
     isUnsupported ? (unsupportedReason ?? 'This report is currently unsupported for your workspace.') : null
 

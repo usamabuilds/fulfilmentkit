@@ -6,7 +6,7 @@ import { apiResponse } from '../../common/utils/api-response';
 import { toListResponse } from '../../common/utils/list-response';
 import { requireWorkspaceId } from '../../common/workspace/workspace.utils';
 
-const reportKeySchema = z.enum(['sales-summary', 'inventory-aging', 'order-fulfillment-health']);
+const reportKeySchema = z.string().min(1);
 
 function createFiltersSchema(definitions: ReportFilterDefinitionMap): z.ZodType<Record<string, unknown>> {
   return createReportFiltersSchema(definitions);

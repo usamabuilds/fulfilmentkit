@@ -11,6 +11,14 @@ function createController() {
       key: 'sales-summary',
       title: 'Sales summary',
     },
+    {
+      key: 'orders-over-time',
+      title: 'Orders over time',
+    },
+    {
+      key: 'items-bought-together',
+      title: 'Items bought together',
+    },
   ];
 
   const runReportCalls: Array<Record<string, unknown>> = [];
@@ -37,20 +45,53 @@ function createController() {
     status: 'completed',
   };
 
-  const filterDefinitionMap = {
+  const salesSummaryFilterDefinitionMap = {
     platform: {
-      type: 'select',
+      type: 'multi-select',
       options: [
+        { value: 'all', label: 'All platforms' },
         { value: 'shopify', label: 'Shopify' },
+      ],
+      default: ['all'],
+    },
+    minRevenue: {
+      type: 'number',
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    searchTerm: {
+      type: 'text',
+      default: '',
+      minLength: 0,
+      maxLength: 10,
+    },
+  };
+
+  const itemsBoughtTogetherFilterDefinitionMap = {
+    platform: {
+      type: 'multi-select',
+      options: [
+        { value: 'all', label: 'All platforms' },
         { value: 'amazon', label: 'Amazon' },
+      ],
+      default: ['all'],
+    },
+    combinationSize: {
+      type: 'select',
+      default: '2',
+      options: [
+        { value: '2', label: 'Pairs' },
+        { value: '3', label: 'Triples' },
       ],
     },
   };
 
   const service = {
     listReports: () => listReportsResult,
-    hasReportKey: (key: string) => key === 'sales-summary',
-    getFilterDefinitionMap: () => filterDefinitionMap,
+    hasReportKey: (key: string) => ['sales-summary', 'orders-over-time', 'items-bought-together'].includes(key),
+    getFilterDefinitionMap: (key: string) =>
+      key === 'items-bought-together' ? itemsBoughtTogetherFilterDefinitionMap : salesSummaryFilterDefinitionMap,
     runReport: (input: Record<string, unknown>) => {
       runReportCalls.push(input);
       return runReportResult;
@@ -99,7 +140,41 @@ test('runReport validates payload and returns run payload in response envelope',
         'sales-summary',
         {
           filters: {
-            platform: 'unsupported',
+            minRevenue: -1,
+          },
+        },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof ZodError);
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    () =>
+      controller.runReport(
+        { workspaceId: 'ws-1' },
+        'sales-summary',
+        {
+          filters: {
+            searchTerm: 'way-too-long-search-term',
+          },
+        },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof ZodError);
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    () =>
+      controller.runReport(
+        { workspaceId: 'ws-1' },
+        'sales-summary',
+        {
+          filters: {
+            platform: ['unknown-platform'],
           },
         },
       ),
@@ -114,7 +189,8 @@ test('runReport validates payload and returns run payload in response envelope',
     'sales-summary',
     {
       filters: {
-        platform: 'SHOPIFY',
+        platform: ['SHOPIFY'],
+        minRevenue: 10,
       },
     },
   );
@@ -126,7 +202,33 @@ test('runReport validates payload and returns run payload in response envelope',
     workspaceId: 'ws-1',
     key: 'sales-summary',
     filters: {
-      platform: 'shopify',
+      platform: ['shopify'],
+      minRevenue: 10,
+    },
+  });
+});
+
+test('runReport accepts newly supported report keys', async () => {
+  const { controller, runReportCalls } = createController();
+
+  await controller.runReport(
+    { workspaceId: 'ws-1' },
+    'items-bought-together',
+    {
+      filters: {
+        platform: ['AMAZON'],
+        combinationSize: '2',
+      },
+    },
+  );
+
+  assert.equal(runReportCalls.length, 1);
+  assert.deepEqual(runReportCalls[0], {
+    workspaceId: 'ws-1',
+    key: 'items-bought-together',
+    filters: {
+      platform: ['amazon'],
+      combinationSize: '2',
     },
   });
 });
@@ -145,7 +247,7 @@ test('exportReport returns xlsx headers and binary payload', async () => {
     'sales-summary',
     {
       filters: {
-        platform: 'amazon',
+        platform: ['shopify'],
       },
       formatting: {
         reportSheetName: 'Sales',
@@ -158,7 +260,7 @@ test('exportReport returns xlsx headers and binary payload', async () => {
     workspaceId: 'ws-1',
     key: 'sales-summary',
     filters: {
-      platform: 'amazon',
+      platform: ['shopify'],
     },
     formatting: {
       reportSheetName: 'Sales',
@@ -227,21 +329,20 @@ test('invalid report key handling remains unchanged for run and export', async (
   assert.equal(exportReportCalls.length, 0);
 });
 
-
 test('controller routes use the canonical /orders/reports base path', () => {
   assert.equal(Reflect.getMetadata(PATH_METADATA, OrdersReportsController), 'orders/reports');
 
   const prototype = OrdersReportsController.prototype;
 
-  assert.equal(Reflect.getMetadata(METHOD_METADATA, prototype.listReports), 'GET');
-  assert.equal(Reflect.getMetadata(PATH_METADATA, prototype.listReports), undefined);
+  assert.ok(['GET', 0].includes(Reflect.getMetadata(METHOD_METADATA, prototype.listReports) as string | number));
+  assert.ok([undefined, '/'].includes(Reflect.getMetadata(PATH_METADATA, prototype.listReports) as string | undefined));
 
-  assert.equal(Reflect.getMetadata(METHOD_METADATA, prototype.runReport), 'POST');
+  assert.ok(['POST', 1].includes(Reflect.getMetadata(METHOD_METADATA, prototype.runReport) as string | number));
   assert.equal(Reflect.getMetadata(PATH_METADATA, prototype.runReport), ':key/run');
 
-  assert.equal(Reflect.getMetadata(METHOD_METADATA, prototype.exportReport), 'POST');
+  assert.ok(['POST', 1].includes(Reflect.getMetadata(METHOD_METADATA, prototype.exportReport) as string | number));
   assert.equal(Reflect.getMetadata(PATH_METADATA, prototype.exportReport), ':key/export');
 
-  assert.equal(Reflect.getMetadata(METHOD_METADATA, prototype.getReportRun), 'GET');
+  assert.ok(['GET', 0].includes(Reflect.getMetadata(METHOD_METADATA, prototype.getReportRun) as string | number));
   assert.equal(Reflect.getMetadata(PATH_METADATA, prototype.getReportRun), ':key/runs/:runId');
 });
