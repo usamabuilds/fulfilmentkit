@@ -44,6 +44,24 @@ type HistoricalOrderPayload = {
   customer_id?: string | number;
   customerId?: string | number;
   email?: string;
+  payment_transactions?: Array<Record<string, unknown>>;
+  transactions?: Array<Record<string, unknown>>;
+  gateway_fees?: Array<Record<string, unknown>>;
+  tax_lines?: Array<Record<string, unknown>>;
+  taxLines?: Array<Record<string, unknown>>;
+  chargebacks?: Array<Record<string, unknown>>;
+  risks?: Array<Record<string, unknown>>;
+  risk_assessments?: Array<Record<string, unknown>>;
+  protect?: Record<string, unknown>;
+  shopify_protect?: Record<string, unknown>;
+  pos?: Record<string, unknown>;
+  staff?: Record<string, unknown>;
+  location?: Record<string, unknown>;
+  bundle?: Record<string, unknown>;
+  bundles?: Array<Record<string, unknown>>;
+  subscription?: Record<string, unknown>;
+  subscription_contract?: Record<string, unknown>;
+  store_credit?: Record<string, unknown>;
 };
 
 @Processor('sync') // queue name (no colons)
@@ -103,6 +121,16 @@ export class ConnectionSyncWorker extends WorkerHost {
   private normalizeEmailCanonical(value: unknown): string | null {
     const email = this.asNonEmptyString(value);
     return email ? email.toLowerCase() : null;
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || Array.isArray(value) || typeof value !== 'object') return null;
+    return value as Record<string, unknown>;
+  }
+
+  private asRecordArray(value: unknown): Array<Record<string, unknown>> {
+    if (!Array.isArray(value)) return [];
+    return value.filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === 'object');
   }
 
   private async resolveCustomerId(args: {
@@ -187,6 +215,181 @@ export class ConnectionSyncWorker extends WorkerHost {
     }
   }
 
+  private buildProvenancePayload(args: {
+    orderExternalRef: string;
+    category: string;
+    raw: unknown;
+    normalized: Record<string, unknown>;
+  }): Prisma.InputJsonValue {
+    return {
+      orderExternalRef: args.orderExternalRef,
+      category: args.category,
+      normalized: args.normalized,
+      raw: args.raw,
+      capturedAt: new Date().toISOString(),
+      source: 'sync-worker',
+    } as Prisma.InputJsonValue;
+  }
+
+  private async ingestHistoricalOrderContextHooks(args: {
+    workspaceId: string;
+    platform: ConnectionPlatform;
+    payload: HistoricalOrderPayload;
+    orderId: string;
+    orderExternalRef: string;
+    currency: string;
+  }): Promise<void> {
+    const { workspaceId, platform, payload, orderId, orderExternalRef, currency } = args;
+    const paymentTransactions = this.asRecordArray(payload.payment_transactions ?? payload.transactions);
+    const gatewayFees = this.asRecordArray(payload.gateway_fees);
+
+    for (const row of [...paymentTransactions, ...gatewayFees]) {
+      const externalId =
+        this.normalizeExternalIdentifier(row.id) ??
+        this.normalizeExternalIdentifier(row.transaction_id) ??
+        this.normalizeExternalIdentifier(row.gateway_transaction_id) ??
+        `${this.asNonEmptyString(row.kind ?? row.type ?? 'payment')}:${this.asNonEmptyString(row.created_at) ?? 'unknown'}`;
+      const feeAmountRaw =
+        row.gateway_fee_amount ?? row.processing_fee ?? row.fee_amount ?? row.fee ?? row.amount ?? 0;
+      const amount = this.toDecimal(feeAmountRaw);
+      const normalizedCurrency = this.asNonEmptyString(row.currency) ?? currency;
+      const normalizedType = this.asNonEmptyString(row.type ?? row.kind) ?? 'payment_transaction';
+
+      const shouldCreate = await this.createDataAvailabilityMarker({
+        workspaceId,
+        platform,
+        externalEventId: `sync:${orderExternalRef}:payment_gateway:${externalId}`,
+        topic: 'sync:historical:payment_gateway',
+        payload: this.buildProvenancePayload({
+          orderExternalRef,
+          category: 'payment_gateway',
+          raw: row,
+          normalized: {
+            type: normalizedType,
+            gateway: this.asNonEmptyString(row.gateway ?? row.payment_gateway_name),
+            currency: normalizedCurrency,
+            amount: String(amount),
+          },
+        }),
+      });
+
+      if (!shouldCreate) continue;
+      await (this.prisma.fee as any).create({
+        data: {
+          workspaceId,
+          orderId,
+          externalRef: `sync:payment_gateway:${orderExternalRef}:${externalId}`,
+          type: normalizedType,
+          amount,
+          currency: normalizedCurrency,
+        },
+      });
+    }
+
+    for (const line of this.asRecordArray(payload.tax_lines ?? payload.taxLines)) {
+      const jurisdiction =
+        this.asNonEmptyString(line.jurisdiction ?? line.title ?? line.country ?? line.province) ?? 'unknown';
+      const lineId =
+        this.normalizeExternalIdentifier(line.id) ??
+        `${jurisdiction}:${this.asNonEmptyString(line.rate ?? line.price) ?? 'unknown'}`;
+      await this.createDataAvailabilityMarker({
+        workspaceId,
+        platform,
+        externalEventId: `sync:${orderExternalRef}:tax_line:${lineId}`,
+        topic: 'sync:historical:tax_line_jurisdiction',
+        payload: this.buildProvenancePayload({
+          orderExternalRef,
+          category: 'tax_line_jurisdiction',
+          raw: line,
+          normalized: {
+            jurisdiction,
+            rate: this.asNonEmptyString(line.rate),
+            amount: this.asNonEmptyString(line.price),
+            channelLiable: this.asNonEmptyString(line.channel_liable),
+          },
+        }),
+      });
+    }
+
+    const riskRows = [
+      ...this.asRecordArray(payload.chargebacks),
+      ...this.asRecordArray(payload.risks),
+      ...this.asRecordArray(payload.risk_assessments),
+    ];
+    const protect = this.asRecord(payload.protect ?? payload.shopify_protect);
+    if (protect) riskRows.push(protect);
+
+    for (const marker of riskRows) {
+      const markerExternalId =
+        this.normalizeExternalIdentifier(marker.id) ??
+        `${this.asNonEmptyString(marker.type ?? marker.recommendation ?? marker.status ?? 'risk')}:${this.asNonEmptyString(marker.created_at) ?? 'unknown'}`;
+      await this.createDataAvailabilityMarker({
+        workspaceId,
+        platform,
+        externalEventId: `sync:${orderExternalRef}:risk_protect:${markerExternalId}`,
+        topic: 'sync:historical:chargeback_risk_protect',
+        payload: this.buildProvenancePayload({
+          orderExternalRef,
+          category: 'chargeback_risk_protect',
+          raw: marker,
+          normalized: {
+            type: this.asNonEmptyString(marker.type),
+            status: this.asNonEmptyString(marker.status),
+            recommendation: this.asNonEmptyString(marker.recommendation),
+          },
+        }),
+      });
+    }
+
+    const posContext = this.asRecord(payload.pos);
+    const staffContext = this.asRecord(payload.staff);
+    const locationContext = this.asRecord(payload.location);
+    if (posContext || staffContext || locationContext) {
+      await this.createDataAvailabilityMarker({
+        workspaceId,
+        platform,
+        externalEventId: `sync:${orderExternalRef}:pos_staff_location`,
+        topic: 'sync:historical:pos_staff_location_context',
+        payload: this.buildProvenancePayload({
+          orderExternalRef,
+          category: 'pos_staff_location_context',
+          raw: { pos: posContext, staff: staffContext, location: locationContext },
+          normalized: {
+            posName: this.asNonEmptyString(posContext?.name ?? posContext?.source_name),
+            staffId: this.normalizeExternalIdentifier(staffContext?.id),
+            locationId: this.normalizeExternalIdentifier(locationContext?.id),
+            locationName: this.asNonEmptyString(locationContext?.name),
+          },
+        }),
+      });
+    }
+
+    const bundles = this.asRecordArray(payload.bundles);
+    const bundle = this.asRecord(payload.bundle);
+    if (bundle) bundles.push(bundle);
+    const subscription = this.asRecord(payload.subscription ?? payload.subscription_contract);
+    const storeCredit = this.asRecord(payload.store_credit);
+
+    if (bundles.length > 0 || subscription || storeCredit) {
+      await this.createDataAvailabilityMarker({
+        workspaceId,
+        platform,
+        externalEventId: `sync:${orderExternalRef}:bundle_subscription_store_credit`,
+        topic: 'sync:historical:bundle_subscription_store_credit_context',
+        payload: this.buildProvenancePayload({
+          orderExternalRef,
+          category: 'bundle_subscription_store_credit_context',
+          raw: { bundles, subscription, storeCredit },
+          normalized: {
+            bundleCount: bundles.length,
+            subscriptionId: this.normalizeExternalIdentifier(subscription?.id),
+            storeCreditAmount: this.asNonEmptyString(storeCredit?.amount),
+          },
+        }),
+      });
+    }
+  }
+
   private async ingestHistoricalOrder(args: {
     workspaceId: string;
     platform: ConnectionPlatform;
@@ -246,6 +449,15 @@ export class ConnectionSyncWorker extends WorkerHost {
       select: {
         id: true,
       },
+    });
+
+    await this.ingestHistoricalOrderContextHooks({
+      workspaceId,
+      platform,
+      payload,
+      orderId: order.id,
+      orderExternalRef,
+      currency,
     });
 
     const fulfillmentEvents = Array.isArray(payload.fulfillment_timeline)
