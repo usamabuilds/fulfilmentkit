@@ -12,10 +12,35 @@ export type ReportKey =
 
 export type ReportPlatform = 'shopify' | 'amazon' | 'woocommerce' | 'all'
 
+export type ReportDomain =
+  | 'transactional'
+  | 'finance'
+  | 'inventory'
+  | 'fulfillment'
+  | 'customer'
+  | 'attribution'
+  | 'behavior'
+  | 'fraud'
+  | 'feature-specific'
+
+export type ReportSupportStatus = 'supported' | 'partial' | 'unsupported'
+
+export type ReportBlockerClassification =
+  | 'none'
+  | 'not-implemented'
+  | 'missing-input-data'
+  | 'shopify-scope-only'
+  | 'deprecated'
+  | 'not-documented'
+
 export interface ReportDefinition {
   key: ReportKey
   label: string
   description: string
+  domain: ReportDomain
+  supportStatus: ReportSupportStatus
+  requiredCapabilities: string[]
+  blockerClassification: ReportBlockerClassification
   defaultFilters: {
     dateRange: string
     region: string
@@ -30,6 +55,10 @@ export const reportCatalog: ReportDefinition[] = [
     key: 'sales-summary',
     label: 'Sales Summary',
     description: 'Revenue, order volume, and channel contribution over a selected time period.',
+    domain: 'finance',
+    supportStatus: 'unsupported',
+    requiredCapabilities: ['orders'],
+    blockerClassification: 'not-implemented',
     defaultFilters: {
       dateRange: 'last_30_days',
       region: 'all',
@@ -42,6 +71,10 @@ export const reportCatalog: ReportDefinition[] = [
     key: 'inventory-aging',
     label: 'Inventory Aging',
     description: 'On-hand inventory grouped by aging buckets to identify at-risk stock.',
+    domain: 'inventory',
+    supportStatus: 'unsupported',
+    requiredCapabilities: ['inventory_levels', 'orders'],
+    blockerClassification: 'not-implemented',
     defaultFilters: {
       dateRange: 'last_90_days',
       region: 'all',
@@ -54,6 +87,10 @@ export const reportCatalog: ReportDefinition[] = [
     key: 'order-fulfillment-health',
     label: 'Order Fulfillment Health',
     description: 'Fill-rate, late shipment counts, and average pick-pack-ship cycle time.',
+    domain: 'fulfillment',
+    supportStatus: 'unsupported',
+    requiredCapabilities: ['fulfillments', 'shipments', 'orders'],
+    blockerClassification: 'not-implemented',
     defaultFilters: {
       dateRange: 'last_14_days',
       region: 'all',
@@ -66,6 +103,10 @@ export const reportCatalog: ReportDefinition[] = [
     key: 'orders-reversals-by-product',
     label: 'Orders Reversals by Product',
     description: 'Cancelled and reversed orders grouped by product to identify return-prone catalog items.',
+    domain: 'transactional',
+    supportStatus: 'supported',
+    requiredCapabilities: ['orders', 'order_items', 'refunds'],
+    blockerClassification: 'none',
     defaultFilters: {
       dateRange: 'last_30_days',
       region: 'all',
@@ -78,6 +119,10 @@ export const reportCatalog: ReportDefinition[] = [
     key: 'orders-over-time',
     label: 'Orders Over Time',
     description: 'Order volume trends over time with daily and weekly trajectory views.',
+    domain: 'transactional',
+    supportStatus: 'supported',
+    requiredCapabilities: ['orders', 'order_items'],
+    blockerClassification: 'none',
     defaultFilters: {
       dateRange: 'last_30_days',
       region: 'all',
@@ -90,6 +135,10 @@ export const reportCatalog: ReportDefinition[] = [
     key: 'shipping-delivery-performance',
     label: 'Shipping Delivery Performance',
     description: 'Carrier delivery speed and on-time performance across recent shipments.',
+    domain: 'fulfillment',
+    supportStatus: 'supported',
+    requiredCapabilities: ['orders', 'fulfillments', 'shipments'],
+    blockerClassification: 'none',
     defaultFilters: {
       dateRange: 'last_14_days',
       region: 'all',
@@ -102,6 +151,10 @@ export const reportCatalog: ReportDefinition[] = [
     key: 'orders-fulfilled-over-time',
     label: 'Orders Fulfilled Over Time',
     description: 'Completed fulfillment volumes over time for throughput and capacity planning.',
+    domain: 'fulfillment',
+    supportStatus: 'supported',
+    requiredCapabilities: ['orders', 'fulfillments'],
+    blockerClassification: 'none',
     defaultFilters: {
       dateRange: 'last_30_days',
       region: 'all',
@@ -114,6 +167,10 @@ export const reportCatalog: ReportDefinition[] = [
     key: 'shipping-labels-over-time',
     label: 'Shipping Labels Over Time',
     description: 'Shipping label creation volume by date to track dispatch operations.',
+    domain: 'fulfillment',
+    supportStatus: 'supported',
+    requiredCapabilities: ['orders', 'shipping_labels'],
+    blockerClassification: 'none',
     defaultFilters: {
       dateRange: 'last_30_days',
       region: 'all',
@@ -126,6 +183,10 @@ export const reportCatalog: ReportDefinition[] = [
     key: 'shipping-labels-by-order',
     label: 'Shipping Labels by Order',
     description: 'Per-order label generation activity with shipment-level detail.',
+    domain: 'fulfillment',
+    supportStatus: 'supported',
+    requiredCapabilities: ['orders', 'shipping_labels'],
+    blockerClassification: 'none',
     defaultFilters: {
       dateRange: 'last_30_days',
       region: 'all',
@@ -138,6 +199,10 @@ export const reportCatalog: ReportDefinition[] = [
     key: 'items-bought-together',
     label: 'Items Bought Together',
     description: 'Frequently co-purchased item combinations for bundle and merchandising decisions.',
+    domain: 'feature-specific',
+    supportStatus: 'partial',
+    requiredCapabilities: ['orders', 'order_items', 'variant_ids'],
+    blockerClassification: 'missing-input-data',
     defaultFilters: {
       dateRange: 'last_90_days',
       region: 'all',
