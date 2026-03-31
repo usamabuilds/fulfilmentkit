@@ -34,6 +34,8 @@ export type ReportBlockerClassification =
   | 'none'
   | 'not-implemented'
   | 'missing-input-data'
+  | 'needs-separate-tracking-system'
+  | 'needs-additional-connector-expansion'
   | 'shopify-scope-only'
   | 'deprecated'
   | 'not-documented';
@@ -53,10 +55,16 @@ const registry = [
   mk('sessions-by-location', 'acquisition', ['session_tracking', 'ip_geolocation']),
   mk('sessions-over-time', 'acquisition', ['session_tracking']),
   mk('visitors-over-time', 'acquisition', ['session_tracking']),
+  mk('sessions-acquisition-overview', 'acquisition', ['session_tracking'], {
+    blockerClassification: 'needs-separate-tracking-system',
+  }),
 
   // Behavior (02)
   mk('conversion-rate-breakdown', 'behavior', ['session_tracking', 'checkout_events']),
   mk('conversion-rate-over-time', 'behavior', ['session_tracking', 'checkout_events']),
+  mk('conversion-funnel-storefront-events', 'behavior', ['storefront_events', 'checkout_events'], {
+    blockerClassification: 'needs-additional-connector-expansion',
+  }),
   mk('web-performance-reports', 'behavior', ['core_web_vitals_rum']),
   mk('product-recommendation-conversions-over-time', 'behavior', ['recommendation_events']),
   mk('product-recommendations-with-low-engagement', 'behavior', ['recommendation_events']),
@@ -100,6 +108,12 @@ const registry = [
   mk('canceled-due-to-fraud', 'fraud', ['fraud_assessments', 'orders']),
   mk('chargeback-rate-overall', 'fraud', ['chargebacks']),
   mk('orders-covered-by-shopify-protect', 'fraud', ['shopify_payments_protect']),
+  mk('shopify-fraud-internals', 'fraud', ['shopify_fraud_internals'], {
+    blockerClassification: 'needs-additional-connector-expansion',
+  }),
+  mk('shopify-protect-internals', 'fraud', ['shopify_protect_internals'], {
+    blockerClassification: 'needs-additional-connector-expansion',
+  }),
 
   // Inventory (06)
   mk('month-end-inventory-snapshot', 'inventory', ['inventory_levels']),
@@ -176,6 +190,9 @@ const registry = [
   mk('largest-contentful-paint-page-type', 'performance', ['core_web_vitals_rum']),
   mk('interaction-to-next-paint-page-type', 'performance', ['core_web_vitals_rum']),
   mk('cumulative-layout-shift-page-type', 'performance', ['core_web_vitals_rum']),
+  mk('core-web-vitals-without-rum-connector', 'performance', ['core_web_vitals_rum'], {
+    blockerClassification: 'needs-separate-tracking-system',
+  }),
 
   // Profit margin (10)
   mk('average-profit-margin-by-market', 'profit-margin', ['orders', 'cost_per_item']),
