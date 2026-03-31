@@ -730,6 +730,35 @@ type ReportOutput = {
   chartRows?: Array<Record<string, string | number>>;
 };
 
+const reportExportHeadersByKey: Record<ReportKey, string[]> = {
+  'sales-summary': [],
+  'inventory-aging': [],
+  'order-fulfillment-health': [],
+  'orders-reversals-by-product': [
+    'productId',
+    'sku',
+    'productName',
+    'orderedQuantity',
+    'reversedQuantity',
+    'reversedQuantityRate',
+    'returnRate',
+  ],
+  'orders-over-time': [
+    'periodStart',
+    'periodLabel',
+    'ordersCount',
+    'averageUnitsPerOrder',
+    'averageOrderValue',
+    'returnedUnits',
+    'returnedAmount',
+  ],
+  'shipping-delivery-performance': [],
+  'orders-fulfilled-over-time': [],
+  'shipping-labels-over-time': [],
+  'shipping-labels-by-order': [],
+  'items-bought-together': ['combination', 'ordersContaining', 'percentageOverQualifyingOrders'],
+};
+
 @Injectable()
 export class OrdersReportsService {
   private readonly reports: ReportDefinition[] = [
@@ -958,7 +987,7 @@ export class OrdersReportsService {
 
   async exportReport<K extends ReportKey>(input: ExportReportInput<K>): Promise<ExportedReport> {
     const run = await this.runReport(input);
-    const reportRows = this.generateRowsForExport(input.key, run.output.rows, run.output.chartRows);
+    const reportRows = this.generateRowsForExport(input.key, run.output.chartRows);
     const exportedAt = new Date();
     const metadataEntries = this.buildMetadataEntries({
       workspaceId: input.workspaceId,
@@ -1460,24 +1489,25 @@ export class OrdersReportsService {
 
   private generateRowsForExport(
     reportKey: ReportKey,
-    rowCount: number,
     chartRows?: Array<Record<string, string | number>>,
   ): Array<Record<string, string | number>> {
-    if (chartRows && chartRows.length > 0) {
-      return chartRows;
-    }
-
-    if (rowCount <= 0) {
+    if (!chartRows || chartRows.length === 0) {
       return [];
     }
 
-    return Array.from({ length: rowCount }, (_, index) => ({
-      reportKey,
-      rowNumber: index + 1,
-      itemId: `${reportKey.replaceAll('-', '_')}_${(index + 1).toString().padStart(4, '0')}`,
-      metric: (index + 1) * 10,
-      status: index % 2 === 0 ? 'ok' : 'review',
-    }));
+    const expectedHeaders = reportExportHeadersByKey[reportKey];
+    if (expectedHeaders.length === 0) {
+      return chartRows;
+    }
+
+    return chartRows.map((row) => {
+      const normalizedRow: Record<string, string | number> = {};
+      for (const header of expectedHeaders) {
+        const value = row[header];
+        normalizedRow[header] = typeof value === 'number' || typeof value === 'string' ? value : '';
+      }
+      return normalizedRow;
+    });
   }
 
   private buildMetadataEntries(input: {
