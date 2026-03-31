@@ -179,6 +179,50 @@ function toSupportStatus(value: unknown): ReportSupportStatus | null {
   return null
 }
 
+type BlockerClassification = 'metadata' | 'runtime' | 'none'
+
+interface ReportSupportAssessment {
+  status: ReportSupportStatus
+  blockerClassification: BlockerClassification
+  blockerReason: string | null
+  dataCoverageDisclaimer: string | null
+}
+
+function resolveReportSupportAssessment(
+  report: ReportDefinitionDto,
+  runOutputRecord: Record<string, unknown> | null,
+): ReportSupportAssessment {
+  const runStatus = toSupportStatus(runOutputRecord?.supportStatus)
+  const runReason =
+    getStringValue(runOutputRecord?.supportReason) ??
+    getStringValue(runOutputRecord?.unsupportedReason) ??
+    getStringValue(runOutputRecord?.reason) ??
+    getStringValue(runOutputRecord?.caveat)
+  const metadataStatus = toSupportStatus(report.supportStatus) ?? 'supported'
+  const metadataReason = getStringValue(report.supportReason)
+
+  const finalStatus = runStatus ?? metadataStatus
+  const blockerClassification: BlockerClassification =
+    finalStatus === 'unsupported' ? (runStatus === 'unsupported' ? 'runtime' : 'metadata') : 'none'
+  const blockerReason =
+    finalStatus === 'unsupported'
+      ? runReason ?? metadataReason ?? 'This report is currently unsupported for your workspace.'
+      : null
+  const dataCoverageDisclaimer =
+    finalStatus === 'partial'
+      ? runReason ??
+        metadataReason ??
+        'This report is partially supported. Results may not include full platform coverage for all connected sources.'
+      : null
+
+  return {
+    status: finalStatus,
+    blockerClassification,
+    blockerReason,
+    dataCoverageDisclaimer,
+  }
+}
+
 export default function ReportDetailPage() {
   const router = useRouter()
   const params = useParams<{ reportKey: string }>()
@@ -368,34 +412,16 @@ export default function ReportDetailPage() {
   const run = runMutation.data?.data
   const runRecord = getRecordValue(run)
   const runOutputRecord = getRecordValue(runRecord?.output)
-  const reportRecord = report as unknown as Record<string, unknown>
-  const reportSupportStatus =
-    toSupportStatus(runOutputRecord?.status) ??
-    toSupportStatus(runRecord?.status) ??
-    toSupportStatus(reportRecord.supportStatus) ??
-    toSupportStatus(reportRecord.status) ??
-    'supported'
-  const unsupportedReason =
-    getStringValue(runOutputRecord?.unsupportedReason) ??
-    getStringValue(runOutputRecord?.reason) ??
-    getStringValue(reportRecord.unsupportedReason) ??
-    getStringValue(reportRecord.reason) ??
-    getStringValue(runOutputRecord?.caveat) ??
-    getStringValue(reportRecord.caveat)
-  const partialCaveat =
-    getStringValue(runOutputRecord?.caveat) ??
-    getStringValue(reportRecord.partialCaveat) ??
-    getStringValue(reportRecord.caveat)
+  const supportAssessment = resolveReportSupportAssessment(report, runOutputRecord)
   const viewState = resolveReportDetailViewState({
     reportsLoading: false,
     reportExists: true,
-    reportSupportStatus,
+    reportSupportStatus: supportAssessment.status,
   })
 
   const isUnsupported = viewState === 'unsupported'
   const isPartial = viewState === 'partial'
-  const executionDisabledReason =
-    isUnsupported ? (unsupportedReason ?? 'This report is currently unsupported for your workspace.') : null
+  const executionDisabledReason = isUnsupported ? supportAssessment.blockerReason : null
 
   return (
     <div className="flex flex-col gap-6">
@@ -426,9 +452,10 @@ export default function ReportDetailPage() {
           <p className="mt-1 text-subhead text-text-primary">
             {isUnsupported ? 'Unsupported' : isPartial ? 'Partially supported' : 'Supported'}
           </p>
-          {executionDisabledReason && <p className="mt-2 text-footnote text-destructive">{executionDisabledReason}</p>}
-          {!executionDisabledReason && isPartial && partialCaveat && (
-            <p className="mt-2 text-footnote text-text-secondary">{partialCaveat}</p>
+          {executionDisabledReason && (
+            <p className="mt-2 text-footnote text-destructive">
+              Blocker classification: {supportAssessment.blockerClassification}. Reason: {executionDisabledReason}
+            </p>
           )}
           {!executionDisabledReason && !isPartial && <p className="mt-2 text-footnote text-text-secondary">No caveats.</p>}
         </div>
@@ -572,6 +599,12 @@ export default function ReportDetailPage() {
           </p>
         )}
         {executionDisabledReason && <p className="mt-3 text-footnote text-destructive">{executionDisabledReason}</p>}
+        {isPartial && supportAssessment.dataCoverageDisclaimer && (
+          <div className="mt-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
+            <p className="text-caption-1 uppercase tracking-wide text-text-tertiary">Data coverage disclaimer</p>
+            <p className="mt-2 text-footnote text-text-secondary">{supportAssessment.dataCoverageDisclaimer}</p>
+          </div>
+        )}
       </div>
 
       <div className="glass-panel p-6">
