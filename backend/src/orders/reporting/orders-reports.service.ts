@@ -785,6 +785,8 @@ type ReportRunRecord = {
     caveat?: string;
     warnings?: string[];
     chartRows?: Array<Record<string, string | number | null>>;
+    supportStatus: 'supported' | 'partial' | 'unsupported';
+    supportReason?: string;
     generatedAt: string;
   };
   createdAt: Date;
@@ -829,7 +831,11 @@ type ReportOutput = {
   caveat?: string;
   warnings?: string[];
   chartRows?: Array<Record<string, string | number | null>>;
+  supportStatus: 'supported' | 'partial' | 'unsupported';
+  supportReason?: string;
 };
+
+type ReportComputationOutput = Omit<ReportOutput, 'supportStatus' | 'supportReason'>;
 
 type ShippingOrderRecord = {
   id: string;
@@ -1107,6 +1113,8 @@ export class OrdersReportsService {
         caveat: reportOutput.caveat,
         warnings: reportOutput.warnings,
         chartRows: reportOutput.chartRows,
+        supportStatus: reportOutput.supportStatus,
+        supportReason: reportOutput.supportReason,
         generatedAt: new Date().toISOString(),
       },
       createdAt: new Date(),
@@ -1190,52 +1198,82 @@ export class OrdersReportsService {
     workspaceId: string,
     filters: ReportFiltersByKey[ReportKey],
   ): Promise<ReportOutput> {
+    const report = this.reports.find((item) => item.key === key);
+    if (!report) {
+      throw new NotFoundException('Report not found');
+    }
+
+    const withSupportMetadata = (output: ReportComputationOutput): ReportOutput => ({
+      ...output,
+      supportStatus: report.supportStatus,
+      supportReason: report.supportReason,
+    });
+
     switch (key) {
+      case 'sales-summary':
+      case 'inventory-aging':
+      case 'order-fulfillment-health':
+        return withSupportMetadata({
+          rows: 0,
+          chartRows: [],
+          summary: `${report.label} is not currently implemented for ${(
+            filters as ReportFiltersByKey['sales-summary']
+          ).dateRange}.`,
+          caveat: report.supportReason,
+        });
       case 'orders-reversals-by-product':
-        return this.runOrdersReversalsByProduct(
-          workspaceId,
-          filters as ReportFiltersByKey['orders-reversals-by-product'],
+        return withSupportMetadata(
+          await this.runOrdersReversalsByProduct(
+            workspaceId,
+            filters as ReportFiltersByKey['orders-reversals-by-product'],
+          ),
         );
       case 'orders-over-time':
-        return this.runOrdersOverTime(workspaceId, filters as ReportFiltersByKey['orders-over-time']);
+        return withSupportMetadata(
+          await this.runOrdersOverTime(workspaceId, filters as ReportFiltersByKey['orders-over-time']),
+        );
       case 'shipping-delivery-performance':
-        return this.runShippingDeliveryPerformance(
-          workspaceId,
-          filters as ReportFiltersByKey['shipping-delivery-performance'],
+        return withSupportMetadata(
+          await this.runShippingDeliveryPerformance(
+            workspaceId,
+            filters as ReportFiltersByKey['shipping-delivery-performance'],
+          ),
         );
       case 'orders-fulfilled-over-time':
-        return this.runOrdersFulfilledOverTime(
-          workspaceId,
-          filters as ReportFiltersByKey['orders-fulfilled-over-time'],
+        return withSupportMetadata(
+          await this.runOrdersFulfilledOverTime(
+            workspaceId,
+            filters as ReportFiltersByKey['orders-fulfilled-over-time'],
+          ),
         );
       case 'shipping-labels-over-time':
-        return this.runShippingLabelsOverTime(
-          workspaceId,
-          filters as ReportFiltersByKey['shipping-labels-over-time'],
+        return withSupportMetadata(
+          await this.runShippingLabelsOverTime(
+            workspaceId,
+            filters as ReportFiltersByKey['shipping-labels-over-time'],
+          ),
         );
       case 'shipping-labels-by-order':
-        return this.runShippingLabelsByOrder(
-          workspaceId,
-          filters as ReportFiltersByKey['shipping-labels-by-order'],
+        return withSupportMetadata(
+          await this.runShippingLabelsByOrder(
+            workspaceId,
+            filters as ReportFiltersByKey['shipping-labels-by-order'],
+          ),
         );
       case 'items-bought-together':
-        return this.runItemsBoughtTogether(
-          workspaceId,
-          filters as ReportFiltersByKey['items-bought-together'],
+        return withSupportMetadata(
+          await this.runItemsBoughtTogether(
+            workspaceId,
+            filters as ReportFiltersByKey['items-bought-together'],
+          ),
         );
-      default: {
-        return {
-          rows: 0,
-          summary: `${key} generated for ${(filters as ReportFiltersByKey['sales-summary']).dateRange}`,
-        };
-      }
     }
   }
 
   private async runOrdersReversalsByProduct(
     workspaceId: string,
     filters: ReportFiltersByKey['orders-reversals-by-product'],
-  ): Promise<ReportOutput> {
+  ): Promise<ReportComputationOutput> {
     const where = this.buildOrderWhereInput(workspaceId, filters);
     const orders = await this.prisma.order.findMany({
       where,
@@ -1379,7 +1417,7 @@ export class OrdersReportsService {
   private async runOrdersOverTime(
     workspaceId: string,
     filters: ReportFiltersByKey['orders-over-time'],
-  ): Promise<ReportOutput> {
+  ): Promise<ReportComputationOutput> {
     const where = this.buildOrderWhereInput(workspaceId, filters);
     const orders = await this.prisma.order.findMany({
       where,
@@ -1487,7 +1525,7 @@ export class OrdersReportsService {
   private async runShippingDeliveryPerformance(
     workspaceId: string,
     filters: ReportFiltersByKey['shipping-delivery-performance'],
-  ): Promise<ReportOutput> {
+  ): Promise<ReportComputationOutput> {
     const orders = await this.loadShippingOrders(workspaceId, filters);
     const warnings = this.buildShippingWarnings(orders);
     const scoped = this.applyShippingDimensionFilters(orders, filters);
@@ -1525,7 +1563,7 @@ export class OrdersReportsService {
   private async runOrdersFulfilledOverTime(
     workspaceId: string,
     filters: ReportFiltersByKey['orders-fulfilled-over-time'],
-  ): Promise<ReportOutput> {
+  ): Promise<ReportComputationOutput> {
     const orders = await this.loadShippingOrders(workspaceId, filters);
 
     const warnings = this.buildShippingWarnings(orders);
@@ -1576,7 +1614,7 @@ export class OrdersReportsService {
   private async runShippingLabelsOverTime(
     workspaceId: string,
     filters: ReportFiltersByKey['shipping-labels-over-time'],
-  ): Promise<ReportOutput> {
+  ): Promise<ReportComputationOutput> {
     const orders = await this.loadShippingOrders(workspaceId, filters);
     const warnings = this.buildShippingWarnings(orders);
     const scoped = this.applyShippingDimensionFilters(orders, filters);
@@ -1618,7 +1656,7 @@ export class OrdersReportsService {
   private async runShippingLabelsByOrder(
     workspaceId: string,
     filters: ReportFiltersByKey['shipping-labels-by-order'],
-  ): Promise<ReportOutput> {
+  ): Promise<ReportComputationOutput> {
     const orders = await this.loadShippingOrders(workspaceId, filters);
     const warnings = this.buildShippingWarnings(orders);
     const scoped = this.applyShippingDimensionFilters(orders, filters);
@@ -1850,7 +1888,7 @@ export class OrdersReportsService {
   private async runItemsBoughtTogether(
     workspaceId: string,
     filters: ReportFiltersByKey['items-bought-together'],
-  ): Promise<ReportOutput> {
+  ): Promise<ReportComputationOutput> {
     if (filters.itemGroupingLevel === 'variant') {
       return {
         rows: 0,
