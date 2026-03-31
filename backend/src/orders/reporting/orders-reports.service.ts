@@ -764,6 +764,9 @@ export type ReportFiltersByKey = {
 export type ReportDefinition = {
   key: ReportKey;
   label: string;
+  supportStatus: 'supported' | 'partial' | 'unsupported';
+  supportReason?: string;
+  requiredFeatures?: string[];
   defaultFilters: ReportFiltersByKey[ReportKey];
   filterDefinitions: ReportFilterDefinitionMap;
   supportedPlatforms: ReportPlatform[];
@@ -886,6 +889,10 @@ export class OrdersReportsService {
     {
       key: 'sales-summary',
       label: 'Sales Summary',
+      supportStatus: 'unsupported',
+      supportReason:
+        'Execution is not implemented yet; this key currently returns a placeholder summary with no computed rows.',
+      requiredFeatures: ['sales-summary-report-runner'],
       defaultFilters: {
         platform: ['all'],
         dateRange: 'last_30_days',
@@ -901,6 +908,10 @@ export class OrdersReportsService {
     {
       key: 'inventory-aging',
       label: 'Inventory Aging',
+      supportStatus: 'unsupported',
+      supportReason:
+        'Execution is not implemented yet; this key currently returns a placeholder summary with no computed rows.',
+      requiredFeatures: ['inventory-aging-report-runner'],
       defaultFilters: {
         platform: ['all'],
         dateRange: 'last_90_days',
@@ -916,6 +927,10 @@ export class OrdersReportsService {
     {
       key: 'order-fulfillment-health',
       label: 'Order Fulfillment Health',
+      supportStatus: 'unsupported',
+      supportReason:
+        'Execution is not implemented yet; this key currently returns a placeholder summary with no computed rows.',
+      requiredFeatures: ['order-fulfillment-health-report-runner'],
       defaultFilters: {
         platform: ['all'],
         dateRange: 'last_14_days',
@@ -931,6 +946,8 @@ export class OrdersReportsService {
     {
       key: 'orders-reversals-by-product',
       label: 'Orders Reversals by Product',
+      supportStatus: 'supported',
+      requiredFeatures: ['orders-reversals-by-product-report-runner'],
       defaultFilters: {
         platform: ['all'],
         dateRange: 'last_30_days',
@@ -944,6 +961,8 @@ export class OrdersReportsService {
     {
       key: 'orders-over-time',
       label: 'Orders Over Time',
+      supportStatus: 'supported',
+      requiredFeatures: ['orders-over-time-report-runner'],
       defaultFilters: {
         platform: ['all'],
         dateRange: 'last_30_days',
@@ -957,6 +976,8 @@ export class OrdersReportsService {
     {
       key: 'shipping-delivery-performance',
       label: 'Shipping Delivery Performance',
+      supportStatus: 'supported',
+      requiredFeatures: ['shipping-delivery-performance-report-runner'],
       defaultFilters: {
         platform: ['all'],
         dateRange: 'last_14_days',
@@ -972,6 +993,8 @@ export class OrdersReportsService {
     {
       key: 'orders-fulfilled-over-time',
       label: 'Orders Fulfilled Over Time',
+      supportStatus: 'supported',
+      requiredFeatures: ['orders-fulfilled-over-time-report-runner'],
       defaultFilters: {
         platform: ['all'],
         dateRange: 'last_30_days',
@@ -988,6 +1011,8 @@ export class OrdersReportsService {
     {
       key: 'shipping-labels-over-time',
       label: 'Shipping Labels Over Time',
+      supportStatus: 'supported',
+      requiredFeatures: ['shipping-labels-over-time-report-runner'],
       defaultFilters: {
         platform: ['all'],
         dateRange: 'last_30_days',
@@ -1003,6 +1028,8 @@ export class OrdersReportsService {
     {
       key: 'shipping-labels-by-order',
       label: 'Shipping Labels by Order',
+      supportStatus: 'supported',
+      requiredFeatures: ['shipping-labels-by-order-report-runner'],
       defaultFilters: {
         platform: ['all'],
         dateRange: 'last_30_days',
@@ -1018,6 +1045,10 @@ export class OrdersReportsService {
     {
       key: 'items-bought-together',
       label: 'Items Bought Together',
+      supportStatus: 'partial',
+      supportReason:
+        'Variant grouping mode is currently unavailable because order item variant identifiers are not available in the current schema.',
+      requiredFeatures: ['items-bought-together-report-runner', 'order-item-variant-identifiers'],
       defaultFilters: {
         platform: ['all'],
         dateRange: 'last_90_days',
