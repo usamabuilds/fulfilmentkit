@@ -203,6 +203,23 @@ export default function ReportDetailPage() {
         },
       })
     },
+    onSuccess: (result) => {
+      const caveat = result.data.output.caveat
+      if (caveat) {
+        setFeedbackMessage({
+          type: 'error',
+          message: caveat,
+        })
+        return
+      }
+      setFeedbackMessage(null)
+    },
+    onError: (error) => {
+      setFeedbackMessage({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to run report.',
+      })
+    },
   })
   const exportMutation = useMutation({
     mutationFn: (nextFilters: FilterState) => {
@@ -511,6 +528,7 @@ export default function ReportDetailPage() {
             <div className="rounded-lg border border-border-subtle p-4 sm:col-span-2">
               <p className="text-caption-1 text-text-tertiary">Summary</p>
               <p className="text-body text-text-primary">{run.output.summary}</p>
+              {run.output.caveat && <p className="mt-2 text-footnote text-destructive">{run.output.caveat}</p>}
               <p className="mt-1 text-caption-1 text-text-tertiary">Generated {new Date(run.output.generatedAt).toLocaleString()}</p>
             </div>
           </div>

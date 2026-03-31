@@ -88,6 +88,7 @@ export interface ReportRunDto {
   output: {
     rows: number
     summary: string
+    caveat?: string
     generatedAt: string
   }
   createdAt: string

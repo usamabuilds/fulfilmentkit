@@ -653,6 +653,7 @@ type ReportRunRecord = {
   output: {
     rows: number;
     summary: string;
+    caveat?: string;
     chartRows?: Array<Record<string, string | number>>;
     generatedAt: string;
   };
@@ -690,6 +691,13 @@ type ExportedReport = {
   runId: string;
   isEmpty: boolean;
   message: string;
+};
+
+type ReportOutput = {
+  rows: number;
+  summary: string;
+  caveat?: string;
+  chartRows?: Array<Record<string, string | number>>;
 };
 
 @Injectable()
@@ -870,6 +878,7 @@ export class OrdersReportsService {
       output: {
         rows: reportOutput.rows,
         summary: reportOutput.summary,
+        caveat: reportOutput.caveat,
         chartRows: reportOutput.chartRows,
         generatedAt: new Date().toISOString(),
       },
@@ -953,7 +962,7 @@ export class OrdersReportsService {
     key: ReportKey,
     workspaceId: string,
     filters: ReportFiltersByKey[ReportKey],
-  ): Promise<{ rows: number; summary: string; chartRows?: Array<Record<string, string | number>> }> {
+  ): Promise<ReportOutput> {
     switch (key) {
       case 'orders-reversals-by-product':
         return this.runOrdersReversalsByProduct(
@@ -979,46 +988,151 @@ export class OrdersReportsService {
   private async runOrdersReversalsByProduct(
     workspaceId: string,
     filters: ReportFiltersByKey['orders-reversals-by-product'],
-  ): Promise<{ rows: number; summary: string; chartRows?: Array<Record<string, string | number>> }> {
+  ): Promise<ReportOutput> {
     const where = this.buildOrderWhereInput(workspaceId, filters);
-    const refundedOrderIds = await this.prisma.refund.findMany({
-      where: {
-        workspaceId,
-        order: where,
+    const orders = await this.prisma.order.findMany({
+      where,
+      select: {
+        id: true,
+        total: true,
+        items: {
+          select: {
+            productId: true,
+            quantity: true,
+            product: {
+              select: {
+                sku: true,
+                name: true,
+              },
+            },
+          },
+        },
+        refunds: {
+          select: {
+            amount: true,
+          },
+        },
       },
-      distinct: ['orderId'],
-      select: { orderId: true },
     });
 
-    if (refundedOrderIds.length === 0) {
+    if (orders.length === 0) {
       return { rows: 0, summary: 'No reversed products found for the selected filters.' };
     }
 
-    const refundedOrderIdList = refundedOrderIds
-      .map((item) => item.orderId)
-      .filter((orderId): orderId is string => typeof orderId === 'string');
+    type ProductAggregate = {
+      productId: string;
+      sku: string;
+      name: string;
+      orderedQuantity: number;
+      reversedQuantity: number;
+      orderCount: number;
+      refundedOrderCount: number;
+    };
 
-    const grouped = await this.prisma.orderItem.groupBy({
-      by: ['productId'],
-      where: {
-        orderId: { in: refundedOrderIdList },
-        order: { workspaceId },
-      },
-      _sum: { quantity: true },
-    });
+    const aggregates = new Map<string, ProductAggregate>();
+    let approximatedRefundAllocationUsed = false;
 
-    const reversedUnits = grouped.reduce((sum, item) => sum + (item._sum?.quantity ?? 0), 0);
+    for (const order of orders) {
+      const orderRefundAmount = order.refunds.reduce((sum, refund) => sum + Number(refund.amount), 0);
+      const hasRefund = orderRefundAmount > 0;
+
+      const reversedByProduct = hasRefund
+        ? this.allocateReversedQuantitiesByProduct({
+            items: order.items.map((item) => ({
+              productId: item.productId,
+              quantity: item.quantity,
+            })),
+            refundAmount: orderRefundAmount,
+            orderTotalAmount: Number(order.total),
+          })
+        : new Map<string, number>();
+
+      if (hasRefund) {
+        approximatedRefundAllocationUsed = true;
+      }
+
+      const orderProductIds = new Set<string>();
+      const refundedOrderProductIds = new Set<string>();
+
+      for (const item of order.items) {
+        const existing =
+          aggregates.get(item.productId) ??
+          ({
+            productId: item.productId,
+            sku: item.product.sku,
+            name: item.product.name,
+            orderedQuantity: 0,
+            reversedQuantity: 0,
+            orderCount: 0,
+            refundedOrderCount: 0,
+          } satisfies ProductAggregate);
+
+        existing.orderedQuantity += item.quantity;
+        existing.reversedQuantity += reversedByProduct.get(item.productId) ?? 0;
+        aggregates.set(item.productId, existing);
+
+        orderProductIds.add(item.productId);
+        if (hasRefund) {
+          refundedOrderProductIds.add(item.productId);
+        }
+      }
+
+      for (const productId of orderProductIds) {
+        const aggregate = aggregates.get(productId);
+        if (aggregate) {
+          aggregate.orderCount += 1;
+        }
+      }
+      for (const productId of refundedOrderProductIds) {
+        const aggregate = aggregates.get(productId);
+        if (aggregate) {
+          aggregate.refundedOrderCount += 1;
+        }
+      }
+    }
+
+    const chartRows = Array.from(aggregates.values())
+      .map((aggregate) => {
+        const reversedQuantityRate =
+          aggregate.orderedQuantity > 0
+            ? Number(((aggregate.reversedQuantity / aggregate.orderedQuantity) * 100).toFixed(2))
+            : 0;
+        const returnRate =
+          aggregate.orderCount > 0
+            ? Number(((aggregate.refundedOrderCount / aggregate.orderCount) * 100).toFixed(2))
+            : 0;
+
+        return {
+          productId: aggregate.productId,
+          sku: aggregate.sku,
+          productName: aggregate.name,
+          orderedQuantity: aggregate.orderedQuantity,
+          reversedQuantity: aggregate.reversedQuantity,
+          reversedQuantityRate,
+          returnRate,
+        };
+      })
+      .filter((row) => row.reversedQuantity > 0 || row.orderedQuantity > 0)
+      .sort((a, b) => b.reversedQuantity - a.reversedQuantity || a.sku.localeCompare(b.sku));
+
+    const reversedUnits = chartRows.reduce((sum, row) => sum + row.reversedQuantity, 0);
+    const orderedUnits = chartRows.reduce((sum, row) => sum + row.orderedQuantity, 0);
+    const caveat = approximatedRefundAllocationUsed
+      ? 'Partial mapping: refund records do not include line-level product references, so reversed quantity is deterministically allocated by each line item share of refunded order value.'
+      : undefined;
 
     return {
-      rows: grouped.length,
-      summary: `${grouped.length} products with ${reversedUnits} reversed units in ${filters.dateRange}.`,
+      rows: chartRows.length,
+      chartRows,
+      caveat,
+      summary: `${chartRows.length} products, ${orderedUnits} ordered units, and ${reversedUnits} reversed units in ${filters.dateRange}.${caveat ? ` Caveat: ${caveat}` : ''}`,
     };
   }
 
   private async runOrdersOverTime(
     workspaceId: string,
     filters: ReportFiltersByKey['orders-over-time'],
-  ): Promise<{ rows: number; summary: string; chartRows?: Array<Record<string, string | number>> }> {
+  ): Promise<ReportOutput> {
     const where = this.buildOrderWhereInput(workspaceId, filters);
     const orders = await this.prisma.order.findMany({
       where,
@@ -1126,7 +1240,7 @@ export class OrdersReportsService {
   private async runItemsBoughtTogether(
     workspaceId: string,
     filters: ReportFiltersByKey['items-bought-together'],
-  ): Promise<{ rows: number; summary: string }> {
+  ): Promise<ReportOutput> {
     const where = this.buildOrderWhereInput(workspaceId, filters);
     const orders = await this.prisma.order.findMany({
       where,
@@ -1195,6 +1309,54 @@ export class OrdersReportsService {
     }
 
     return where;
+  }
+
+  private allocateReversedQuantitiesByProduct(input: {
+    items: Array<{ productId: string; quantity: number }>;
+    refundAmount: number;
+    orderTotalAmount: number;
+  }): Map<string, number> {
+    const quantitiesByProduct = new Map<string, number>();
+    for (const item of input.items) {
+      quantitiesByProduct.set(item.productId, (quantitiesByProduct.get(item.productId) ?? 0) + item.quantity);
+    }
+
+    const orderUnits = Array.from(quantitiesByProduct.values()).reduce((sum, quantity) => sum + quantity, 0);
+    if (orderUnits <= 0 || input.refundAmount <= 0) {
+      return new Map<string, number>();
+    }
+
+    const cappedRatio =
+      input.orderTotalAmount > 0
+        ? Math.max(0, Math.min(1, input.refundAmount / input.orderTotalAmount))
+        : 1;
+    const targetReversedUnits = Math.min(orderUnits, orderUnits * cappedRatio);
+
+    const allocations = Array.from(quantitiesByProduct.entries()).map(([productId, quantity]) => {
+      const exact = quantity * cappedRatio;
+      const floor = Math.floor(exact);
+      return { productId, quantity, floor, remainder: exact - floor };
+    });
+
+    let allocated = allocations.reduce((sum, item) => sum + item.floor, 0);
+    const targetRounded = Math.round(targetReversedUnits);
+    const remainingUnits = Math.max(0, targetRounded - allocated);
+
+    const sortedByRemainder = [...allocations].sort(
+      (a, b) => b.remainder - a.remainder || a.productId.localeCompare(b.productId),
+    );
+    for (let i = 0; i < remainingUnits; i += 1) {
+      const allocation = sortedByRemainder[i % sortedByRemainder.length];
+      if (allocation.floor < allocation.quantity) {
+        allocation.floor += 1;
+        allocated += 1;
+      }
+      if (allocated >= targetRounded) {
+        break;
+      }
+    }
+
+    return new Map(allocations.map((item) => [item.productId, Math.min(item.floor, item.quantity)]));
   }
 
   private getDateRangeStart(dateRange: DateRangePreset): Date {
