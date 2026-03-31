@@ -19,6 +19,7 @@ import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 type FilterValue = string | number | string[]
 type FilterState = Record<string, FilterValue>
 type PlatformSelection = ReportPlatform[]
+type ReportSupportStatus = 'supported' | 'partial' | 'unsupported'
 
 const reportsBasePath = '/orders/reports'
 
@@ -149,6 +150,32 @@ function validateFilters(filters: FilterState, definitions: ReportFilterDefiniti
     }
   }
 
+  return null
+}
+
+function getStringValue(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function getRecordValue(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'object' || value === null) {
+    return null
+  }
+  return value as Record<string, unknown>
+}
+
+function toSupportStatus(value: unknown): ReportSupportStatus | null {
+  const normalized = getStringValue(value)?.toLowerCase()
+  if (!normalized) {
+    return null
+  }
+  if (normalized === 'supported' || normalized === 'partial' || normalized === 'unsupported') {
+    return normalized
+  }
   return null
 }
 
@@ -338,6 +365,30 @@ export default function ReportDetailPage() {
   }
 
   const run = runMutation.data?.data
+  const runRecord = getRecordValue(run)
+  const runOutputRecord = getRecordValue(runRecord?.output)
+  const reportRecord = report as unknown as Record<string, unknown>
+  const reportSupportStatus =
+    toSupportStatus(runOutputRecord?.status) ??
+    toSupportStatus(runRecord?.status) ??
+    toSupportStatus(reportRecord.supportStatus) ??
+    toSupportStatus(reportRecord.status) ??
+    'supported'
+  const unsupportedReason =
+    getStringValue(runOutputRecord?.unsupportedReason) ??
+    getStringValue(runOutputRecord?.reason) ??
+    getStringValue(reportRecord.unsupportedReason) ??
+    getStringValue(reportRecord.reason) ??
+    getStringValue(runOutputRecord?.caveat) ??
+    getStringValue(reportRecord.caveat)
+  const partialCaveat =
+    getStringValue(runOutputRecord?.caveat) ??
+    getStringValue(reportRecord.partialCaveat) ??
+    getStringValue(reportRecord.caveat)
+  const isUnsupported = reportSupportStatus === 'unsupported'
+  const isPartial = reportSupportStatus === 'partial'
+  const executionDisabledReason =
+    isUnsupported ? (unsupportedReason ?? 'This report is currently unsupported for your workspace.') : null
 
   return (
     <div className="flex flex-col gap-6">
@@ -355,6 +406,26 @@ export default function ReportDetailPage() {
       </div>
 
       <div className="glass-panel p-6">
+        <div
+          className={`rounded-lg border p-4 ${
+            isUnsupported
+              ? 'border-destructive/40 bg-destructive/10'
+              : isPartial
+                ? 'border-yellow-500/30 bg-yellow-500/10'
+                : 'border-border-subtle bg-black/5'
+          }`}
+        >
+          <p className="text-caption-1 uppercase tracking-wide text-text-tertiary">Report status</p>
+          <p className="mt-1 text-subhead text-text-primary">
+            {isUnsupported ? 'Unsupported' : isPartial ? 'Partially supported' : 'Supported'}
+          </p>
+          {executionDisabledReason && <p className="mt-2 text-footnote text-destructive">{executionDisabledReason}</p>}
+          {!executionDisabledReason && isPartial && partialCaveat && (
+            <p className="mt-2 text-footnote text-text-secondary">{partialCaveat}</p>
+          )}
+          {!executionDisabledReason && !isPartial && <p className="mt-2 text-footnote text-text-secondary">No caveats.</p>}
+        </div>
+
         <h2 className="text-headline text-text-primary">Execution Filters</h2>
         <div className="mt-4">
           <label className="flex flex-col gap-2">
@@ -460,7 +531,8 @@ export default function ReportDetailPage() {
             type="button"
             onClick={() => runMutation.mutate(filters)}
             className="rounded-lg bg-black px-4 py-2 text-callout text-white transition hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={runMutation.isPending}
+            disabled={runMutation.isPending || isUnsupported}
+            title={executionDisabledReason ?? undefined}
           >
             {runMutation.isPending ? 'Running…' : 'Run report'}
           </button>
@@ -469,7 +541,8 @@ export default function ReportDetailPage() {
               type="button"
               onClick={() => exportMutation.mutate(filters)}
               className="rounded-lg border border-border-subtle px-4 py-2 text-callout text-text-secondary transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={exportMutation.isPending}
+              disabled={exportMutation.isPending || isUnsupported}
+              title={executionDisabledReason ?? undefined}
             >
               {exportMutation.isPending ? 'Exporting…' : 'Export Excel'}
             </button>
@@ -491,6 +564,7 @@ export default function ReportDetailPage() {
             {feedbackMessage.message}
           </p>
         )}
+        {executionDisabledReason && <p className="mt-3 text-footnote text-destructive">{executionDisabledReason}</p>}
       </div>
 
       <div className="glass-panel p-6">
