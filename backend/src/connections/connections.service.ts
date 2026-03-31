@@ -7,12 +7,16 @@ import { toListResponse } from '../common/utils/list-response';
 import { ConnectionPlatform, ConnectionStatus } from '../generated/prisma';
 import { StartConnectionResponseDto } from './dto/start-connection-response.dto';
 
-type StartPlatform = 'shopify' | 'woocommerce' | 'amazon' | 'zoho' | 'xero' | 'sage' | 'odoo' | 'quickbooks';
-type ConnectionAuthType =
-  | 'oauth_callback'
-  | 'api_keys_callback'
-  | 'sp_api_callback'
-  | 'oauth2';
+type StartPlatform =
+  | 'shopify'
+  | 'woocommerce'
+  | 'amazon'
+  | 'zoho'
+  | 'xero'
+  | 'sage'
+  | 'odoo'
+  | 'quickbooks';
+type ConnectionAuthType = 'oauth_callback' | 'api_keys_callback' | 'sp_api_callback' | 'oauth2';
 
 const PLATFORM_MAP: Record<StartPlatform, ConnectionPlatform> = {
   shopify: 'SHOPIFY',
@@ -81,6 +85,80 @@ type ListSyncRunsArgs = {
   connectionId: string;
 };
 
+export type ConnectionCapabilityFlags = {
+  supports_pos: boolean;
+  supports_tax_detail: boolean;
+  supports_subscriptions: boolean;
+};
+
+const defaultCapabilityFlags = (): ConnectionCapabilityFlags => ({
+  supports_pos: false,
+  supports_tax_detail: false,
+  supports_subscriptions: false,
+});
+
+const PLATFORM_CAPABILITY_FLAGS: Record<ConnectionPlatform, ConnectionCapabilityFlags> = {
+  SHOPIFY: {
+    supports_pos: true,
+    supports_tax_detail: true,
+    supports_subscriptions: true,
+  },
+  WOOCOMMERCE: {
+    supports_pos: false,
+    supports_tax_detail: true,
+    supports_subscriptions: true,
+  },
+  AMAZON: {
+    supports_pos: false,
+    supports_tax_detail: true,
+    supports_subscriptions: false,
+  },
+  ZOHO: {
+    supports_pos: true,
+    supports_tax_detail: true,
+    supports_subscriptions: true,
+  },
+  XERO: {
+    supports_pos: false,
+    supports_tax_detail: true,
+    supports_subscriptions: false,
+  },
+  SAGE: {
+    supports_pos: false,
+    supports_tax_detail: true,
+    supports_subscriptions: false,
+  },
+  ODOO: {
+    supports_pos: true,
+    supports_tax_detail: true,
+    supports_subscriptions: true,
+  },
+  QUICKBOOKS: {
+    supports_pos: false,
+    supports_tax_detail: true,
+    supports_subscriptions: false,
+  },
+};
+
+export function getPlatformCapabilityFlags(
+  platform: ConnectionPlatform,
+): ConnectionCapabilityFlags {
+  return PLATFORM_CAPABILITY_FLAGS[platform];
+}
+
+export function unionConnectionCapabilities(
+  connectionCapabilities: readonly ConnectionCapabilityFlags[],
+): ConnectionCapabilityFlags {
+  return connectionCapabilities.reduce<ConnectionCapabilityFlags>(
+    (union, capabilityFlags) => ({
+      supports_pos: union.supports_pos || capabilityFlags.supports_pos,
+      supports_tax_detail: union.supports_tax_detail || capabilityFlags.supports_tax_detail,
+      supports_subscriptions:
+        union.supports_subscriptions || capabilityFlags.supports_subscriptions,
+    }),
+    defaultCapabilityFlags(),
+  );
+}
 
 /**
  * Canonical API status values for connection list responses.
@@ -116,7 +194,6 @@ export class ConnectionsService {
         lastError: true,
       },
     });
-
     return toListResponse({
       items: rows.map((r) => ({
         id: r.id,
@@ -125,6 +202,7 @@ export class ConnectionsService {
         status: CONNECTION_LIST_STATUS_MAP[r.status],
         lastSyncAt: r.lastSyncAt ? r.lastSyncAt.toISOString() : null,
         lastError: r.lastError ?? null,
+        capabilityFlags: getPlatformCapabilityFlags(r.platform),
       })),
       total: rows.length,
       page: 1,
@@ -132,7 +210,25 @@ export class ConnectionsService {
     });
   }
 
-  async startConnectionFlow(args: StartConnectionFlowArgs): Promise<{ success: true; data: StartConnectionResponseDto }> {
+  async getWorkspaceCapabilityFlags(workspaceId: string): Promise<ConnectionCapabilityFlags> {
+    const activeRows = await this.prisma.connection.findMany({
+      where: {
+        workspaceId,
+        status: 'ACTIVE',
+      },
+      select: {
+        platform: true,
+      },
+    });
+
+    return unionConnectionCapabilities(
+      activeRows.map((row) => getPlatformCapabilityFlags(row.platform)),
+    );
+  }
+
+  async startConnectionFlow(
+    args: StartConnectionFlowArgs,
+  ): Promise<{ success: true; data: StartConnectionResponseDto }> {
     const { workspaceId, platform, payload } = args;
     const platformEnum = this.getPlatformEnum(platform);
     const connection = await this.ensureConnection(workspaceId, platformEnum);
@@ -168,7 +264,8 @@ export class ConnectionsService {
               'Generate a Consumer Key and Consumer Secret in WooCommerce REST API settings.',
               'Submit credentials to POST /connections/woocommerce/callback to complete storage and activation.',
             ],
-            message: 'WooCommerce uses API key credentials for this flow; start only initializes the connection record.',
+            message:
+              'WooCommerce uses API key credentials for this flow; start only initializes the connection record.',
           },
         };
       case 'amazon':
@@ -184,8 +281,7 @@ export class ConnectionsService {
             message: 'Amazon setup requires SP-API credentials managed server-side.',
           },
         };
-      case 'zoho':
-      {
+      case 'zoho': {
         const url = await this.buildZohoAuthorizeUrl({
           workspaceId,
           connectionId: connection.id,
@@ -199,8 +295,7 @@ export class ConnectionsService {
           },
         };
       }
-      case 'xero':
-      {
+      case 'xero': {
         const url = await this.buildXeroAuthorizeUrl({
           workspaceId,
           connectionId: connection.id,
@@ -224,7 +319,8 @@ export class ConnectionsService {
               'Authorize the Sage connector using OAuth 2.0 credentials.',
               'Finish consent and callback completion through the backend flow.',
             ],
-            message: 'Sage integration currently returns setup instructions while OAuth completion is finalized.',
+            message:
+              'Sage integration currently returns setup instructions while OAuth completion is finalized.',
           },
         };
       case 'odoo':
@@ -240,8 +336,7 @@ export class ConnectionsService {
             message: 'Odoo connector support is scaffolded with placeholder setup guidance.',
           },
         };
-      case 'quickbooks':
-      {
+      case 'quickbooks': {
         const url = await this.buildQuickBooksAuthorizeUrl({
           workspaceId,
           connectionId: connection.id,
@@ -257,9 +352,7 @@ export class ConnectionsService {
       }
       default: {
         const unreachablePlatform: never = platform;
-        throw new NotFoundException(
-          `Unsupported platform: ${String(unreachablePlatform)}`,
-        );
+        throw new NotFoundException(`Unsupported platform: ${String(unreachablePlatform)}`);
       }
     }
   }
@@ -280,7 +373,9 @@ export class ConnectionsService {
       normalized.includes('?') ||
       normalized.includes('#')
     ) {
-      throw new BadRequestException('shop must be a plain myshopify domain (e.g. mystore.myshopify.com)');
+      throw new BadRequestException(
+        'shop must be a plain myshopify domain (e.g. mystore.myshopify.com)',
+      );
     }
 
     const myShopifyDomainPattern = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
@@ -300,21 +395,20 @@ export class ConnectionsService {
     const scopes = process.env.SHOPIFY_SCOPES;
     const redirectUri = process.env.SHOPIFY_REDIRECT_URI;
     if (!clientId || !scopes || !redirectUri) {
-      throw new Error(
-        'SHOPIFY_CLIENT_ID, SHOPIFY_SCOPES, and SHOPIFY_REDIRECT_URI must be set',
-      );
+      throw new Error('SHOPIFY_CLIENT_ID, SHOPIFY_SCOPES, and SHOPIFY_REDIRECT_URI must be set');
     }
 
     return this.createAndStoreOAuthStateAtStart({
       workspaceId: args.workspaceId,
       connectionId: args.connectionId,
       platform: 'SHOPIFY',
-      buildStateToken: (expiresAt) => this.generateAndSignShopifyOAuthState({
-        workspaceId: args.workspaceId,
-        connectionId: args.connectionId,
-        shop: args.shop,
-        expiresAt,
-      }),
+      buildStateToken: (expiresAt) =>
+        this.generateAndSignShopifyOAuthState({
+          workspaceId: args.workspaceId,
+          connectionId: args.connectionId,
+          shop: args.shop,
+          expiresAt,
+        }),
     }).then((state) => {
       const params = new URLSearchParams({
         client_id: clientId,
@@ -337,9 +431,7 @@ export class ConnectionsService {
     const scopes = process.env.XERO_SCOPES;
 
     if (!clientId || !redirectUri || !scopes) {
-      throw new Error(
-        'XERO_CLIENT_ID, XERO_REDIRECT_URI, and XERO_SCOPES must be set',
-      );
+      throw new Error('XERO_CLIENT_ID, XERO_REDIRECT_URI, and XERO_SCOPES must be set');
     }
 
     return {
@@ -359,9 +451,7 @@ export class ConnectionsService {
     const redirectUri = process.env.XERO_REDIRECT_URI;
 
     if (!clientId || !clientSecret || !redirectUri) {
-      throw new Error(
-        'XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_REDIRECT_URI must be set',
-      );
+      throw new Error('XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_REDIRECT_URI must be set');
     }
 
     return {
@@ -381,9 +471,7 @@ export class ConnectionsService {
     const scopes = process.env.ZOHO_SCOPES;
 
     if (!clientId || !redirectUri || !scopes) {
-      throw new Error(
-        'ZOHO_CLIENT_ID, ZOHO_REDIRECT_URI, and ZOHO_SCOPES must be set',
-      );
+      throw new Error('ZOHO_CLIENT_ID, ZOHO_REDIRECT_URI, and ZOHO_SCOPES must be set');
     }
 
     return {
@@ -403,9 +491,7 @@ export class ConnectionsService {
     const redirectUri = process.env.ZOHO_REDIRECT_URI;
 
     if (!clientId || !clientSecret || !redirectUri) {
-      throw new Error(
-        'ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, and ZOHO_REDIRECT_URI must be set',
-      );
+      throw new Error('ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, and ZOHO_REDIRECT_URI must be set');
     }
 
     return {
@@ -434,9 +520,7 @@ export class ConnectionsService {
     }
 
     if (environment !== 'sandbox' && environment !== 'production') {
-      throw new Error(
-        'QUICKBOOKS_ENVIRONMENT must be either "sandbox" or "production"',
-      );
+      throw new Error('QUICKBOOKS_ENVIRONMENT must be either "sandbox" or "production"');
     }
 
     return {
@@ -466,9 +550,7 @@ export class ConnectionsService {
     }
 
     if (environment !== 'sandbox' && environment !== 'production') {
-      throw new Error(
-        'QUICKBOOKS_ENVIRONMENT must be either "sandbox" or "production"',
-      );
+      throw new Error('QUICKBOOKS_ENVIRONMENT must be either "sandbox" or "production"');
     }
 
     return {
@@ -488,14 +570,15 @@ export class ConnectionsService {
       workspaceId: args.workspaceId,
       connectionId: args.connectionId,
       platform: 'ZOHO',
-      buildStateToken: () => Buffer.from(
-        JSON.stringify({
-          workspaceId: args.workspaceId,
-          connectionId: args.connectionId,
-          nonce: crypto.randomBytes(16).toString('hex'),
-        }),
-        'utf8',
-      ).toString('base64url'),
+      buildStateToken: () =>
+        Buffer.from(
+          JSON.stringify({
+            workspaceId: args.workspaceId,
+            connectionId: args.connectionId,
+            nonce: crypto.randomBytes(16).toString('hex'),
+          }),
+          'utf8',
+        ).toString('base64url'),
     });
 
     const params = new URLSearchParams({
@@ -519,14 +602,15 @@ export class ConnectionsService {
       workspaceId: args.workspaceId,
       connectionId: args.connectionId,
       platform: 'XERO',
-      buildStateToken: () => Buffer.from(
-        JSON.stringify({
-          workspaceId: args.workspaceId,
-          connectionId: args.connectionId,
-          nonce: crypto.randomBytes(16).toString('hex'),
-        }),
-        'utf8',
-      ).toString('base64url'),
+      buildStateToken: () =>
+        Buffer.from(
+          JSON.stringify({
+            workspaceId: args.workspaceId,
+            connectionId: args.connectionId,
+            nonce: crypto.randomBytes(16).toString('hex'),
+          }),
+          'utf8',
+        ).toString('base64url'),
     });
 
     const params = new URLSearchParams({
@@ -549,14 +633,15 @@ export class ConnectionsService {
       workspaceId: args.workspaceId,
       connectionId: args.connectionId,
       platform: 'QUICKBOOKS',
-      buildStateToken: () => Buffer.from(
-        JSON.stringify({
-          workspaceId: args.workspaceId,
-          connectionId: args.connectionId,
-          nonce: crypto.randomBytes(16).toString('hex'),
-        }),
-        'utf8',
-      ).toString('base64url'),
+      buildStateToken: () =>
+        Buffer.from(
+          JSON.stringify({
+            workspaceId: args.workspaceId,
+            connectionId: args.connectionId,
+            nonce: crypto.randomBytes(16).toString('hex'),
+          }),
+          'utf8',
+        ).toString('base64url'),
     });
 
     const params = new URLSearchParams({
@@ -635,10 +720,12 @@ export class ConnectionsService {
     }
 
     const stateHash = this.hashOAuthState(args.state);
-    const consumedRows = await this.prisma.$queryRaw<Array<{
-      workspaceId: string;
-      connectionId: string;
-    }>>`
+    const consumedRows = await this.prisma.$queryRaw<
+      Array<{
+        workspaceId: string;
+        connectionId: string;
+      }>
+    >`
       UPDATE "ConnectionOAuthState"
       SET "usedAt" = NOW(), "updatedAt" = NOW()
       WHERE "stateHash" = ${stateHash}
@@ -689,10 +776,7 @@ export class ConnectionsService {
     return `${encodedPayload}.${signature}`;
   }
 
-  private verifyShopifyOAuthState(args: {
-    state: unknown;
-    shop: unknown;
-  }): ShopifyOAuthState {
+  private verifyShopifyOAuthState(args: { state: unknown; shop: unknown }): ShopifyOAuthState {
     if (typeof args.state !== 'string' || !args.state.trim()) {
       throw new BadRequestException('Missing Shopify OAuth state');
     }
@@ -810,11 +894,7 @@ export class ConnectionsService {
 
     // Derive a stable 32-byte key from the secret string.
     // Salt is fixed for this app (v1). If we later rotate keys, we can version in metadata.
-    const key = crypto.scryptSync(
-      secret,
-      'fulfilmentkit:connection_secret:v1',
-      32,
-    );
+    const key = crypto.scryptSync(secret, 'fulfilmentkit:connection_secret:v1', 32);
 
     const iv = crypto.randomBytes(12); // recommended size for GCM
     const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
@@ -861,10 +941,7 @@ export class ConnectionsService {
     });
   }
 
-  private async exchangeShopifyAccessToken(args: {
-    shop: string;
-    code: string;
-  }): Promise<{
+  private async exchangeShopifyAccessToken(args: { shop: string; code: string }): Promise<{
     accessToken: string;
     scopes: string[];
     associatedUserScopes: string[];
@@ -937,20 +1014,24 @@ export class ConnectionsService {
       accessToken,
       scopes:
         typeof scope === 'string'
-          ? scope.split(',').map((value) => value.trim()).filter(Boolean)
+          ? scope
+              .split(',')
+              .map((value) => value.trim())
+              .filter(Boolean)
           : [],
       associatedUserScopes:
         typeof associatedUserScope === 'string'
-          ? associatedUserScope.split(',').map((value) => value.trim()).filter(Boolean)
+          ? associatedUserScope
+              .split(',')
+              .map((value) => value.trim())
+              .filter(Boolean)
           : [],
       tokenType: typeof tokenType === 'string' ? tokenType : null,
       rawResponseKeys: Object.keys(data),
     };
   }
 
-  private async exchangeXeroAccessToken(args: {
-    code: string;
-  }): Promise<{
+  private async exchangeXeroAccessToken(args: { code: string }): Promise<{
     accessToken: string;
     refreshToken: string;
     expiresIn: number;
@@ -982,9 +1063,7 @@ export class ConnectionsService {
       data = await response.json();
     } catch {
       if (!response.ok) {
-        throw new BadRequestException(
-          `Xero token exchange failed with status ${response.status}`,
-        );
+        throw new BadRequestException(`Xero token exchange failed with status ${response.status}`);
       }
       throw new BadRequestException('Invalid Xero token response payload');
     }
@@ -1047,9 +1126,7 @@ export class ConnectionsService {
     };
   }
 
-  private async exchangeZohoAccessToken(args: {
-    code: string;
-  }): Promise<{
+  private async exchangeZohoAccessToken(args: { code: string }): Promise<{
     accessToken: string;
     refreshToken: string;
     expiresInSeconds: number;
@@ -1082,9 +1159,7 @@ export class ConnectionsService {
       data = await response.json();
     } catch {
       if (!response.ok) {
-        throw new BadRequestException(
-          `Zoho token exchange failed with status ${response.status}`,
-        );
+        throw new BadRequestException(`Zoho token exchange failed with status ${response.status}`);
       }
       throw new BadRequestException('Invalid Zoho token response payload');
     }
@@ -1150,9 +1225,7 @@ export class ConnectionsService {
     const parsedExpiresIn = parseExpires(expiresIn);
     const expiresInSeconds = parsedExpiresInSec ?? parsedExpiresIn;
     if (!expiresInSeconds) {
-      throw new BadRequestException(
-        'Zoho token response missing expires_in or expires_in_sec',
-      );
+      throw new BadRequestException('Zoho token response missing expires_in or expires_in_sec');
     }
 
     return {
@@ -1160,17 +1233,13 @@ export class ConnectionsService {
       refreshToken: refreshToken.trim(),
       expiresInSeconds,
       tokenType: tokenType.trim(),
-      apiDomain: typeof apiDomain === 'string' && apiDomain.trim()
-        ? apiDomain.trim()
-        : null,
+      apiDomain: typeof apiDomain === 'string' && apiDomain.trim() ? apiDomain.trim() : null,
       scope: typeof scope === 'string' && scope.trim() ? scope.trim() : null,
       rawResponseKeys: Object.keys(data),
     };
   }
 
-  private async exchangeQuickBooksAccessToken(args: {
-    code: string;
-  }): Promise<{
+  private async exchangeQuickBooksAccessToken(args: { code: string }): Promise<{
     accessToken: string;
     refreshToken: string;
     expiresIn: number;
@@ -1181,9 +1250,10 @@ export class ConnectionsService {
   }> {
     const { clientId, clientSecret, redirectUri, environment } = this.getQuickBooksTokenConfig();
     const basicAuth = Buffer.from(`${clientId}:${clientSecret}`, 'utf8').toString('base64');
-    const tokenEndpoint = environment === 'production'
-      ? 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
-      : 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
+    const tokenEndpoint =
+      environment === 'production'
+        ? 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
+        : 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 
     const formBody = new URLSearchParams({
       grant_type: 'authorization_code',
@@ -1242,7 +1312,8 @@ export class ConnectionsService {
     const accessToken = (data as { access_token?: unknown }).access_token;
     const refreshToken = (data as { refresh_token?: unknown }).refresh_token;
     const expiresIn = (data as { expires_in?: unknown }).expires_in;
-    const refreshTokenExpiresIn = (data as { x_refresh_token_expires_in?: unknown }).x_refresh_token_expires_in;
+    const refreshTokenExpiresIn = (data as { x_refresh_token_expires_in?: unknown })
+      .x_refresh_token_expires_in;
     const tokenType = (data as { token_type?: unknown }).token_type;
     const scope = (data as { scope?: unknown }).scope;
 
@@ -1256,9 +1327,9 @@ export class ConnectionsService {
       throw new BadRequestException('QuickBooks token response missing expires_in');
     }
     if (
-      !Number.isFinite(refreshTokenExpiresIn)
-      || typeof refreshTokenExpiresIn !== 'number'
-      || refreshTokenExpiresIn <= 0
+      !Number.isFinite(refreshTokenExpiresIn) ||
+      typeof refreshTokenExpiresIn !== 'number' ||
+      refreshTokenExpiresIn <= 0
     ) {
       throw new BadRequestException('QuickBooks token response missing x_refresh_token_expires_in');
     }
@@ -1301,9 +1372,8 @@ export class ConnectionsService {
     }
 
     if (platform === 'xero') {
-      const connectionIdFromPayload = typeof payload?.connectionId === 'string'
-        ? payload.connectionId.trim()
-        : '';
+      const connectionIdFromPayload =
+        typeof payload?.connectionId === 'string' ? payload.connectionId.trim() : '';
       const consumedState = await this.lookupAndValidateOAuthStateOnCallback({
         state: payload?.state,
         platform: 'XERO',
@@ -1315,9 +1385,8 @@ export class ConnectionsService {
     }
 
     if (platform === 'zoho') {
-      const connectionIdFromPayload = typeof payload?.connectionId === 'string'
-        ? payload.connectionId.trim()
-        : '';
+      const connectionIdFromPayload =
+        typeof payload?.connectionId === 'string' ? payload.connectionId.trim() : '';
       const consumedState = await this.lookupAndValidateOAuthStateOnCallback({
         state: payload?.state,
         platform: 'ZOHO',
@@ -1329,9 +1398,8 @@ export class ConnectionsService {
     }
 
     if (platform === 'quickbooks') {
-      const connectionIdFromPayload = typeof payload?.connectionId === 'string'
-        ? payload.connectionId.trim()
-        : '';
+      const connectionIdFromPayload =
+        typeof payload?.connectionId === 'string' ? payload.connectionId.trim() : '';
       const consumedState = await this.lookupAndValidateOAuthStateOnCallback({
         state: payload?.state,
         platform: 'QUICKBOOKS',
@@ -1364,8 +1432,7 @@ export class ConnectionsService {
     try {
       let secretPayload: any = payload;
       let providerMetadata: Record<string, unknown> = {
-        payloadKeys:
-          payload && typeof payload === 'object' ? Object.keys(payload) : [],
+        payloadKeys: payload && typeof payload === 'object' ? Object.keys(payload) : [],
       };
 
       if (platform === 'shopify') {
@@ -1399,9 +1466,8 @@ export class ConnectionsService {
 
       if (platform === 'xero') {
         const xeroError = typeof payload?.error === 'string' ? payload.error.trim() : '';
-        const xeroErrorDescription = typeof payload?.error_description === 'string'
-          ? payload.error_description.trim()
-          : '';
+        const xeroErrorDescription =
+          typeof payload?.error_description === 'string' ? payload.error_description.trim() : '';
         const code = typeof payload?.code === 'string' ? payload.code.trim() : '';
 
         if (xeroError) {
@@ -1415,7 +1481,10 @@ export class ConnectionsService {
         const now = new Date();
         const nowIso = now.toISOString();
         const expiresAtIso = new Date(now.getTime() + tokenResponse.expiresIn * 1000).toISOString();
-        const scopeList = tokenResponse.scope.split(/\s+/).map((value) => value.trim()).filter(Boolean);
+        const scopeList = tokenResponse.scope
+          .split(/\s+/)
+          .map((value) => value.trim())
+          .filter(Boolean);
 
         secretPayload = {
           accessToken: tokenResponse.accessToken,
@@ -1437,9 +1506,8 @@ export class ConnectionsService {
 
       if (platform === 'zoho') {
         const zohoError = typeof payload?.error === 'string' ? payload.error.trim() : '';
-        const zohoErrorDescription = typeof payload?.error_description === 'string'
-          ? payload.error_description.trim()
-          : '';
+        const zohoErrorDescription =
+          typeof payload?.error_description === 'string' ? payload.error_description.trim() : '';
         const code = typeof payload?.code === 'string' ? payload.code.trim() : '';
 
         if (zohoError) {
@@ -1452,7 +1520,9 @@ export class ConnectionsService {
         const tokenResponse = await this.exchangeZohoAccessToken({ code });
         const now = new Date();
         const nowIso = now.toISOString();
-        const expiresAtIso = new Date(now.getTime() + tokenResponse.expiresInSeconds * 1000).toISOString();
+        const expiresAtIso = new Date(
+          now.getTime() + tokenResponse.expiresInSeconds * 1000,
+        ).toISOString();
         const scopeList = (tokenResponse.scope ?? '')
           .split(/[,\s]+/)
           .map((value) => value.trim())
@@ -1478,9 +1548,8 @@ export class ConnectionsService {
 
       if (platform === 'quickbooks') {
         const quickBooksError = typeof payload?.error === 'string' ? payload.error.trim() : '';
-        const quickBooksErrorDescription = typeof payload?.error_description === 'string'
-          ? payload.error_description.trim()
-          : '';
+        const quickBooksErrorDescription =
+          typeof payload?.error_description === 'string' ? payload.error_description.trim() : '';
         const code = typeof payload?.code === 'string' ? payload.code.trim() : '';
         const realmId = typeof payload?.realmId === 'string' ? payload.realmId.trim() : '';
 
@@ -1497,7 +1566,9 @@ export class ConnectionsService {
         const tokenResponse = await this.exchangeQuickBooksAccessToken({ code });
         const now = new Date();
         const nowIso = now.toISOString();
-        const accessTokenExpiresAt = new Date(now.getTime() + tokenResponse.expiresIn * 1000).toISOString();
+        const accessTokenExpiresAt = new Date(
+          now.getTime() + tokenResponse.expiresIn * 1000,
+        ).toISOString();
         const refreshTokenExpiresAt = new Date(
           now.getTime() + tokenResponse.refreshTokenExpiresIn * 1000,
         ).toISOString();
@@ -1578,25 +1649,24 @@ export class ConnectionsService {
           }
 
           if (
-            typeof systemStatusPayload !== 'object'
-            || systemStatusPayload === null
-            || Array.isArray(systemStatusPayload)
+            typeof systemStatusPayload !== 'object' ||
+            systemStatusPayload === null ||
+            Array.isArray(systemStatusPayload)
           ) {
             throw new BadRequestException('Invalid WooCommerce credentials or store URL');
           }
 
           const payloadRecord = systemStatusPayload as Record<string, unknown>;
           const hasExpectedKeys =
-            'environment' in payloadRecord
-            && 'database' in payloadRecord
-            && 'active_plugins' in payloadRecord;
+            'environment' in payloadRecord &&
+            'database' in payloadRecord &&
+            'active_plugins' in payloadRecord;
           if (!hasExpectedKeys) {
             throw new BadRequestException('Invalid WooCommerce credentials or store URL');
           }
 
-          const apiVersion = typeof payloadRecord.version === 'string'
-            ? payloadRecord.version
-            : null;
+          const apiVersion =
+            typeof payloadRecord.version === 'string' ? payloadRecord.version : null;
 
           const nowIso = new Date().toISOString();
           secretPayload = {

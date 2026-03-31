@@ -9,6 +9,12 @@ import { FinanceReportsService } from '../../reports/finance/finance-reports.ser
 import { FulfillmentReportsService } from '../../reports/fulfillment/fulfillment-reports.service';
 import { InventoryReportsService } from '../../reports/inventory/inventory-reports.service';
 import { OrdersTransactionalReportsService } from '../../reports/orders/orders-transactional-reports.service';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import {
+  type ConnectionCapabilityFlags,
+  getPlatformCapabilityFlags,
+  unionConnectionCapabilities,
+} from '../../connections/connections.service';
 
 export type ReportKey =
   | 'sales-summary'
@@ -840,6 +846,14 @@ type ReportOutput = {
 
 export type ReportComputationOutput = Omit<ReportOutput, 'supportStatus' | 'supportReason'>;
 
+type CapabilityKey = keyof ConnectionCapabilityFlags;
+
+const reportCapabilityRequirementsByKey: Partial<Record<ReportKey, readonly CapabilityKey[]>> = {
+  'shipping-delivery-performance': ['supports_pos'],
+  'shipping-labels-over-time': ['supports_pos'],
+  'shipping-labels-by-order': ['supports_pos'],
+  'items-bought-together': ['supports_subscriptions'],
+};
 
 const reportExportHeadersByKey: Record<ReportKey, string[]> = {
   'sales-summary': [],
@@ -870,7 +884,12 @@ const reportExportHeadersByKey: Record<ReportKey, string[]> = {
     'fulfilledOrders',
     'medianOrderToFulfilledHours',
   ],
-  'shipping-labels-over-time': ['periodStart', 'periodLabel', 'labelsPurchased', 'medianOrderToLabelHours'],
+  'shipping-labels-over-time': [
+    'periodStart',
+    'periodLabel',
+    'labelsPurchased',
+    'medianOrderToLabelHours',
+  ],
   'shipping-labels-by-order': [
     'orderId',
     'orderNumber',
@@ -1066,14 +1085,18 @@ export class OrdersReportsService {
   private readonly runsByWorkspace = new Map<string, ReportRunRecord[]>();
 
   constructor(
+    private readonly prisma: PrismaService,
     private readonly ordersTransactionalReportsService?: OrdersTransactionalReportsService,
     private readonly fulfillmentReportsService?: FulfillmentReportsService,
     private readonly inventoryReportsService?: InventoryReportsService,
     private readonly financeReportsService?: FinanceReportsService,
   ) {}
 
-  listReports() {
-    return this.reports;
+  async listReports(workspaceId: string) {
+    const workspaceCapabilityFlags = await this.getWorkspaceCapabilityFlags(workspaceId);
+    return this.reports.map((report) =>
+      this.attachCapabilityMetadata(report, workspaceCapabilityFlags),
+    );
   }
 
   hasReportKey(key: string): key is ReportKey {
@@ -1095,10 +1118,17 @@ export class OrdersReportsService {
       ...report.defaultFilters,
       ...(input.filters ?? {}),
     } as ReportFiltersByKey[K];
-    const normalizedPlatformFilters = this.normalizePlatformFilter(report.key, normalizedFilters.platform);
+    const normalizedPlatformFilters = this.normalizePlatformFilter(
+      report.key,
+      normalizedFilters.platform,
+    );
     normalizedFilters.platform = normalizedPlatformFilters as ReportFiltersByKey[K]['platform'];
 
-    const reportOutput = await this.buildReportOutput(report.key, input.workspaceId, normalizedFilters);
+    const reportOutput = await this.buildReportOutput(
+      report.key,
+      input.workspaceId,
+      normalizedFilters,
+    );
 
     const run: ReportRunRecord = {
       id: `run_${Date.now().toString(36)}`,
@@ -1224,7 +1254,9 @@ export class OrdersReportsService {
           return this.buildMissingConnectorOutput(report, 'inventory connector');
         }
         return withSupportMetadata(
-          inventoryReportsService.runInventoryAging(filters as ReportFiltersByKey['inventory-aging']),
+          inventoryReportsService.runInventoryAging(
+            filters as ReportFiltersByKey['inventory-aging'],
+          ),
         );
       }
       case 'order-fulfillment-health': {
@@ -1400,9 +1432,60 @@ export class OrdersReportsService {
     return buildReportWorkbookXml(input);
   }
 
-  private normalizePlatformFilter(key: ReportKey, rawValue: ReportPlatform[] | ReportPlatform): ReportPlatform[] {
+  private normalizePlatformFilter(
+    key: ReportKey,
+    rawValue: ReportPlatform[] | ReportPlatform,
+  ): ReportPlatform[] {
     return normalizeReportPlatformFilter(key, rawValue, this.reports, reportPlatforms);
   }
 
+  private async getWorkspaceCapabilityFlags(
+    workspaceId: string,
+  ): Promise<ConnectionCapabilityFlags> {
+    const activeConnections = await this.prisma.connection.findMany({
+      where: {
+        workspaceId,
+        status: 'ACTIVE',
+      },
+      select: {
+        platform: true,
+      },
+    });
 
+    return unionConnectionCapabilities(
+      activeConnections.map((activeConnection) =>
+        getPlatformCapabilityFlags(activeConnection.platform),
+      ),
+    );
+  }
+
+  private attachCapabilityMetadata(
+    report: ReportDefinition,
+    workspaceCapabilityFlags: ConnectionCapabilityFlags,
+  ): ReportDefinition {
+    const requiredCapabilities = reportCapabilityRequirementsByKey[report.key] ?? [];
+    const missingCapabilities = requiredCapabilities.filter(
+      (capability) => !workspaceCapabilityFlags[capability],
+    );
+
+    if (missingCapabilities.length === 0) {
+      return report;
+    }
+
+    const downgradedSupportStatus =
+      report.supportStatus === 'supported' ? 'partial' : 'unsupported';
+    const capabilityBlockerReason = `Missing workspace connection capabilities: ${missingCapabilities.join(', ')}.`;
+
+    return {
+      ...report,
+      supportStatus: downgradedSupportStatus,
+      supportReason: report.supportReason
+        ? `${report.supportReason} ${capabilityBlockerReason}`
+        : capabilityBlockerReason,
+      requiredFeatures: [
+        ...(report.requiredFeatures ?? []),
+        ...requiredCapabilities.map((value) => `capability:${value}`),
+      ],
+    };
+  }
 }

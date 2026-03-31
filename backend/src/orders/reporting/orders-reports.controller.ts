@@ -1,6 +1,10 @@
 import { BadRequestException, Body, Controller, Get, Param, Post, Req, Res } from '@nestjs/common';
 import { z } from 'zod';
-import { OrdersReportsService, type ReportFilterDefinitionMap, type ReportKey } from './orders-reports.service';
+import {
+  OrdersReportsService,
+  type ReportFilterDefinitionMap,
+  type ReportKey,
+} from './orders-reports.service';
 import { createReportFiltersSchema } from './report-filter-schema.builder';
 import { apiResponse } from '../../common/utils/api-response';
 import { toListResponse } from '../../common/utils/list-response';
@@ -45,7 +49,9 @@ const reportRunResponseSchema = z
   })
   .strict();
 
-function createFiltersSchema(definitions: ReportFilterDefinitionMap): z.ZodType<Record<string, unknown>> {
+function createFiltersSchema(
+  definitions: ReportFilterDefinitionMap,
+): z.ZodType<Record<string, unknown>> {
   return createReportFiltersSchema(definitions);
 }
 
@@ -54,8 +60,11 @@ export class OrdersReportsController {
   constructor(private readonly reportsService: OrdersReportsService) {}
 
   @Get()
-  async listReports() {
-    const items = z.array(reportDefinitionResponseSchema).parse(this.reportsService.listReports());
+  async listReports(@Req() req?: any) {
+    const workspaceId = req ? requireWorkspaceId(req) : '__workspace_capability_fallback__';
+    const items = z
+      .array(reportDefinitionResponseSchema)
+      .parse(await this.reportsService.listReports(workspaceId));
 
     return apiResponse(
       toListResponse({
@@ -76,7 +85,9 @@ export class OrdersReportsController {
       throw new BadRequestException('Invalid report key');
     }
 
-    const filtersSchema = createFiltersSchema(this.reportsService.getFilterDefinitionMap(parsedKey.data));
+    const filtersSchema = createFiltersSchema(
+      this.reportsService.getFilterDefinitionMap(parsedKey.data),
+    );
     const runBodySchema = z
       .object({
         filters: filtersSchema.optional(),
@@ -109,7 +120,9 @@ export class OrdersReportsController {
       throw new BadRequestException('Invalid report key');
     }
 
-    const filtersSchema = createFiltersSchema(this.reportsService.getFilterDefinitionMap(parsedKey.data));
+    const filtersSchema = createFiltersSchema(
+      this.reportsService.getFilterDefinitionMap(parsedKey.data),
+    );
     const exportBodySchema = z
       .object({
         filters: filtersSchema.optional(),
