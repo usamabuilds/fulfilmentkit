@@ -53,6 +53,8 @@ model Workspace {
   inventory       Inventory[]
   locations       Location[]
   orders          Order[]
+  fulfillmentStatusEvents OrderFulfillmentStatusEvent[]
+  shippingLabelPurchases  OrderShippingLabelPurchase[]
   products        Product[]
   refunds         Refund[]
   members         WorkspaceMember[]
@@ -65,6 +67,13 @@ model Workspace {
   forecasts       Forecast[]
   plans           Plan[]
   roleDefinitions WorkspaceRoleDefinition[]
+}
+
+enum OrderFulfillmentStatus {
+  PLACED
+  FULFILLED
+  SHIPPED
+  DELIVERED
 }
 
 model User {
@@ -266,8 +275,48 @@ model Order {
   workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   items       OrderItem[]
   refunds     Refund[]
+  fulfillmentStatusEvents OrderFulfillmentStatusEvent[]
+  shippingLabelPurchases  OrderShippingLabelPurchase[]
 
   @@unique([workspaceId, externalRef])
+}
+
+model OrderFulfillmentStatusEvent {
+  id          String                  @id @default(uuid())
+  workspaceId String
+  orderId     String
+  status      OrderFulfillmentStatus
+  eventAt     DateTime
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  workspace   Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order       Order                   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([orderId])
+  @@index([workspaceId, eventAt])
+  @@index([workspaceId, status, eventAt])
+}
+
+model OrderShippingLabelPurchase {
+  id               String    @id @default(uuid())
+  workspaceId      String
+  orderId          String
+  carrier          String
+  service          String
+  packageType      String
+  labelCost        Decimal
+  customerPaidCost Decimal
+  currency         String
+  purchasedAt      DateTime
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order            Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([orderId])
+  @@index([workspaceId, purchasedAt])
 }
 
 model OrderItem {
