@@ -17,6 +17,11 @@ type MetadataEntriesInput = {
   isEmpty: boolean;
   rowCount: number;
   extraEntries?: Array<[string, string]>;
+  dataCoverage?: {
+    coverageStart: string;
+    coverageEnd: string;
+    isCompleteForRange: boolean;
+  };
 };
 
 export function buildMetadataEntries(input: MetadataEntriesInput): Array<[string, string]> {
@@ -34,11 +39,20 @@ export function buildMetadataEntries(input: MetadataEntriesInput): Array<[string
     ['to', fromTo.to],
     ['platformSelection', platformSelection],
     ['rowCount', String(input.rowCount)],
+    ['coverageStart', input.dataCoverage?.coverageStart ?? 'unknown'],
+    ['coverageEnd', input.dataCoverage?.coverageEnd ?? 'unknown'],
+    ['isCompleteForRange', String(input.dataCoverage?.isCompleteForRange ?? false)],
     [
       'message',
       input.isEmpty
         ? 'No report rows matched selected filters. File contains metadata for auditability.'
         : 'Report rows generated.',
+    ],
+    [
+      'coverageDisclaimer',
+      input.dataCoverage?.isCompleteForRange === false
+        ? `Data is only available from ${input.dataCoverage.coverageStart}. No inferred history is included before this date.`
+        : 'Complete data coverage for selected range.',
     ],
   ];
 

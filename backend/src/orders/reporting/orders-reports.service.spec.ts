@@ -151,6 +151,9 @@ test('runReport returns deterministic support metadata with zero rows for unsupp
     run.output.supportReason,
     'Execution is not implemented yet; this key currently returns a placeholder summary with no computed rows.',
   );
+  assert.equal(typeof run.output.dataCoverage.coverageStart, 'string');
+  assert.equal(typeof run.output.dataCoverage.coverageEnd, 'string');
+  assert.equal(typeof run.output.dataCoverage.isCompleteForRange, 'boolean');
 });
 
 test('runReport returns caveat for partial reports when unsupported mode is requested', async () => {

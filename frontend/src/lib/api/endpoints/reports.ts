@@ -96,6 +96,11 @@ export interface ReportRunDto {
     chartRows?: Array<Record<string, string | number | null>>
     supportStatus: 'supported' | 'partial' | 'unsupported'
     supportReason?: string
+    dataCoverage: {
+      coverageStart: string
+      coverageEnd: string
+      isCompleteForRange: boolean
+    }
     generatedAt: string
   }
   createdAt: string

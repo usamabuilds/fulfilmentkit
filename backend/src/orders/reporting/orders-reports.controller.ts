@@ -20,8 +20,8 @@ const reportDefinitionResponseSchema = z
     supportStatus: reportSupportStatusSchema,
     supportReason: z.string().min(1).optional(),
     requiredFeatures: z.array(z.string().min(1)).optional(),
-    defaultFilters: z.record(z.union([z.string(), z.number(), z.array(z.string())])),
-    filterDefinitions: z.record(z.unknown()),
+    defaultFilters: z.record(z.string(), z.union([z.string(), z.number(), z.array(z.string())])),
+    filterDefinitions: z.record(z.string(), z.unknown()),
     supportedPlatforms: z.array(z.string().min(1)),
     supportsExport: z.boolean(),
   })
@@ -32,16 +32,25 @@ const reportRunResponseSchema = z
     id: z.string().min(1),
     reportKey: reportKeySchema,
     status: z.literal('completed'),
-    filters: z.record(z.union([z.string(), z.number(), z.array(z.string())])),
+    filters: z.record(z.string(), z.union([z.string(), z.number(), z.array(z.string())])),
     output: z
       .object({
         rows: z.number(),
         summary: z.string(),
         caveat: z.string().optional(),
         warnings: z.array(z.string()).optional(),
-        chartRows: z.array(z.record(z.union([z.string(), z.number(), z.null()]))).optional(),
+        chartRows: z
+          .array(z.record(z.string(), z.union([z.string(), z.number(), z.null()])))
+          .optional(),
         supportStatus: reportSupportStatusSchema,
         supportReason: z.string().optional(),
+        dataCoverage: z
+          .object({
+            coverageStart: z.string().min(1),
+            coverageEnd: z.string().min(1),
+            isCompleteForRange: z.boolean(),
+          })
+          .strict(),
         generatedAt: z.string(),
       })
       .strict(),

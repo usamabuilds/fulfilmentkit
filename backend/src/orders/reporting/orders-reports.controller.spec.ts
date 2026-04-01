@@ -66,6 +66,11 @@ function createController() {
       caveat: 'Execution is not implemented yet.',
       supportStatus: 'unsupported',
       supportReason: 'Execution is not implemented yet.',
+      dataCoverage: {
+        coverageStart: '2024-01-01',
+        coverageEnd: '2026-03-31',
+        isCompleteForRange: true,
+      },
       generatedAt: '2026-03-31T00:00:00.000Z',
     },
     createdAt: '2026-03-31T00:00:00.000Z',
