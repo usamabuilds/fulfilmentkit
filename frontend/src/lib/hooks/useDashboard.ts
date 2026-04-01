@@ -7,6 +7,12 @@ import {
   type DashboardTopSkusParams,
   type DashboardTrendsParams,
 } from '@/lib/api/endpoints/dashboard'
+import {
+  reportsApi,
+  type DashboardTargetReportKey,
+  type ReportDefinitionDto,
+  type ReportRunDto,
+} from '@/lib/api/endpoints/reports'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 
 export function useDashboardStats(params?: DashboardStatsParams, enabled = true) {
@@ -96,4 +102,59 @@ export function useDashboardRepeatPurchase(params?: DashboardRepeatPurchaseParam
     queryFn: () => dashboardApi.getRepeatPurchase(params),
     enabled: !!workspaceId && enabled,
   })
+}
+
+export function useDashboardSnapshotReports(enabled = true) {
+  const workspaceId = useWorkspaceStore((state) => state.workspace?.id)
+
+  return useQuery({
+    queryKey: ['dashboard', 'snapshot', 'reports', workspaceId],
+    queryFn: () => reportsApi.list(),
+    enabled: !!workspaceId && enabled,
+  })
+}
+
+interface DashboardSnapshotReportRunParams {
+  reportKey: DashboardTargetReportKey
+  filters?: Record<string, string | number | string[]>
+  enabled?: boolean
+}
+
+function getDashboardReportDefinition(
+  reports: ReportDefinitionDto[] | undefined,
+  key: DashboardTargetReportKey,
+): ReportDefinitionDto | null {
+  if (!reports) {
+    return null
+  }
+
+  return reports.find((report) => report.key === key) ?? null
+}
+
+export function useDashboardSnapshotReportRun({
+  reportKey,
+  filters,
+  enabled = true,
+}: DashboardSnapshotReportRunParams) {
+  const workspaceId = useWorkspaceStore((state) => state.workspace?.id)
+  const reportsQuery = useDashboardSnapshotReports(enabled)
+  const reportDefinition = getDashboardReportDefinition(reportsQuery.data?.data.items, reportKey)
+  const reportSupportStatus = reportDefinition?.supportStatus ?? null
+  const isRunnable = reportSupportStatus !== 'unsupported'
+
+  const runQuery = useQuery({
+    queryKey: ['dashboard', 'snapshot', 'run', workspaceId, reportKey, filters ?? null],
+    queryFn: () => reportsApi.run(reportKey, { filters }),
+    enabled: !!workspaceId && enabled && !!reportDefinition && isRunnable,
+  })
+
+  return {
+    reportDefinition,
+    reportSupportStatus,
+    isRunnable,
+    reportDefinitionLoading: reportsQuery.isLoading,
+    reportDefinitionError: reportsQuery.error,
+    runQuery,
+    runData: runQuery.data as ReportRunDto<DashboardTargetReportKey> | undefined,
+  }
 }
