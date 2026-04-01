@@ -12,6 +12,7 @@ import {
   type ReportDefinitionDto,
   type ReportFilterDefinitionMapDto,
   type ReportFilterDefinitionDto,
+  type ReportRunDto,
 } from '@/lib/api/endpoints/reports'
 import { connectionPlatforms, connectionsApi, type ConnectionPlatform } from '@/lib/api/endpoints/connections'
 import { useWorkspaceStore } from '@/lib/store/workspaceStore'
@@ -186,6 +187,13 @@ interface ReportSupportAssessment {
   blockerClassification: BlockerClassification
   blockerReason: string | null
   dataCoverageDisclaimer: string | null
+}
+
+function getCoverageDisclaimer(runOutput: ReportRunDto['output'] | null): string | null {
+  if (!runOutput || runOutput.dataCoverage.isCompleteForRange) {
+    return null
+  }
+  return `Data is only available from ${runOutput.dataCoverage.coverageStart} to ${runOutput.dataCoverage.coverageEnd}. Pre-coverage history is never inferred.`
 }
 
 function resolveReportSupportAssessment(
@@ -422,6 +430,7 @@ export default function ReportDetailPage() {
   const isUnsupported = viewState === 'unsupported'
   const isPartial = viewState === 'partial'
   const executionDisabledReason = isUnsupported ? supportAssessment.blockerReason : null
+  const coverageDisclaimer = run ? getCoverageDisclaimer(run.output) : null
 
   return (
     <div className="flex flex-col gap-6">
@@ -603,6 +612,12 @@ export default function ReportDetailPage() {
           <div className="mt-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
             <p className="text-caption-1 uppercase tracking-wide text-text-tertiary">Data coverage disclaimer</p>
             <p className="mt-2 text-footnote text-text-secondary">{supportAssessment.dataCoverageDisclaimer}</p>
+          </div>
+        )}
+        {coverageDisclaimer && (
+          <div className="mt-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
+            <p className="text-caption-1 uppercase tracking-wide text-text-tertiary">Coverage window</p>
+            <p className="mt-2 text-footnote text-text-secondary">{coverageDisclaimer}</p>
           </div>
         )}
       </div>

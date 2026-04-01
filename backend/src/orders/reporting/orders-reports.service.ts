@@ -1018,6 +1018,7 @@ type ReportRunRecord = {
     metadataEntries?: Array<[string, string]>;
     supportStatus: 'supported' | 'partial' | 'unsupported';
     supportReason?: string;
+    dataCoverage: ReportDataCoverage;
     generatedAt: string;
   };
   createdAt: Date;
@@ -1067,6 +1068,30 @@ type ReportOutput = {
   supportReason?: string;
   supportStatusOverride?: 'supported' | 'partial' | 'unsupported';
   supportReasonOverride?: string;
+};
+
+type ReportDataCoverage = {
+  coverageStart: string;
+  coverageEnd: string;
+  isCompleteForRange: boolean;
+};
+
+const reportBackfillStartByKey: Record<ReportKey, string> = {
+  'sales-summary': '2024-01-01',
+  'inventory-aging': '2024-03-01',
+  'order-fulfillment-health': '2024-05-01',
+  'orders-reversals-by-product': '2024-01-01',
+  'orders-over-time': '2024-01-01',
+  'shipping-delivery-performance': '2024-05-01',
+  'orders-fulfilled-over-time': '2024-05-01',
+  'shipping-labels-over-time': '2024-05-01',
+  'shipping-labels-by-order': '2024-05-01',
+  'items-bought-together': '2024-01-01',
+  'new-vs-returning-customers': '2024-01-01',
+  'customer-cohort-analysis': '2024-01-01',
+  'rfm-customer-analysis': '2024-01-01',
+  'rfm-customer-list': '2024-01-01',
+  'predicted-spend-tier': '2024-01-01',
 };
 
 export type ReportComputationOutput = Omit<ReportOutput, 'supportStatus' | 'supportReason'>;
@@ -1443,6 +1468,7 @@ export class OrdersReportsService {
       input.workspaceId,
       normalizedFilters,
     );
+    const dataCoverage = this.resolveDataCoverage(report.key, normalizedFilters.dateRange);
 
     const run: ReportRunRecord = {
       id: `run_${Date.now().toString(36)}`,
@@ -1458,6 +1484,7 @@ export class OrdersReportsService {
         chartRows: reportOutput.chartRows,
         supportStatus: reportOutput.supportStatus,
         supportReason: reportOutput.supportReason,
+        dataCoverage,
         generatedAt: new Date().toISOString(),
       },
       createdAt: new Date(),
@@ -1514,6 +1541,7 @@ export class OrdersReportsService {
       isEmpty: reportRows.length === 0,
       rowCount: reportRows.length,
       extraEntries: run.output.metadataEntries,
+      dataCoverage: run.output.dataCoverage,
     });
 
     const workbook = this.buildWorkbookXml({
@@ -1793,8 +1821,39 @@ export class OrdersReportsService {
     isEmpty: boolean;
     rowCount: number;
     extraEntries?: Array<[string, string]>;
+    dataCoverage?: ReportDataCoverage;
   }): Array<[string, string]> {
     return buildReportMetadataEntries(input);
+  }
+
+  private resolveDataCoverage(key: ReportKey, dateRange: DateRangePreset): ReportDataCoverage {
+    const requestedRange = this.resolveDateRangeToFromTo(dateRange);
+    const coverageStart = reportBackfillStartByKey[key];
+    const coverageEnd = requestedRange.to;
+
+    return {
+      coverageStart,
+      coverageEnd,
+      isCompleteForRange: requestedRange.from >= coverageStart,
+    };
+  }
+
+  private resolveDateRangeToFromTo(range: DateRangePreset): { from: string; to: string } {
+    const now = new Date();
+    const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const daysBackByPreset: Record<DateRangePreset, number> = {
+      last_7_days: 7,
+      last_14_days: 14,
+      last_30_days: 30,
+      last_90_days: 90,
+    };
+    const from = new Date(to);
+    from.setUTCDate(from.getUTCDate() - (daysBackByPreset[range] - 1));
+
+    return {
+      from: from.toISOString().slice(0, 10),
+      to: to.toISOString().slice(0, 10),
+    };
   }
 
   private formatFileNameTimestamp(value: Date): string {
