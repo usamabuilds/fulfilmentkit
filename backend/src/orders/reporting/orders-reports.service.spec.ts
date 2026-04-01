@@ -8,6 +8,9 @@ type QueryRawFn = {
 
 function createService() {
   const prisma = {
+    connection: {
+      findMany: async () => [],
+    },
     order: {
       findMany: async (args: { select?: Record<string, unknown> }) => {
         const select = args.select ?? {};
@@ -200,4 +203,19 @@ test('exportReport returns workbook with rows when report output is non-empty', 
   assert.equal(exported.isEmpty, false);
   assert.match(exported.message, /successfully/i);
   assert.ok(exported.file.length > 0);
+});
+
+test('listReports appends capability metadata when required workspace capability is missing', async () => {
+  const service = createService();
+
+  const reports = await service.listReports('ws-1');
+  const shippingLabelsByOrder = reports.find((report) => report.key === 'shipping-labels-by-order');
+
+  assert.ok(shippingLabelsByOrder);
+  assert.equal(shippingLabelsByOrder.supportStatus, 'partial');
+  assert.match(
+    shippingLabelsByOrder.supportReason ?? '',
+    /Missing workspace connection capabilities: supports_pos\./,
+  );
+  assert.ok(shippingLabelsByOrder.requiredFeatures?.includes('capability:supports_pos'));
 });

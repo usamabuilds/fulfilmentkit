@@ -16,6 +16,7 @@ import {
   getPlatformCapabilityFlags,
   unionConnectionCapabilities,
 } from '../../connections/connections.service';
+import { attachCapabilityMetadata as applyCapabilityMetadata } from './report-support-metadata';
 
 export type ReportKey =
   | 'sales-summary'
@@ -1070,15 +1071,6 @@ type ReportOutput = {
 
 export type ReportComputationOutput = Omit<ReportOutput, 'supportStatus' | 'supportReason'>;
 
-type CapabilityKey = keyof ConnectionCapabilityFlags;
-
-const reportCapabilityRequirementsByKey: Partial<Record<ReportKey, readonly CapabilityKey[]>> = {
-  'shipping-delivery-performance': ['supports_pos'],
-  'shipping-labels-over-time': ['supports_pos'],
-  'shipping-labels-by-order': ['supports_pos'],
-  'items-bought-together': ['supports_subscriptions'],
-};
-
 const reportExportHeadersByKey: Record<ReportKey, string[]> = {
   'sales-summary': [],
   'inventory-aging': [
@@ -1850,29 +1842,15 @@ export class OrdersReportsService {
     report: ReportDefinition,
     workspaceCapabilityFlags: ConnectionCapabilityFlags,
   ): ReportDefinition {
-    const requiredCapabilities = reportCapabilityRequirementsByKey[report.key] ?? [];
-    const missingCapabilities = requiredCapabilities.filter(
-      (capability) => !workspaceCapabilityFlags[capability],
-    );
+    const metadata = applyCapabilityMetadata(report, workspaceCapabilityFlags);
 
-    if (missingCapabilities.length === 0) {
+    if (metadata.supportStatus === report.supportStatus && metadata.supportReason === report.supportReason) {
       return report;
     }
 
-    const downgradedSupportStatus =
-      report.supportStatus === 'supported' ? 'partial' : 'unsupported';
-    const capabilityBlockerReason = `Missing workspace connection capabilities: ${missingCapabilities.join(', ')}.`;
-
     return {
       ...report,
-      supportStatus: downgradedSupportStatus,
-      supportReason: report.supportReason
-        ? `${report.supportReason} ${capabilityBlockerReason}`
-        : capabilityBlockerReason,
-      requiredFeatures: [
-        ...(report.requiredFeatures ?? []),
-        ...requiredCapabilities.map((value) => `capability:${value}`),
-      ],
+      ...metadata,
     };
   }
 }
