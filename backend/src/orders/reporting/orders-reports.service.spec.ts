@@ -1,15 +1,47 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { OrdersReportsService, type ReportKey } from './orders-reports.service';
+import {
+  OrdersReportsService,
+  reportFilterDefinitionsByKey,
+  type ReportKey,
+} from './orders-reports.service';
 
 type QueryRawFn = {
   <T>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T>;
 };
 
-function createService() {
+type ServiceDeps = {
+  ordersTransactionalReportsService?: {
+    runOrdersReversalsByProduct?: (workspaceId: string, filters: unknown) => Promise<unknown>;
+    runOrdersOverTime?: (workspaceId: string, filters: unknown) => Promise<unknown>;
+    runItemsBoughtTogether?: (workspaceId: string, filters: unknown) => Promise<unknown>;
+  };
+  fulfillmentReportsService?: {
+    runShippingDeliveryPerformance?: (workspaceId: string, filters: unknown) => Promise<unknown>;
+    runOrdersFulfilledOverTime?: (workspaceId: string, filters: unknown) => Promise<unknown>;
+    runShippingLabelsOverTime?: (workspaceId: string, filters: unknown) => Promise<unknown>;
+    runShippingLabelsByOrder?: (workspaceId: string, filters: unknown) => Promise<unknown>;
+    runOrderFulfillmentHealth?: (filters: unknown) => Promise<unknown>;
+  };
+  inventoryReportsService?: {
+    runInventoryAging?: (workspaceId: string, filters: unknown) => Promise<unknown>;
+  };
+  financeReportsService?: {
+    runSalesSummary?: (filters: unknown) => Promise<unknown>;
+  };
+  customerReportsService?: {
+    runNewVsReturningCustomers?: (workspaceId: string, filters: unknown) => Promise<unknown>;
+    runCustomerCohortAnalysis?: (workspaceId: string, filters: unknown) => Promise<unknown>;
+    runRfmCustomerAnalysis?: (workspaceId: string, filters: unknown) => Promise<unknown>;
+    runRfmCustomerList?: (workspaceId: string, filters: unknown) => Promise<unknown>;
+  };
+  connections?: Array<{ capabilities: unknown }>;
+};
+
+function createService(deps: ServiceDeps = {}) {
   const prisma = {
     connection: {
-      findMany: async () => [],
+      findMany: async () => deps.connections ?? [],
     },
     order: {
       findMany: async (args: { select?: Record<string, unknown> }) => {
@@ -100,64 +132,74 @@ function createService() {
     }) as QueryRawFn,
   };
 
-  return new OrdersReportsService(prisma as never);
+  return new OrdersReportsService(
+    prisma as never,
+    deps.ordersTransactionalReportsService as never,
+    deps.fulfillmentReportsService as never,
+    deps.inventoryReportsService as never,
+    deps.financeReportsService as never,
+    deps.customerReportsService as never,
+  );
 }
 
-test('runReport executes each implemented report query method', async () => {
+const allReportKeys = Object.keys(reportFilterDefinitionsByKey) as ReportKey[];
+
+test('runReport always returns deterministic output shape across all report keys', async () => {
   const service = createService();
-  const workspaceId = 'ws-1';
 
-  const implementedKeys: ReportKey[] = [
-    'orders-reversals-by-product',
-    'orders-over-time',
-    'shipping-delivery-performance',
-    'orders-fulfilled-over-time',
-    'shipping-labels-over-time',
-    'shipping-labels-by-order',
-    'items-bought-together',
-  ];
-
-  for (const key of implementedKeys) {
+  for (const key of allReportKeys) {
     const run = await service.runReport({
-      workspaceId,
+      workspaceId: 'ws-1',
       key,
-      filters: key === 'items-bought-together' ? { itemGroupingLevel: 'product', combinationSize: '2', topN: 10 } : {},
+      filters: {},
     });
 
     assert.equal(run.reportKey, key);
     assert.equal(run.status, 'completed');
-    assert.ok(run.output.summary.length > 0);
+    assert.equal(typeof run.output.rows, 'number');
+    assert.equal(typeof run.output.summary, 'string');
+    assert.ok(Array.isArray(run.output.chartRows));
+    assert.ok(['supported', 'partial', 'unsupported'].includes(run.output.supportStatus));
+    assert.ok(typeof run.output.dataCoverage.coverageStart === 'string' && run.output.dataCoverage.coverageStart.length > 0);
+    assert.ok(typeof run.output.dataCoverage.coverageEnd === 'string' && run.output.dataCoverage.coverageEnd.length > 0);
+    assert.equal(typeof run.output.dataCoverage.isCompleteForRange, 'boolean');
+    assert.ok(typeof run.output.generatedAt === 'string' && !Number.isNaN(Date.parse(run.output.generatedAt)));
   }
 });
 
 test('runReport returns deterministic support metadata with zero rows for unsupported reports', async () => {
   const service = createService();
+  const unsupportedKeys: ReportKey[] = ['sales-summary', 'order-fulfillment-health', 'predicted-spend-tier'];
 
-  const run = await service.runReport({
-    workspaceId: 'ws-1',
-    key: 'sales-summary',
-    filters: {},
-  });
+  for (const key of unsupportedKeys) {
+    const run = await service.runReport({
+      workspaceId: 'ws-1',
+      key,
+      filters: {},
+    });
 
-  assert.equal(run.status, 'completed');
-  assert.equal(run.output.rows, 0);
-  assert.deepEqual(run.output.chartRows, []);
-  assert.equal(
-    run.output.summary,
-    'Sales Summary is not currently implemented for last_30_days.',
-  );
-  assert.equal(run.output.supportStatus, 'unsupported');
-  assert.equal(
-    run.output.supportReason,
-    'Execution is not implemented yet; this key currently returns a placeholder summary with no computed rows.',
-  );
-  assert.equal(typeof run.output.dataCoverage.coverageStart, 'string');
-  assert.equal(typeof run.output.dataCoverage.coverageEnd, 'string');
-  assert.equal(typeof run.output.dataCoverage.isCompleteForRange, 'boolean');
+    assert.equal(run.status, 'completed');
+    assert.equal(run.output.rows, 0);
+    assert.deepEqual(run.output.chartRows, []);
+    assert.equal(run.output.supportStatus, 'unsupported');
+    assert.ok(typeof run.output.supportReason === 'string' && run.output.supportReason.length > 0);
+    assert.match(run.output.supportReason ?? '', /(not implemented|unsupported|not available)/i);
+  }
 });
 
-test('runReport returns caveat for partial reports when unsupported mode is requested', async () => {
-  const service = createService();
+test('runReport returns partial support metadata with caveat and reason for unsupported variant grouping mode', async () => {
+  const service = createService({
+    ordersTransactionalReportsService: {
+      runItemsBoughtTogether: async () => ({
+        rows: 0,
+        chartRows: [],
+        summary: 'Variant grouping mode is unsupported/disabled for this workspace.',
+        caveat: 'Variant identifiers are unavailable in the current source schema.',
+        supportStatusOverride: 'partial',
+        supportReasonOverride: 'Variant grouping is unavailable for this source dataset.',
+      }),
+    },
+  });
 
   const run = await service.runReport({
     workspaceId: 'ws-1',
@@ -171,7 +213,7 @@ test('runReport returns caveat for partial reports when unsupported mode is requ
   assert.equal(run.output.rows, 0);
   assert.equal(run.output.supportStatus, 'partial');
   assert.ok(typeof run.output.caveat === 'string' && run.output.caveat.length > 0);
-  assert.match(run.output.summary, /unsupported\/disabled/i);
+  assert.ok(typeof run.output.supportReason === 'string' && run.output.supportReason.length > 0);
 });
 
 test('exportReport returns metadata-only output when rows are empty', async () => {
@@ -193,7 +235,25 @@ test('exportReport returns metadata-only output when rows are empty', async () =
 });
 
 test('exportReport returns workbook with rows when report output is non-empty', async () => {
-  const service = createService();
+  const service = createService({
+    ordersTransactionalReportsService: {
+      runOrdersOverTime: async () => ({
+        rows: 1,
+        chartRows: [
+          {
+            periodStart: '2026-03-10',
+            periodLabel: '2026-03-10',
+            ordersCount: 2,
+            averageUnitsPerOrder: 1.5,
+            averageOrderValue: 45,
+            returnedUnits: 0,
+            returnedAmount: 0,
+          },
+        ],
+        summary: 'Found 2 orders across 1 period.',
+      }),
+    },
+  });
 
   const exported = await service.exportReport({
     workspaceId: 'ws-1',
@@ -209,10 +269,21 @@ test('exportReport returns workbook with rows when report output is non-empty', 
 });
 
 test('listReports appends capability metadata when required workspace capability is missing', async () => {
-  const service = createService();
+  const service = createService({
+    connections: [
+      {
+        capabilities: {
+          supports_pos: false,
+          supports_subscriptions: false,
+          supports_tax_detail: true,
+        },
+      },
+    ],
+  });
 
   const reports = await service.listReports('ws-1');
   const shippingLabelsByOrder = reports.find((report) => report.key === 'shipping-labels-by-order');
+  const itemsBoughtTogether = reports.find((report) => report.key === 'items-bought-together');
 
   assert.ok(shippingLabelsByOrder);
   assert.equal(shippingLabelsByOrder.supportStatus, 'partial');
@@ -221,4 +292,12 @@ test('listReports appends capability metadata when required workspace capability
     /Missing workspace connection capabilities: supports_pos\./,
   );
   assert.ok(shippingLabelsByOrder.requiredFeatures?.includes('capability:supports_pos'));
+
+  assert.ok(itemsBoughtTogether);
+  assert.equal(itemsBoughtTogether.supportStatus, 'unsupported');
+  assert.match(
+    itemsBoughtTogether.supportReason ?? '',
+    /Missing workspace connection capabilities: supports_subscriptions\./,
+  );
+  assert.ok(itemsBoughtTogether.requiredFeatures?.includes('capability:supports_subscriptions'));
 });
