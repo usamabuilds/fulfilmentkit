@@ -1096,6 +1096,12 @@ const reportBackfillStartByKey: Record<ReportKey, string> = {
 
 export type ReportComputationOutput = Omit<ReportOutput, 'supportStatus' | 'supportReason'>;
 
+type ReportHandler<K extends ReportKey = ReportKey> = (
+  workspaceId: string,
+  filters: ReportFiltersByKey[K],
+  report: ReportDefinition,
+) => Promise<ReportOutput> | ReportOutput;
+
 const reportExportHeadersByKey: Record<ReportKey, string[]> = {
   'sales-summary': [],
   'inventory-aging': [
@@ -1469,6 +1475,7 @@ export class OrdersReportsService {
       normalizedFilters,
     );
     const dataCoverage = this.resolveDataCoverage(report.key, normalizedFilters.dateRange);
+    const generatedAt = new Date().toISOString();
 
     const run: ReportRunRecord = {
       id: `run_${Date.now().toString(36)}`,
@@ -1481,11 +1488,11 @@ export class OrdersReportsService {
         summary: reportOutput.summary,
         caveat: reportOutput.caveat,
         warnings: reportOutput.warnings,
-        chartRows: reportOutput.chartRows,
+        chartRows: reportOutput.chartRows ?? [],
         supportStatus: reportOutput.supportStatus,
         supportReason: reportOutput.supportReason,
         dataCoverage,
-        generatedAt: new Date().toISOString(),
+        generatedAt,
       },
       createdAt: new Date(),
     };
@@ -1575,192 +1582,172 @@ export class OrdersReportsService {
       throw new NotFoundException('Report not found');
     }
 
-    const withSupportMetadata = (output: ReportComputationOutput): ReportOutput => {
-      const outputWithOverrides = output as ReportComputationOutput & {
-        supportStatusOverride?: 'supported' | 'partial' | 'unsupported';
-        supportReasonOverride?: string;
-      };
-      const { supportStatusOverride, supportReasonOverride, ...baseOutput } = outputWithOverrides;
+    const handler = this.reportHandlers[key] as ReportHandler<ReportKey>;
+    return handler(workspaceId, filters, report);
+  }
 
-      return {
-        ...baseOutput,
-        supportStatus: supportStatusOverride ?? report.supportStatus,
-        supportReason: supportReasonOverride ?? report.supportReason,
-      };
+  private readonly reportHandlers: { [K in ReportKey]: ReportHandler<K> } = {
+    'sales-summary': (workspaceId, filters, report) => {
+      const financeReportsService = this.financeReportsService;
+      if (!financeReportsService) {
+        return this.buildMissingConnectorOutput(report, 'finance connector');
+      }
+      return this.withSupportMetadata(
+        report,
+        financeReportsService.runSalesSummary(filters),
+      );
+    },
+    'inventory-aging': async (workspaceId, filters, report) => {
+      const inventoryReportsService = this.inventoryReportsService;
+      if (!inventoryReportsService) {
+        return this.buildMissingConnectorOutput(report, 'inventory connector');
+      }
+      return this.withSupportMetadata(
+        report,
+        await inventoryReportsService.runInventoryAging(workspaceId, filters),
+      );
+    },
+    'order-fulfillment-health': async (workspaceId, filters, report) => {
+      const fulfillmentReportsService = this.fulfillmentReportsService;
+      if (!fulfillmentReportsService) {
+        return this.buildMissingConnectorOutput(report, 'fulfillment connector');
+      }
+      return this.withSupportMetadata(
+        report,
+        await fulfillmentReportsService.runOrderFulfillmentHealth(filters),
+      );
+    },
+    'orders-reversals-by-product': async (workspaceId, filters, report) => {
+      const ordersTransactionalReportsService = this.ordersTransactionalReportsService;
+      if (!ordersTransactionalReportsService) {
+        return this.buildMissingConnectorOutput(report, 'orders transactional connector');
+      }
+      return this.withSupportMetadata(
+        report,
+        await ordersTransactionalReportsService.runOrdersReversalsByProduct(workspaceId, filters),
+      );
+    },
+    'orders-over-time': async (workspaceId, filters, report) => {
+      const ordersTransactionalReportsService = this.ordersTransactionalReportsService;
+      if (!ordersTransactionalReportsService) {
+        return this.buildMissingConnectorOutput(report, 'orders transactional connector');
+      }
+      return this.withSupportMetadata(
+        report,
+        await ordersTransactionalReportsService.runOrdersOverTime(workspaceId, filters),
+      );
+    },
+    'shipping-delivery-performance': async (workspaceId, filters, report) => {
+      const fulfillmentReportsService = this.fulfillmentReportsService;
+      if (!fulfillmentReportsService) {
+        return this.buildMissingConnectorOutput(report, 'fulfillment connector');
+      }
+      return this.withSupportMetadata(
+        report,
+        await fulfillmentReportsService.runShippingDeliveryPerformance(workspaceId, filters),
+      );
+    },
+    'orders-fulfilled-over-time': async (workspaceId, filters, report) => {
+      const fulfillmentReportsService = this.fulfillmentReportsService;
+      if (!fulfillmentReportsService) {
+        return this.buildMissingConnectorOutput(report, 'fulfillment connector');
+      }
+      return this.withSupportMetadata(
+        report,
+        await fulfillmentReportsService.runOrdersFulfilledOverTime(workspaceId, filters),
+      );
+    },
+    'shipping-labels-over-time': async (workspaceId, filters, report) => {
+      const fulfillmentReportsService = this.fulfillmentReportsService;
+      if (!fulfillmentReportsService) {
+        return this.buildMissingConnectorOutput(report, 'fulfillment connector');
+      }
+      return this.withSupportMetadata(
+        report,
+        await fulfillmentReportsService.runShippingLabelsOverTime(workspaceId, filters),
+      );
+    },
+    'shipping-labels-by-order': async (workspaceId, filters, report) => {
+      const fulfillmentReportsService = this.fulfillmentReportsService;
+      if (!fulfillmentReportsService) {
+        return this.buildMissingConnectorOutput(report, 'fulfillment connector');
+      }
+      return this.withSupportMetadata(
+        report,
+        await fulfillmentReportsService.runShippingLabelsByOrder(workspaceId, filters),
+      );
+    },
+    'items-bought-together': async (workspaceId, filters, report) => {
+      const ordersTransactionalReportsService = this.ordersTransactionalReportsService;
+      if (!ordersTransactionalReportsService) {
+        return this.buildMissingConnectorOutput(report, 'orders transactional connector');
+      }
+      return this.withSupportMetadata(
+        report,
+        await ordersTransactionalReportsService.runItemsBoughtTogether(workspaceId, filters),
+      );
+    },
+    'new-vs-returning-customers': async (workspaceId, filters, report) => {
+      const customerReportsService = this.customerReportsService;
+      if (!customerReportsService) {
+        return this.buildMissingConnectorOutput(report, 'customer analytics connector');
+      }
+      return this.withSupportMetadata(
+        report,
+        await customerReportsService.runNewVsReturningCustomers(workspaceId, filters),
+      );
+    },
+    'customer-cohort-analysis': async (workspaceId, filters, report) => {
+      const customerReportsService = this.customerReportsService;
+      if (!customerReportsService) {
+        return this.buildMissingConnectorOutput(report, 'customer analytics connector');
+      }
+      return this.withSupportMetadata(
+        report,
+        await customerReportsService.runCustomerCohortAnalysis(workspaceId, filters),
+      );
+    },
+    'rfm-customer-analysis': async (workspaceId, filters, report) => {
+      const customerReportsService = this.customerReportsService;
+      if (!customerReportsService) {
+        return this.buildMissingConnectorOutput(report, 'customer analytics connector');
+      }
+      return this.withSupportMetadata(
+        report,
+        await customerReportsService.runRfmCustomerAnalysis(workspaceId, filters),
+      );
+    },
+    'rfm-customer-list': async (workspaceId, filters, report) => {
+      const customerReportsService = this.customerReportsService;
+      if (!customerReportsService) {
+        return this.buildMissingConnectorOutput(report, 'customer analytics connector');
+      }
+      return this.withSupportMetadata(
+        report,
+        await customerReportsService.runRfmCustomerList(workspaceId, filters),
+      );
+    },
+    'predicted-spend-tier': (workspaceId, filters, report) =>
+      this.withSupportMetadata(report, {
+        rows: 0,
+        chartRows: [],
+        summary: 'Predicted spend tiers are unsupported until an ML model is deployed.',
+      }),
+  };
+
+  private withSupportMetadata(report: ReportDefinition, output: ReportComputationOutput): ReportOutput {
+    const outputWithOverrides = output as ReportComputationOutput & {
+      supportStatusOverride?: 'supported' | 'partial' | 'unsupported';
+      supportReasonOverride?: string;
     };
+    const { supportStatusOverride, supportReasonOverride, ...baseOutput } = outputWithOverrides;
 
-    switch (key) {
-      case 'sales-summary': {
-        const financeReportsService = this.financeReportsService;
-        if (!financeReportsService) {
-          return this.buildMissingConnectorOutput(report, 'finance connector');
-        }
-        return withSupportMetadata(
-          financeReportsService.runSalesSummary(filters as ReportFiltersByKey['sales-summary']),
-        );
-      }
-      case 'inventory-aging': {
-        const inventoryReportsService = this.inventoryReportsService;
-        if (!inventoryReportsService) {
-          return this.buildMissingConnectorOutput(report, 'inventory connector');
-        }
-        return withSupportMetadata(
-          await inventoryReportsService.runInventoryAging(
-            workspaceId,
-            filters as ReportFiltersByKey['inventory-aging'],
-          ),
-        );
-      }
-      case 'order-fulfillment-health': {
-        const fulfillmentReportsService = this.fulfillmentReportsService;
-        if (!fulfillmentReportsService) {
-          return this.buildMissingConnectorOutput(report, 'fulfillment connector');
-        }
-        return withSupportMetadata(
-          await fulfillmentReportsService.runOrderFulfillmentHealth(
-            filters as ReportFiltersByKey['order-fulfillment-health'],
-          ),
-        );
-      }
-      case 'orders-reversals-by-product': {
-        const ordersTransactionalReportsService = this.ordersTransactionalReportsService;
-        if (!ordersTransactionalReportsService) {
-          return this.buildMissingConnectorOutput(report, 'orders transactional connector');
-        }
-        return withSupportMetadata(
-          await ordersTransactionalReportsService.runOrdersReversalsByProduct(
-            workspaceId,
-            filters as ReportFiltersByKey['orders-reversals-by-product'],
-          ),
-        );
-      }
-      case 'orders-over-time': {
-        const ordersTransactionalReportsService = this.ordersTransactionalReportsService;
-        if (!ordersTransactionalReportsService) {
-          return this.buildMissingConnectorOutput(report, 'orders transactional connector');
-        }
-        return withSupportMetadata(
-          await ordersTransactionalReportsService.runOrdersOverTime(
-            workspaceId,
-            filters as ReportFiltersByKey['orders-over-time'],
-          ),
-        );
-      }
-      case 'shipping-delivery-performance': {
-        const fulfillmentReportsService = this.fulfillmentReportsService;
-        if (!fulfillmentReportsService) {
-          return this.buildMissingConnectorOutput(report, 'fulfillment connector');
-        }
-        return withSupportMetadata(
-          await fulfillmentReportsService.runShippingDeliveryPerformance(
-            workspaceId,
-            filters as ReportFiltersByKey['shipping-delivery-performance'],
-          ),
-        );
-      }
-      case 'orders-fulfilled-over-time': {
-        const fulfillmentReportsService = this.fulfillmentReportsService;
-        if (!fulfillmentReportsService) {
-          return this.buildMissingConnectorOutput(report, 'fulfillment connector');
-        }
-        return withSupportMetadata(
-          await fulfillmentReportsService.runOrdersFulfilledOverTime(
-            workspaceId,
-            filters as ReportFiltersByKey['orders-fulfilled-over-time'],
-          ),
-        );
-      }
-      case 'shipping-labels-over-time': {
-        const fulfillmentReportsService = this.fulfillmentReportsService;
-        if (!fulfillmentReportsService) {
-          return this.buildMissingConnectorOutput(report, 'fulfillment connector');
-        }
-        return withSupportMetadata(
-          await fulfillmentReportsService.runShippingLabelsOverTime(
-            workspaceId,
-            filters as ReportFiltersByKey['shipping-labels-over-time'],
-          ),
-        );
-      }
-      case 'shipping-labels-by-order': {
-        const fulfillmentReportsService = this.fulfillmentReportsService;
-        if (!fulfillmentReportsService) {
-          return this.buildMissingConnectorOutput(report, 'fulfillment connector');
-        }
-        return withSupportMetadata(
-          await fulfillmentReportsService.runShippingLabelsByOrder(
-            workspaceId,
-            filters as ReportFiltersByKey['shipping-labels-by-order'],
-          ),
-        );
-      }
-      case 'items-bought-together': {
-        const ordersTransactionalReportsService = this.ordersTransactionalReportsService;
-        if (!ordersTransactionalReportsService) {
-          return this.buildMissingConnectorOutput(report, 'orders transactional connector');
-        }
-        return withSupportMetadata(
-          await ordersTransactionalReportsService.runItemsBoughtTogether(
-            workspaceId,
-            filters as ReportFiltersByKey['items-bought-together'],
-          ),
-        );
-      }
-      case 'new-vs-returning-customers': {
-        const customerReportsService = this.customerReportsService;
-        if (!customerReportsService) {
-          return this.buildMissingConnectorOutput(report, 'customer analytics connector');
-        }
-        return withSupportMetadata(
-          await customerReportsService.runNewVsReturningCustomers(
-            workspaceId,
-            filters as ReportFiltersByKey['new-vs-returning-customers'],
-          ),
-        );
-      }
-      case 'customer-cohort-analysis': {
-        const customerReportsService = this.customerReportsService;
-        if (!customerReportsService) {
-          return this.buildMissingConnectorOutput(report, 'customer analytics connector');
-        }
-        return withSupportMetadata(
-          await customerReportsService.runCustomerCohortAnalysis(
-            workspaceId,
-            filters as ReportFiltersByKey['customer-cohort-analysis'],
-          ),
-        );
-      }
-      case 'rfm-customer-analysis': {
-        const customerReportsService = this.customerReportsService;
-        if (!customerReportsService) {
-          return this.buildMissingConnectorOutput(report, 'customer analytics connector');
-        }
-        return withSupportMetadata(
-          await customerReportsService.runRfmCustomerAnalysis(
-            workspaceId,
-            filters as ReportFiltersByKey['rfm-customer-analysis'],
-          ),
-        );
-      }
-      case 'rfm-customer-list': {
-        const customerReportsService = this.customerReportsService;
-        if (!customerReportsService) {
-          return this.buildMissingConnectorOutput(report, 'customer analytics connector');
-        }
-        return withSupportMetadata(
-          await customerReportsService.runRfmCustomerList(
-            workspaceId,
-            filters as ReportFiltersByKey['rfm-customer-list'],
-          ),
-        );
-      }
-      case 'predicted-spend-tier':
-        return withSupportMetadata({
-          rows: 0,
-          chartRows: [],
-          summary: 'Predicted spend tiers are unsupported until an ML model is deployed.',
-        });
-    }
+    return {
+      ...baseOutput,
+      chartRows: baseOutput.chartRows ?? [],
+      supportStatus: supportStatusOverride ?? report.supportStatus,
+      supportReason: supportReasonOverride ?? report.supportReason,
+    };
   }
 
   private buildMissingConnectorOutput(

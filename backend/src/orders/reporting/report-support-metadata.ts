@@ -41,15 +41,17 @@ export function attachCapabilityMetadata(
 
   const downgradedSupportStatus = report.supportStatus === 'supported' ? 'partial' : 'unsupported';
   const capabilityBlockerReason = `Missing workspace connection capabilities: ${missingCapabilities.join(', ')}.`;
+  const supportReasonParts = [report.supportReason, capabilityBlockerReason].filter(
+    (value): value is string => Boolean(value && value.length > 0),
+  );
+  const requiredFeatures = [...new Set([
+    ...(report.requiredFeatures ?? []),
+    ...missingCapabilities.map((value) => `capability:${value}`),
+  ])].sort();
 
   return {
     supportStatus: downgradedSupportStatus,
-    supportReason: report.supportReason
-      ? `${report.supportReason} ${capabilityBlockerReason}`
-      : capabilityBlockerReason,
-    requiredFeatures: [
-      ...(report.requiredFeatures ?? []),
-      ...missingCapabilities.map((value) => `capability:${value}`),
-    ],
+    supportReason: supportReasonParts.join(' '),
+    requiredFeatures,
   };
 }
