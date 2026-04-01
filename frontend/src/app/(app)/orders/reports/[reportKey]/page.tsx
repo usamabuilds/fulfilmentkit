@@ -189,6 +189,11 @@ interface ReportSupportAssessment {
   dataCoverageDisclaimer: string | null
 }
 
+interface ActionEligibility {
+  isRunExportEnabled: boolean
+  disabledReason: string | null
+}
+
 function getCoverageDisclaimer(runOutput: ReportRunDto['output'] | null): string | null {
   if (!runOutput || runOutput.dataCoverage.isCompleteForRange) {
     return null
@@ -228,6 +233,20 @@ function resolveReportSupportAssessment(
     blockerClassification,
     blockerReason,
     dataCoverageDisclaimer,
+  }
+}
+
+function resolveActionEligibility(supportAssessment: ReportSupportAssessment): ActionEligibility {
+  if (supportAssessment.status === 'unsupported') {
+    return {
+      isRunExportEnabled: false,
+      disabledReason: supportAssessment.blockerReason,
+    }
+  }
+
+  return {
+    isRunExportEnabled: true,
+    disabledReason: null,
   }
 }
 
@@ -421,6 +440,7 @@ export default function ReportDetailPage() {
   const runRecord = getRecordValue(run)
   const runOutputRecord = getRecordValue(runRecord?.output)
   const supportAssessment = resolveReportSupportAssessment(report, runOutputRecord)
+  const actionEligibility = resolveActionEligibility(supportAssessment)
   const viewState = resolveReportDetailViewState({
     reportsLoading: false,
     reportExists: true,
@@ -429,7 +449,7 @@ export default function ReportDetailPage() {
 
   const isUnsupported = viewState === 'unsupported'
   const isPartial = viewState === 'partial'
-  const executionDisabledReason = isUnsupported ? supportAssessment.blockerReason : null
+  const executionDisabledReason = actionEligibility.disabledReason
   const coverageDisclaimer = run ? getCoverageDisclaimer(run.output) : null
 
   return (
@@ -448,26 +468,18 @@ export default function ReportDetailPage() {
       </div>
 
       <div className="glass-panel p-6">
-        <div
-          className={`rounded-lg border p-4 ${
-            isUnsupported
-              ? 'border-destructive/40 bg-destructive/10'
-              : isPartial
-                ? 'border-yellow-500/30 bg-yellow-500/10'
-                : 'border-border-subtle bg-black/5'
-          }`}
-        >
-          <p className="text-caption-1 uppercase tracking-wide text-text-tertiary">Report status</p>
-          <p className="mt-1 text-subhead text-text-primary">
-            {isUnsupported ? 'Unsupported' : isPartial ? 'Partially supported' : 'Supported'}
-          </p>
-          {executionDisabledReason && (
-            <p className="mt-2 text-footnote text-destructive">
-              Blocker classification: {supportAssessment.blockerClassification}. Reason: {executionDisabledReason}
-            </p>
-          )}
-          {!executionDisabledReason && !isPartial && <p className="mt-2 text-footnote text-text-secondary">No caveats.</p>}
-        </div>
+        {isUnsupported && executionDisabledReason && (
+          <div className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+            <p className="text-caption-1 uppercase tracking-wide text-destructive">Unsupported report</p>
+            <p className="mt-2 text-body text-text-primary">{executionDisabledReason}</p>
+          </div>
+        )}
+        {isPartial && supportAssessment.dataCoverageDisclaimer && (
+          <div className="mb-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
+            <p className="text-caption-1 uppercase tracking-wide text-text-tertiary">Partial platform coverage</p>
+            <p className="mt-2 text-footnote text-text-secondary">{supportAssessment.dataCoverageDisclaimer}</p>
+          </div>
+        )}
 
         <h2 className="text-headline text-text-primary">Execution Filters</h2>
         <div className="mt-4">
@@ -574,7 +586,8 @@ export default function ReportDetailPage() {
             type="button"
             onClick={() => runMutation.mutate(filters)}
             className="rounded-lg bg-black px-4 py-2 text-callout text-white transition hover:bg-black/90 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={runMutation.isPending || isUnsupported}
+            disabled={runMutation.isPending || !actionEligibility.isRunExportEnabled}
+            aria-disabled={runMutation.isPending || !actionEligibility.isRunExportEnabled}
             title={executionDisabledReason ?? undefined}
           >
             {runMutation.isPending ? 'Running…' : 'Run report'}
@@ -584,7 +597,8 @@ export default function ReportDetailPage() {
               type="button"
               onClick={() => exportMutation.mutate(filters)}
               className="rounded-lg border border-border-subtle px-4 py-2 text-callout text-text-secondary transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={exportMutation.isPending || isUnsupported}
+              disabled={exportMutation.isPending || !actionEligibility.isRunExportEnabled}
+              aria-disabled={exportMutation.isPending || !actionEligibility.isRunExportEnabled}
               title={executionDisabledReason ?? undefined}
             >
               {exportMutation.isPending ? 'Exporting…' : 'Export Excel'}
@@ -606,13 +620,6 @@ export default function ReportDetailPage() {
           <p className={`mt-3 text-footnote ${feedbackMessage.type === 'success' ? 'text-success' : 'text-destructive'}`}>
             {feedbackMessage.message}
           </p>
-        )}
-        {executionDisabledReason && <p className="mt-3 text-footnote text-destructive">{executionDisabledReason}</p>}
-        {isPartial && supportAssessment.dataCoverageDisclaimer && (
-          <div className="mt-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
-            <p className="text-caption-1 uppercase tracking-wide text-text-tertiary">Data coverage disclaimer</p>
-            <p className="mt-2 text-footnote text-text-secondary">{supportAssessment.dataCoverageDisclaimer}</p>
-          </div>
         )}
         {coverageDisclaimer && (
           <div className="mt-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
