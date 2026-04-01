@@ -1,5 +1,10 @@
+'use client'
+
 import Link from 'next/link'
-import { reportCatalog } from '@/lib/reports/report-catalog'
+import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { reportsApi, type ReportDefinitionDto, type ReportKey } from '@/lib/api/endpoints/reports'
+import { useWorkspaceStore } from '@/lib/store/workspaceStore'
 
 const reportsBasePath = '/orders/reports'
 const supportBadgeClassByStatus = {
@@ -14,14 +19,66 @@ const supportLabelByStatus = {
   unsupported: 'Unsupported',
 } as const
 
+const reportDomainByKey: Record<ReportKey, string> = {
+  'sales-summary': 'finance',
+  'inventory-aging': 'inventory',
+  'order-fulfillment-health': 'fulfillment',
+  'orders-reversals-by-product': 'transactional',
+  'orders-over-time': 'transactional',
+  'shipping-delivery-performance': 'fulfillment',
+  'orders-fulfilled-over-time': 'fulfillment',
+  'shipping-labels-over-time': 'fulfillment',
+  'shipping-labels-by-order': 'fulfillment',
+  'items-bought-together': 'feature-specific',
+}
+
+function formatDomainLabel(domain: string): string {
+  return domain
+    .split('-')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ')
+}
+
+function getReportDomain(report: ReportDefinitionDto): string {
+  return reportDomainByKey[report.key] ?? 'other'
+}
+
+function getDefaultDateRangeLabel(report: ReportDefinitionDto): string {
+  const value = report.defaultFilters.dateRange
+  if (typeof value === 'string') {
+    return value.replaceAll('_', ' ')
+  }
+
+  return 'custom'
+}
+
+function getRequiredFeaturesLabel(report: ReportDefinitionDto): string {
+  if (!report.requiredFeatures || report.requiredFeatures.length === 0) {
+    return 'none'
+  }
+  return report.requiredFeatures.join(', ')
+}
+
 export default function ReportsPage() {
-  const reportsByDomain = reportCatalog.reduce<Record<string, typeof reportCatalog>>((acc, report) => {
-    if (!acc[report.domain]) {
-      acc[report.domain] = []
-    }
-    acc[report.domain].push(report)
-    return acc
-  }, {})
+  const workspaceId = useWorkspaceStore((state) => state.workspace?.id)
+
+  const reportsQuery = useQuery({
+    queryKey: ['report-definitions', workspaceId],
+    queryFn: () => reportsApi.list(),
+    enabled: Boolean(workspaceId),
+  })
+
+  const reportsByDomain = useMemo(() => {
+    const reports = reportsQuery.data?.data.items ?? []
+    return reports.reduce<Record<string, ReportDefinitionDto[]>>((acc, report) => {
+      const domain = getReportDomain(report)
+      if (!acc[domain]) {
+        acc[domain] = []
+      }
+      acc[domain].push(report)
+      return acc
+    }, {})
+  }, [reportsQuery.data])
 
   return (
     <div className="flex flex-col gap-6">
@@ -32,15 +89,16 @@ export default function ReportsPage() {
         </p>
       </div>
 
+      {reportsQuery.isError ? (
+        <div className="glass-card p-5 text-footnote text-rose-200">
+          Failed to load reports. Please refresh and try again.
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-8">
         {Object.entries(reportsByDomain).map(([domain, reports]) => (
           <section key={domain} className="flex flex-col gap-3">
-            <h2 className="text-headline text-text-primary">
-              {domain
-                .split('-')
-                .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-                .join(' ')}
-            </h2>
+            <h2 className="text-headline text-text-primary">{formatDomainLabel(domain)}</h2>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {reports.map((report) => (
@@ -61,10 +119,10 @@ export default function ReportsPage() {
                           {supportLabelByStatus[report.supportStatus]}
                         </span>
                       </div>
-                      <p className="mt-1 text-footnote text-text-tertiary">{report.description}</p>
-                      <p className="mt-2 text-caption text-text-secondary">
-                        Requires: {report.requiredCapabilities.join(', ')}
-                      </p>
+                      {report.supportReason ? (
+                        <p className="mt-1 text-footnote text-text-tertiary">{report.supportReason}</p>
+                      ) : null}
+                      <p className="mt-2 text-caption text-text-secondary">Requires: {getRequiredFeaturesLabel(report)}</p>
                     </div>
 
                     <div className="mt-auto flex flex-wrap gap-2">
@@ -79,7 +137,7 @@ export default function ReportsPage() {
                     </div>
 
                     <div className="flex items-center justify-between border-t border-border-subtle pt-3 text-footnote text-text-secondary">
-                      <span>Default: {report.defaultFilters.dateRange.replaceAll('_', ' ')}</span>
+                      <span>Default: {getDefaultDateRangeLabel(report)}</span>
                       <span>Not runnable</span>
                     </div>
                   </div>
@@ -100,10 +158,10 @@ export default function ReportsPage() {
                           {supportLabelByStatus[report.supportStatus]}
                         </span>
                       </div>
-                      <p className="mt-1 text-footnote text-text-tertiary">{report.description}</p>
-                      <p className="mt-2 text-caption text-text-secondary">
-                        Requires: {report.requiredCapabilities.join(', ')}
-                      </p>
+                      {report.supportReason ? (
+                        <p className="mt-1 text-footnote text-text-tertiary">{report.supportReason}</p>
+                      ) : null}
+                      <p className="mt-2 text-caption text-text-secondary">Requires: {getRequiredFeaturesLabel(report)}</p>
                     </div>
 
                     <div className="mt-auto flex flex-wrap gap-2">
@@ -118,7 +176,7 @@ export default function ReportsPage() {
                     </div>
 
                     <div className="flex items-center justify-between border-t border-border-subtle pt-3 text-footnote text-text-secondary">
-                      <span>Default: {report.defaultFilters.dateRange.replaceAll('_', ' ')}</span>
+                      <span>Default: {getDefaultDateRangeLabel(report)}</span>
                       <span>{report.supportsExport ? 'CSV export' : 'View only'}</span>
                     </div>
                   </Link>
