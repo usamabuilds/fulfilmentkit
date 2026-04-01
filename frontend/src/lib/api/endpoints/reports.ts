@@ -83,9 +83,133 @@ export interface ReportDefinitionDto {
   supportsExport: boolean
 }
 
-export interface ReportRunDto {
+type ReportChartPrimitive = string | number | null
+type ReportChartRowRecord = Record<string, ReportChartPrimitive>
+
+export type DashboardTargetReportKey =
+  | 'orders-over-time'
+  | 'shipping-delivery-performance'
+  | 'orders-fulfilled-over-time'
+  | 'orders-reversals-by-product'
+
+export interface OrdersOverTimeChartRow {
+  date: string
+  orderCount: number
+}
+
+export interface ShippingDeliveryPerformanceChartRow {
+  date: string
+  onTimeDeliveries: number
+  lateDeliveries: number
+}
+
+export interface OrdersFulfilledOverTimeChartRow {
+  date: string
+  fulfilledOrderCount: number
+}
+
+export interface OrdersReversalsByProductChartRow {
+  productName: string
+  reversalCount: number
+}
+
+type DashboardChartRowsByReportKey = {
+  'orders-over-time': OrdersOverTimeChartRow[]
+  'shipping-delivery-performance': ShippingDeliveryPerformanceChartRow[]
+  'orders-fulfilled-over-time': OrdersFulfilledOverTimeChartRow[]
+  'orders-reversals-by-product': OrdersReversalsByProductChartRow[]
+}
+
+export type ReportChartRowsForKey<K extends ReportKey> = K extends DashboardTargetReportKey
+  ? DashboardChartRowsByReportKey[K]
+  : ReportChartRowRecord[]
+
+function isReportChartRowRecord(value: unknown): value is ReportChartRowRecord {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  return Object.values(value).every(
+    (cell): cell is ReportChartPrimitive => typeof cell === 'string' || typeof cell === 'number' || cell === null,
+  )
+}
+
+function assertReportChartRowRecord(row: unknown, reportKey: ReportKey): ReportChartRowRecord {
+  if (!isReportChartRowRecord(row)) {
+    throw new Error(`Invalid chart row received for report "${reportKey}"`)
+  }
+  return row
+}
+
+function getStringField(row: ReportChartRowRecord, field: string, reportKey: ReportKey): string {
+  const value = row[field]
+  if (typeof value !== 'string') {
+    throw new Error(`Invalid chart row field "${field}" for report "${reportKey}"`)
+  }
+  return value
+}
+
+function getNumberField(row: ReportChartRowRecord, field: string, reportKey: ReportKey): number {
+  const value = row[field]
+  if (typeof value !== 'number') {
+    throw new Error(`Invalid chart row field "${field}" for report "${reportKey}"`)
+  }
+  return value
+}
+
+export function mapReportChartRows<K extends ReportKey>(
+  reportKey: K,
+  chartRows: unknown,
+): ReportChartRowsForKey<K> | undefined {
+  if (chartRows === undefined) {
+    return undefined
+  }
+  if (!Array.isArray(chartRows)) {
+    throw new Error(`Invalid chart rows payload for report "${reportKey}"`)
+  }
+
+  switch (reportKey) {
+    case 'orders-over-time':
+      return chartRows.map((row) => {
+        const record = assertReportChartRowRecord(row, reportKey)
+        return {
+          date: getStringField(record, 'date', reportKey),
+          orderCount: getNumberField(record, 'orderCount', reportKey),
+        }
+      }) as ReportChartRowsForKey<K>
+    case 'shipping-delivery-performance':
+      return chartRows.map((row) => {
+        const record = assertReportChartRowRecord(row, reportKey)
+        return {
+          date: getStringField(record, 'date', reportKey),
+          onTimeDeliveries: getNumberField(record, 'onTimeDeliveries', reportKey),
+          lateDeliveries: getNumberField(record, 'lateDeliveries', reportKey),
+        }
+      }) as ReportChartRowsForKey<K>
+    case 'orders-fulfilled-over-time':
+      return chartRows.map((row) => {
+        const record = assertReportChartRowRecord(row, reportKey)
+        return {
+          date: getStringField(record, 'date', reportKey),
+          fulfilledOrderCount: getNumberField(record, 'fulfilledOrderCount', reportKey),
+        }
+      }) as ReportChartRowsForKey<K>
+    case 'orders-reversals-by-product':
+      return chartRows.map((row) => {
+        const record = assertReportChartRowRecord(row, reportKey)
+        return {
+          productName: getStringField(record, 'productName', reportKey),
+          reversalCount: getNumberField(record, 'reversalCount', reportKey),
+        }
+      }) as ReportChartRowsForKey<K>
+    default:
+      return chartRows.map((row) => assertReportChartRowRecord(row, reportKey)) as ReportChartRowsForKey<K>
+  }
+}
+
+export interface ReportRunDto<K extends ReportKey = ReportKey> {
   id: string
-  reportKey: ReportKey
+  reportKey: K
   status: 'completed'
   filters: Record<string, string | number | string[]>
   output: {
@@ -93,7 +217,7 @@ export interface ReportRunDto {
     summary: string
     caveat?: string
     warnings?: string[]
-    chartRows?: Array<Record<string, string | number | null>>
+    chartRows?: ReportChartRowsForKey<K>
     supportStatus: 'supported' | 'partial' | 'unsupported'
     supportReason?: string
     dataCoverage: {
@@ -158,8 +282,32 @@ export const reportsApiPaths = {
 
 export const reportsApi = {
   list: () => apiGetList<ReportDefinitionDto>(reportsApiPaths.list),
-  run: (reportKey: ReportKey, dto: RunReportDto) => apiPost<ReportRunDto>(reportsApiPaths.run(reportKey), dto),
-  getRun: (reportKey: ReportKey, runId: string) => apiGet<ReportRunDto>(reportsApiPaths.getRun(reportKey, runId)),
+  run: async <K extends ReportKey>(reportKey: K, dto: RunReportDto) => {
+    const response = await apiPost<ReportRunDto<K>>(reportsApiPaths.run(reportKey), dto)
+    return {
+      ...response,
+      data: {
+        ...response.data,
+        output: {
+          ...response.data.output,
+          chartRows: mapReportChartRows(reportKey, response.data.output.chartRows),
+        },
+      },
+    }
+  },
+  getRun: async <K extends ReportKey>(reportKey: K, runId: string) => {
+    const response = await apiGet<ReportRunDto<K>>(reportsApiPaths.getRun(reportKey, runId))
+    return {
+      ...response,
+      data: {
+        ...response.data,
+        output: {
+          ...response.data.output,
+          chartRows: mapReportChartRows(reportKey, response.data.output.chartRows),
+        },
+      },
+    }
+  },
   exportExcel: async (reportKey: ReportKey, dto: ExportReportDto): Promise<ReportExportResult> => {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL
     if (!baseUrl) {
