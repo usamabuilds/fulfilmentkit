@@ -31,6 +31,7 @@ export class WebhookController {
       platform,
       headers,
       payload: body,
+      rawBody: req.rawBody,
     });
 
     return apiResponse(result.data);

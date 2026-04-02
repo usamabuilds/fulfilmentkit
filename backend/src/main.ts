@@ -11,7 +11,9 @@ async function bootstrap() {
   // Validate environment variables on boot
   envSchema.parse(process.env);
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true,
+  });
 
   // Global error response standardization
   app.useGlobalFilters(new GlobalExceptionFilter());
