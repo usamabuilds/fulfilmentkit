@@ -50,6 +50,7 @@ export class WorkspaceGuard implements CanActivate {
     const isZohoOAuthCallbackRoute = path === '/connections/zoho/callback' && method === 'GET';
     const isQuickbooksOAuthCallbackRoute =
       path === '/connections/quickbooks/callback' && method === 'GET';
+    const isWebhookIngressRoute = method === 'POST' && /^\/webhooks\/[^/]+$/.test(path);
 
     if (
       isAuthPublicRoute ||
@@ -84,6 +85,10 @@ export class WorkspaceGuard implements CanActivate {
     }
 
     request.workspaceId = workspaceId;
+
+    if (isWebhookIngressRoute) {
+      return true;
+    }
 
     const user = await this.resolveOrCreateUserFromAuth(request, {
       allowRequestUserFallback: true,
