@@ -1,12 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ConnectionPlatform, Prisma } from '../../generated/prisma';
+import * as crypto from 'crypto';
 
 type IngestWebhookArgs = {
   workspaceId: string;
   platform: 'shopify' | 'woocommerce' | 'amazon';
   headers: any;
   payload: any;
+  rawBody: Buffer | undefined;
 };
 
 type ParsedFulfillmentTimelineEvent = {
@@ -29,6 +31,62 @@ type ParsedShippingLabelPurchase = {
 @Injectable()
 export class WebhookService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private getHeaderValue(headers: any, key: string): string | null {
+    const value = headers?.[key] ?? headers?.[key.toLowerCase()] ?? headers?.[key.toUpperCase()];
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+  }
+
+  private verifyShopifyAuthenticity(args: { headers: any; rawBody: Buffer | undefined }) {
+    const { headers, rawBody } = args;
+    const sharedSecret = process.env.SHOPIFY_CLIENT_SECRET;
+
+    if (!sharedSecret) {
+      throw new BadRequestException('Shopify webhook verification secret is not configured');
+    }
+
+    const providedSignature = this.getHeaderValue(headers, 'x-shopify-hmac-sha256');
+    if (!providedSignature) {
+      throw new BadRequestException('Shopify webhook signature header is required');
+    }
+
+    if (!rawBody || !Buffer.isBuffer(rawBody)) {
+      throw new BadRequestException('Webhook raw payload is required for signature verification');
+    }
+
+    const expectedSignature = crypto
+      .createHmac('sha256', sharedSecret)
+      .update(rawBody)
+      .digest('base64');
+
+    if (expectedSignature.length !== providedSignature.length) {
+      throw new BadRequestException('Invalid Shopify webhook signature');
+    }
+
+    if (
+      !crypto.timingSafeEqual(
+        Buffer.from(expectedSignature, 'utf8'),
+        Buffer.from(providedSignature, 'utf8'),
+      )
+    ) {
+      throw new BadRequestException('Invalid Shopify webhook signature');
+    }
+  }
+
+  private verifyAuthenticity(args: {
+    platform: 'shopify' | 'woocommerce' | 'amazon';
+    headers: any;
+    rawBody: Buffer | undefined;
+  }) {
+    if (args.platform === 'shopify') {
+      this.verifyShopifyAuthenticity({ headers: args.headers, rawBody: args.rawBody });
+      return;
+    }
+
+    throw new BadRequestException(
+      `${args.platform} webhook authenticity verification is not configured yet`,
+    );
+  }
 
   private toPlatformEnum(platform: 'shopify' | 'woocommerce' | 'amazon'): ConnectionPlatform {
     if (platform === 'shopify') return 'SHOPIFY';
@@ -372,7 +430,9 @@ export class WebhookService {
   }
 
   async ingestWebhook(args: IngestWebhookArgs) {
-    const { workspaceId, platform, headers, payload } = args;
+    const { workspaceId, platform, headers, payload, rawBody } = args;
+
+    this.verifyAuthenticity({ platform, headers, rawBody });
 
     const platformEnum = this.toPlatformEnum(platform);
 
