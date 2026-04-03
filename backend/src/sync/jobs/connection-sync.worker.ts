@@ -151,6 +151,22 @@ export class ConnectionSyncWorker extends WorkerHost {
     return `fallback:${args.normalizedType}:${args.currency}:${args.amount.toString()}`;
   }
 
+  private buildShippingLabelPurchaseIdentityToken(args: {
+    label: Record<string, unknown>;
+    carrier: string;
+    service: string;
+    purchasedAt: Date;
+  }): string {
+    const upstreamId =
+      this.normalizeExternalIdentifier(args.label.id) ??
+      this.normalizeExternalIdentifier(args.label.label_id);
+    if (upstreamId) {
+      return `id:${upstreamId}`;
+    }
+
+    return `fallback:${args.carrier}:${args.service}:${args.purchasedAt.toISOString()}`;
+  }
+
   private normalizeEmailCanonical(value: unknown): string | null {
     const email = this.asNonEmptyString(value);
     return email ? email.toLowerCase() : null;
@@ -561,12 +577,14 @@ export class ConnectionSyncWorker extends WorkerHost {
       const carrier = this.asNonEmptyString(label?.carrier ?? label?.tracking_company) ?? 'unknown';
       const service = this.asNonEmptyString(label?.service ?? label?.shipping_service) ?? 'unknown';
       const packageType = this.asNonEmptyString(label?.package_type ?? label?.packageType ?? label?.package) ?? 'unknown';
-      const labelExternalId =
-        this.normalizeExternalIdentifier(label?.id) ??
-        this.normalizeExternalIdentifier(label?.label_id) ??
-        `${carrier}:${service}:${purchasedAt.toISOString()}`;
+      const labelIdentityToken = this.buildShippingLabelPurchaseIdentityToken({
+        label,
+        carrier,
+        service,
+        purchasedAt,
+      });
 
-      const markerId = `sync:${orderExternalRef}:shipping_label_purchase:${labelExternalId}`;
+      const markerId = `sync:${orderExternalRef}:shipping_label_purchase:${labelIdentityToken}`;
       const shouldCreate = await this.createDataAvailabilityMarker({
         workspaceId,
         platform,
@@ -577,10 +595,18 @@ export class ConnectionSyncWorker extends WorkerHost {
 
       if (!shouldCreate) continue;
 
-      await ((this.prisma as any).orderShippingLabelPurchase).create({
-        data: {
+      await ((this.prisma as any).orderShippingLabelPurchase).upsert({
+        where: {
+          workspaceId_externalRef: {
+            workspaceId,
+            externalRef: markerId,
+          },
+        },
+        update: {},
+        create: {
           workspaceId,
           orderId: order.id,
+          externalRef: markerId,
           carrier,
           service,
           packageType,

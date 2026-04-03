@@ -411,6 +411,7 @@ model OrderShippingLabelPurchase {
   id               String    @id @default(uuid())
   workspaceId      String
   orderId          String
+  externalRef      String
   carrier          String
   service          String
   packageType      String
@@ -425,6 +426,7 @@ model OrderShippingLabelPurchase {
 
   @@index([workspaceId])
   @@index([orderId])
+  @@unique([workspaceId, externalRef])
   @@index([workspaceId, purchasedAt])
 }
 
