@@ -4,7 +4,6 @@ import { ConnectionPlatform, Prisma } from '../../generated/prisma';
 import * as crypto from 'crypto';
 
 type IngestWebhookArgs = {
-  workspaceId: string;
   platform: 'shopify' | 'woocommerce' | 'amazon';
   headers: any;
   payload: any;
@@ -86,6 +85,87 @@ export class WebhookService {
     throw new BadRequestException(
       `${args.platform} webhook authenticity verification is not configured yet`,
     );
+  }
+
+  private normalizeShopifyDomain(value: unknown): string | null {
+    const raw = this.asNonEmptyString(value)?.toLowerCase();
+    if (!raw) return null;
+
+    const myShopifyDomainPattern = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
+    if (!myShopifyDomainPattern.test(raw)) return null;
+
+    return raw;
+  }
+
+  private extractShopifyShopDomain(headers: any): string {
+    const shopDomainHeader = this.getHeaderValue(headers, 'x-shopify-shop-domain');
+    const normalizedShopDomain = this.normalizeShopifyDomain(shopDomainHeader);
+
+    if (!normalizedShopDomain) {
+      throw new BadRequestException('Shopify webhook shop domain header is required');
+    }
+
+    return normalizedShopDomain;
+  }
+
+  private async resolveWorkspaceForVerifiedWebhook(args: {
+    platform: 'shopify' | 'woocommerce' | 'amazon';
+    headers: any;
+  }): Promise<string> {
+    if (args.platform !== 'shopify') {
+      throw new BadRequestException(
+        `${args.platform} webhook workspace resolution is not configured yet`,
+      );
+    }
+
+    const shopDomain = this.extractShopifyShopDomain(args.headers);
+
+    const candidateConnections = await this.prisma.connection.findMany({
+      where: {
+        platform: 'SHOPIFY',
+      },
+      select: {
+        workspaceId: true,
+        secret: {
+          select: {
+            workspaceId: true,
+            secretMetadata: true,
+          },
+        },
+      },
+    });
+
+    const mappedWorkspaceIds = new Set<string>();
+
+    for (const connection of candidateConnections) {
+      const metadataShop = this.normalizeShopifyDomain(
+        (connection.secret?.secretMetadata as any)?.shop,
+      );
+      if (!metadataShop || metadataShop !== shopDomain) continue;
+
+      if (!connection.secret) {
+        continue;
+      }
+
+      if (connection.secret.workspaceId !== connection.workspaceId) {
+        throw new BadRequestException(
+          'Shopify webhook workspace mapping is internally inconsistent',
+        );
+      }
+
+      mappedWorkspaceIds.add(connection.workspaceId);
+    }
+
+    const resolvedWorkspaceIds = Array.from(mappedWorkspaceIds);
+    if (resolvedWorkspaceIds.length === 0) {
+      throw new BadRequestException('No workspace mapping found for verified Shopify webhook');
+    }
+
+    if (resolvedWorkspaceIds.length > 1) {
+      throw new BadRequestException('Shopify webhook workspace mapping is ambiguous');
+    }
+
+    return resolvedWorkspaceIds[0];
   }
 
   private toPlatformEnum(platform: 'shopify' | 'woocommerce' | 'amazon'): ConnectionPlatform {
@@ -430,9 +510,10 @@ export class WebhookService {
   }
 
   async ingestWebhook(args: IngestWebhookArgs) {
-    const { workspaceId, platform, headers, payload, rawBody } = args;
+    const { platform, headers, payload, rawBody } = args;
 
     this.verifyAuthenticity({ platform, headers, rawBody });
+    const workspaceId = await this.resolveWorkspaceForVerifiedWebhook({ platform, headers });
 
     const platformEnum = this.toPlatformEnum(platform);
 

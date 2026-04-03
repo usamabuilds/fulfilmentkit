@@ -23,11 +23,9 @@ export class WebhookController {
     @Headers() headers: any,
     @Body() body: any,
   ) {
-    const workspaceId = req.workspaceId as string;
     const platform = platformSchema.parse(platformRaw.toLowerCase());
 
     const result = await this.webhookService.ingestWebhook({
-      workspaceId,
       platform,
       headers,
       payload: body,
