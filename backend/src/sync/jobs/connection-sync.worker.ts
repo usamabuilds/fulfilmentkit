@@ -118,6 +118,24 @@ export class ConnectionSyncWorker extends WorkerHost {
     return null;
   }
 
+  private buildFeeIdentityToken(args: {
+    row: Record<string, unknown>;
+    normalizedType: string;
+    amount: Prisma.Decimal;
+    currency: string;
+  }): string {
+    const upstreamId =
+      this.normalizeExternalIdentifier(args.row.id) ??
+      this.normalizeExternalIdentifier(args.row.transaction_id) ??
+      this.normalizeExternalIdentifier(args.row.gateway_transaction_id);
+
+    if (upstreamId) {
+      return upstreamId;
+    }
+
+    return `fallback:${args.normalizedType}:${args.currency}:${args.amount.toString()}`;
+  }
+
   private normalizeEmailCanonical(value: unknown): string | null {
     const email = this.asNonEmptyString(value);
     return email ? email.toLowerCase() : null;
@@ -244,21 +262,23 @@ export class ConnectionSyncWorker extends WorkerHost {
     const gatewayFees = this.asRecordArray(payload.gateway_fees);
 
     for (const row of [...paymentTransactions, ...gatewayFees]) {
-      const externalId =
-        this.normalizeExternalIdentifier(row.id) ??
-        this.normalizeExternalIdentifier(row.transaction_id) ??
-        this.normalizeExternalIdentifier(row.gateway_transaction_id) ??
-        `${this.asNonEmptyString(row.kind ?? row.type ?? 'payment')}:${this.asNonEmptyString(row.created_at) ?? 'unknown'}`;
       const feeAmountRaw =
         row.gateway_fee_amount ?? row.processing_fee ?? row.fee_amount ?? row.fee ?? row.amount ?? 0;
       const amount = this.toDecimal(feeAmountRaw);
       const normalizedCurrency = this.asNonEmptyString(row.currency) ?? currency;
       const normalizedType = this.asNonEmptyString(row.type ?? row.kind) ?? 'payment_transaction';
+      const feeIdentityToken = this.buildFeeIdentityToken({
+        row,
+        normalizedType,
+        amount,
+        currency: normalizedCurrency,
+      });
+      const markerId = `sync:${orderExternalRef}:payment_gateway:${feeIdentityToken}`;
 
       const shouldCreate = await this.createDataAvailabilityMarker({
         workspaceId,
         platform,
-        externalEventId: `sync:${orderExternalRef}:payment_gateway:${externalId}`,
+        externalEventId: markerId,
         topic: 'sync:historical:payment_gateway',
         payload: this.buildProvenancePayload({
           orderExternalRef,
@@ -274,11 +294,18 @@ export class ConnectionSyncWorker extends WorkerHost {
       });
 
       if (!shouldCreate) continue;
-      await (this.prisma.fee as any).create({
-        data: {
+      await (this.prisma.fee as any).upsert({
+        where: {
+          workspaceId_externalRef: {
+            workspaceId,
+            externalRef: markerId,
+          },
+        },
+        update: {},
+        create: {
           workspaceId,
           orderId,
-          externalRef: `sync:payment_gateway:${orderExternalRef}:${externalId}`,
+          externalRef: markerId,
           type: normalizedType,
           amount,
           currency: normalizedCurrency,
