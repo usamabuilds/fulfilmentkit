@@ -392,6 +392,7 @@ model OrderFulfillmentStatusEvent {
   id          String                  @id @default(uuid())
   workspaceId String
   orderId     String
+  externalRef String
   status      OrderFulfillmentStatus
   eventAt     DateTime
   createdAt   DateTime                @default(now())
@@ -401,6 +402,7 @@ model OrderFulfillmentStatusEvent {
 
   @@index([workspaceId])
   @@index([orderId])
+  @@unique([workspaceId, externalRef])
   @@index([workspaceId, eventAt])
   @@index([workspaceId, status, eventAt])
 }

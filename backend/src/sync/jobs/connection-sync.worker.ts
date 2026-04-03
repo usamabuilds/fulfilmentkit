@@ -118,6 +118,21 @@ export class ConnectionSyncWorker extends WorkerHost {
     return null;
   }
 
+  private buildFulfillmentEventIdentityToken(args: {
+    event: Record<string, unknown>;
+    mappedStatus: 'PLACED' | 'FULFILLED' | 'SHIPPED' | 'DELIVERED';
+    eventAt: Date;
+  }): string {
+    const upstreamId =
+      this.normalizeExternalIdentifier(args.event.id) ??
+      this.normalizeExternalIdentifier(args.event.event_id);
+    if (upstreamId) {
+      return `id:${upstreamId}`;
+    }
+
+    return `fallback:${args.mappedStatus}:${args.eventAt.toISOString()}`;
+  }
+
   private buildFeeIdentityToken(args: {
     row: Record<string, unknown>;
     normalizedType: string;
@@ -498,12 +513,13 @@ export class ConnectionSyncWorker extends WorkerHost {
       const mappedStatus = this.normalizeFulfillmentStatus(event?.status ?? event?.name ?? event?.state);
       if (!eventAt || !mappedStatus) continue;
 
-      const eventExternalId =
-        this.normalizeExternalIdentifier(event?.id) ??
-        this.normalizeExternalIdentifier(event?.event_id) ??
-        `${mappedStatus}:${eventAt.toISOString()}`;
+      const eventIdentityToken = this.buildFulfillmentEventIdentityToken({
+        event,
+        mappedStatus,
+        eventAt,
+      });
 
-      const markerId = `sync:${orderExternalRef}:fulfillment_timeline:${eventExternalId}`;
+      const markerId = `sync:${orderExternalRef}:fulfillment_timeline:${eventIdentityToken}`;
       const shouldCreate = await this.createDataAvailabilityMarker({
         workspaceId,
         platform,
@@ -514,10 +530,18 @@ export class ConnectionSyncWorker extends WorkerHost {
 
       if (!shouldCreate) continue;
 
-      await ((this.prisma as any).orderFulfillmentStatusEvent).create({
-        data: {
+      await ((this.prisma as any).orderFulfillmentStatusEvent).upsert({
+        where: {
+          workspaceId_externalRef: {
+            workspaceId,
+            externalRef: markerId,
+          },
+        },
+        update: {},
+        create: {
           workspaceId,
           orderId: order.id,
+          externalRef: markerId,
           status: mappedStatus,
           eventAt,
         },
