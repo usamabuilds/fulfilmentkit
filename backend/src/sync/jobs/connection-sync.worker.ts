@@ -623,11 +623,18 @@ export class ConnectionSyncWorker extends WorkerHost {
     // Ensure workspace scoping
     const run = await this.prisma.syncRun.findFirst({
       where: { id: syncRunId, workspaceId, connectionId },
-      select: { id: true },
+      select: { id: true, status: true },
     });
 
     if (!run) {
       throw new Error('SyncRun not found for this workspace/connection');
+    }
+
+    if (run.status === 'SUCCESS') {
+      this.logger.log(
+        `Skipping replay for completed sync run=${syncRunId} workspace=${workspaceId} connection=${connectionId}`,
+      );
+      return;
     }
 
     const connection = await this.prisma.connection.findFirst({
@@ -646,14 +653,44 @@ export class ConnectionSyncWorker extends WorkerHost {
         `Starting sync run=${syncRunId} workspace=${workspaceId} connection=${connectionId}`,
       );
 
-      await this.prisma.syncRun.update({
-        where: { id: syncRunId, workspaceId },
+      const claim = await this.prisma.syncRun.updateMany({
+        where: {
+          id: syncRunId,
+          workspaceId,
+          connectionId,
+          status: {
+            in: ['QUEUED', 'FAILED'],
+          },
+        },
         data: {
           status: 'RUNNING',
           startedAt,
           error: null,
         },
       });
+
+      if (claim.count === 0) {
+        const latestRun = await this.prisma.syncRun.findFirst({
+          where: { id: syncRunId, workspaceId, connectionId },
+          select: { status: true },
+        });
+
+        if (latestRun?.status === 'SUCCESS') {
+          this.logger.log(
+            `Skipping replay for completed sync run=${syncRunId} workspace=${workspaceId} connection=${connectionId}`,
+          );
+          return;
+        }
+
+        if (latestRun?.status === 'RUNNING') {
+          this.logger.warn(
+            `Duplicate execution suppressed for sync run already RUNNING run=${syncRunId} workspace=${workspaceId} connection=${connectionId}`,
+          );
+          return;
+        }
+
+        throw new Error(`SyncRun cannot be claimed for execution from status=${latestRun?.status ?? 'UNKNOWN'}`);
+      }
 
       const supportsHistoricalFulfillmentSync = connection.platform === 'SHOPIFY';
       if (supportsHistoricalFulfillmentSync && Array.isArray(historicalOrders)) {
