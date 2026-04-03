@@ -12,7 +12,10 @@
     "prisma:seed": "prisma db seed",
     "lint": "eslint .",
     "format": "prettier . --write",
-    "prisma:check-generated": "node scripts/check-prisma-client-sync.mjs"
+    "prisma:check-generated": "node scripts/check-prisma-client-sync.mjs",
+    "verify:backend": "pnpm run test",
+    "verify:webhook-ingress:evidence": "test -f ../WEBHOOK_INGRESS_VERIFICATION_MATRIX.md && rg -n '^\\| [0-9]+ \\|' ../WEBHOOK_INGRESS_VERIFICATION_MATRIX.md",
+    "verify:sync-retry-replay:evidence": "test -f sync_retry_sensitive_write_inventory.md && rg -n \"^## Final Identity Verdict|^## Locked Output Types From the Previous Task\" sync_retry_sensitive_write_inventory.md"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
