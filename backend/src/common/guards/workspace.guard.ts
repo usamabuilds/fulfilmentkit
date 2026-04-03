@@ -59,7 +59,8 @@ export class WorkspaceGuard implements CanActivate {
       isShopifyOAuthCallbackRoute ||
       isXeroOAuthCallbackRoute ||
       isZohoOAuthCallbackRoute ||
-      isQuickbooksOAuthCallbackRoute
+      isQuickbooksOAuthCallbackRoute ||
+      isWebhookIngressRoute
     ) {
       await this.resolveOrCreateUserFromAuth(request, {
         allowRequestUserFallback: false,
@@ -85,10 +86,6 @@ export class WorkspaceGuard implements CanActivate {
     }
 
     request.workspaceId = workspaceId;
-
-    if (isWebhookIngressRoute) {
-      return true;
-    }
 
     const user = await this.resolveOrCreateUserFromAuth(request, {
       allowRequestUserFallback: true,
